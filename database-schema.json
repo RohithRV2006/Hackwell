@@ -1,0 +1,57 @@
+{
+  "collections": {
+    "teams": {
+      "description": "Stores information about registered hackathon teams and their members. Team name acts as the unique identifier.",
+      "documentId": "teamName (lowercase, trimmed)",
+      "fields": {
+        "teamName": {
+          "type": "string",
+          "encrypted": false,
+          "description": "The unique name of the team."
+        },
+        "problemStatement": {
+          "type": "string",
+          "encrypted": false,
+          "description": "The problem statement chosen by the team."
+        },
+        "leadEmail": {
+          "type": "string",
+          "encrypted": false,
+          "description": "The email of the team lead. Must be @saranathan.ac.in domain."
+        },
+        "leadData": {
+          "type": "object",
+          "encrypted": true,
+          "description": "AES-256-GCM encrypted JSON string containing the team lead's PII.",
+          "schema_before_encryption": {
+            "name": "string",
+            "batchNumber": "string",
+            "department": "string",
+            "year": "string",
+            "section": "string",
+            "contactNumber": "string"
+          }
+        },
+        "membersData": {
+          "type": "array",
+          "encrypted": true,
+          "description": "AES-256-GCM encrypted JSON string containing an array of 3 members' PII.",
+          "schema_before_encryption": [
+            {
+              "name": "string",
+              "batchNumber": "string",
+              "department": "string",
+              "year": "string",
+              "section": "string"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "encrypted": false,
+          "description": "Server timestamp when the team was registered."
+        }
+      }
+    }
+  }
+}
