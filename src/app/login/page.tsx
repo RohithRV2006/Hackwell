@@ -50,11 +50,11 @@ function LoginForm() {
       if (role === 'admin') {
         router.push('/admin');
       } else if (role === 'jury') {
-        router.push('/jury');
+        router.push('/jury-dashboard');
       } else if (role === 'student-coord') {
-        router.push('/student-coord');
+        router.push('/student-coord-dashboard');
       } else if (role === 'faculty-coord') {
-        router.push('/faculty-coord');
+        router.push('/faculty-coord-dashboard');
       } else {
         router.push('/team-dashboard');
       }
