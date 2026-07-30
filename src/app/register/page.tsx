@@ -34,9 +34,7 @@ const memberSuperRefine = (data: any, ctx: z.RefinementCtx) => {
 };
 
 const leadSchema = baseMemberSchema.extend({
-  email: z.string().email('Invalid email').refine((val) => val.endsWith('@saranathan.ac.in'), {
-    message: 'Must end with @saranathan.ac.in',
-  }),
+  email: z.string().email('Invalid email'),
   password: z.string()
     .min(8, 'Password must be at least 8 characters')
     .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
@@ -242,7 +240,7 @@ export default function Register() {
                 {errors.lead?.name && <p className="text-red-500 text-xs mt-1">{errors.lead.name.message}</p>}
               </div>
               <div className="lg:col-span-2">
-                <label className="block text-sm font-medium mb-1">Email (@saranathan.ac.in) *</label>
+                <label className="block text-sm font-medium mb-1">Email *</label>
                 <input type="email" {...register('lead.email')} className="w-full p-2 border rounded-md" />
                 {errors.lead?.email && <p className="text-red-500 text-xs mt-1">{errors.lead.email.message}</p>}
               </div>

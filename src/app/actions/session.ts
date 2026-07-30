@@ -1,7 +1,37 @@
 'use server';
 
 import { cookies } from 'next/headers';
-import { getAdminAuth } from '@/lib/firebase-admin';
+import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
+import { encryptJSON, decryptJSON } from '@/lib/encryption';
+
+export async function getUserRole(email: string) {
+  const sanitizedEmail = email.trim().toLowerCase();
+  
+  if (sanitizedEmail === 'rohithrv2006@gmail.com') {
+    return 'admin';
+  }
+  
+  try {
+    const roleDoc = await getAdminDb().collection('roles').doc(sanitizedEmail).get();
+    if (roleDoc.exists) {
+      const encryptedData = roleDoc.data();
+      if (encryptedData && encryptedData.encryptedRole) {
+        // Assume role is stored encrypted if required by user
+        try {
+          const decrypted = decryptJSON(encryptedData.encryptedRole);
+          if (decrypted && decrypted.role) return decrypted.role;
+        } catch (e) {
+          console.error("Failed to decrypt role", e);
+        }
+      }
+      return encryptedData?.role || 'team';
+    }
+  } catch (error) {
+    console.error('Error fetching role', error);
+  }
+  
+  return 'team';
+}
 
 export async function createSessionCookie(idToken: string) {
   try {

@@ -3,56 +3,22 @@
 import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { encryptJSON, decryptJSON } from '@/lib/encryption';
-
-const ADMIN_EMAIL = 'adminhackwell@saranathan.ac.in';
-const ADMIN_PASSWORD = 'iluvrohith@123';
-
-export async function adminLogin(formData: FormData) {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
-
-  if (email?.trim().toLowerCase() !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-    return { success: false, error: 'Invalid admin credentials.' };
-  }
-
-  // Ensure admin user exists in Firebase Auth
-  try {
-    const adminAuth = getAdminAuth();
-    try {
-      await adminAuth.getUserByEmail(ADMIN_EMAIL);
-    } catch {
-      await adminAuth.createUser({
-        email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
-        displayName: 'Hackwell Admin',
-      });
-    }
-  } catch (err) {
-    console.warn('Firebase Auth admin user check skipped:', err);
-  }
-
-  const cookieStore = await cookies();
-  cookieStore.set('admin_session', 'authenticated_admin_hackwell', {
-    maxAge: 24 * 60 * 60, // 24 hours
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    sameSite: 'lax',
-  });
-
-  return { success: true };
-}
-
-export async function adminLogout() {
-  const cookieStore = await cookies();
-  cookieStore.delete('admin_session');
-  return { success: true };
-}
+import { getUserRole } from '@/app/actions/session';
 
 export async function verifyAdminSession() {
   const cookieStore = await cookies();
-  const session = cookieStore.get('admin_session')?.value;
-  return session === 'authenticated_admin_hackwell';
+  const sessionCookie = cookieStore.get('session')?.value;
+  if (!sessionCookie) return false;
+
+  try {
+    const decodedToken = await getAdminAuth().verifySessionCookie(sessionCookie, true);
+    if (!decodedToken.email) return false;
+    
+    const role = await getUserRole(decodedToken.email);
+    return role === 'admin';
+  } catch (error) {
+    return false;
+  }
 }
 
 export interface Member {

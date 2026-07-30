@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { createSessionCookie } from '@/app/actions/session';
+import { createSessionCookie, getUserRole } from '@/app/actions/session';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import Link from 'next/link';
@@ -45,7 +45,19 @@ function LoginForm() {
         throw new Error(result.error || 'Failed to create session');
       }
 
-      router.push('/team-dashboard');
+      const role = await getUserRole(data.email);
+
+      if (role === 'admin') {
+        router.push('/admin');
+      } else if (role === 'jury') {
+        router.push('/jury');
+      } else if (role === 'student-coord') {
+        router.push('/student-coord');
+      } else if (role === 'faculty-coord') {
+        router.push('/faculty-coord');
+      } else {
+        router.push('/team-dashboard');
+      }
     } catch (err: any) {
       setError(err.message || 'Invalid credentials');
     } finally {
@@ -77,7 +89,7 @@ function LoginForm() {
 
   return (
     <div className="w-full max-w-md bg-white shadow-xl rounded-2xl p-8">
-      <h1 className="text-3xl font-extrabold text-center mb-6 text-blue-600">Team Login</h1>
+      <h1 className="text-3xl font-extrabold text-center mb-6 text-blue-600">Login</h1>
       
       {registered && (
         <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-6">
@@ -99,7 +111,7 @@ function LoginForm() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium mb-1">Email (@saranathan.ac.in)</label>
+          <label className="block text-sm font-medium mb-1">Email</label>
           <input type="email" {...register('email')} className="w-full p-2 border rounded-md" />
           {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
         </div>
