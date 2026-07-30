@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { createSessionCookie } from '@/app/actions/session';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+import Link from 'next/link';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
@@ -16,40 +18,58 @@ const loginSchema = z.object({
 
 type LoginData = z.infer<typeof loginSchema>;
 
-import { Suspense } from 'react';
-
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string>('');
+  const [msg, setMsg] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const registered = searchParams.get('registered');
 
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginData>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
   });
 
+  const emailValue = watch('email');
+
   const onSubmit = async (data: LoginData) => {
     setError('');
+    setMsg('');
     setLoading(true);
     try {
-      // 1. Sign in with Firebase Client Auth
       const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
-      
-      // 2. Get the ID token
       const idToken = await userCredential.user.getIdToken();
-      
-      // 3. Create Session Cookie via Server Action
       const result = await createSessionCookie(idToken);
       
       if (!result.success) {
         throw new Error(result.error || 'Failed to create session');
       }
 
-      // 4. Redirect to dashboard
       router.push('/team-dashboard');
     } catch (err: any) {
       setError(err.message || 'Invalid credentials');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError('');
+    setMsg('');
+    if (!emailValue || !emailValue.includes('@')) {
+      setError('Please enter a valid email address first to receive the reset link.');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const actionCodeSettings = {
+        url: window.location.origin + '/reset-password',
+      };
+      await sendPasswordResetEmail(auth, emailValue, actionCodeSettings);
+      setMsg('Password reset email sent! Check your inbox (and spam folder).');
+    } catch (err: any) {
+      setError(err.message || 'Failed to send password reset email.');
     } finally {
       setLoading(false);
     }
@@ -70,6 +90,12 @@ function LoginForm() {
           {error}
         </div>
       )}
+      
+      {msg && (
+        <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative mb-6">
+          {msg}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
@@ -84,12 +110,25 @@ function LoginForm() {
           {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
         </div>
 
+        <div className="flex items-center justify-between mt-2">
+          <Link href="/register" className="text-sm text-blue-600 hover:underline">
+            Don't have an account? Register
+          </Link>
+          <button 
+            type="button" 
+            onClick={handleForgotPassword}
+            className="text-sm text-gray-500 hover:text-blue-600 hover:underline"
+          >
+            Forgot Password?
+          </button>
+        </div>
+
         <button 
           type="submit" 
           disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 mt-4"
         >
-          {loading ? 'Signing in...' : 'Login'}
+          {loading ? 'Processing...' : 'Login'}
         </button>
       </form>
     </div>
