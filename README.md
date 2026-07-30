@@ -1,6 +1,6 @@
-# Hackwell - Hackathon Management Web Application
+# Hackwell 2.O - Hackathon Management Web Application
 
-Hackwell is a full-stack web application built for managing hackathon events. It provides functional registration, secure authentication, and a protected team dashboard, utilizing modern web technologies.
+Hackwell 2.O is a full-stack web application built for managing hackathon events. It provides functional registration, secure authentication, role-based dashboards, and complete data encryption utilizing modern web technologies.
 
 ## Tech Stack
 - **Framework:** Next.js (App Router, React)
@@ -10,11 +10,13 @@ Hackwell is a full-stack web application built for managing hackathon events. It
 - **Security:** AES-256-GCM encryption for Personally Identifiable Information (PII)
 - **Validation:** React Hook Form & Zod
 
-## Features (Current Implementation)
-- **Registration Page:** Strict team registration (1 Lead + 3 Members). Requires `@saranathan.ac.in` domain for leads. Validates unique team names and enforces strong passwords.
-- **Login Page:** Standard Email & Password authentication.
-- **Session Management:** Enforces a strict 30-minute session via Next.js proxy middleware and Firebase Admin.
+## Features
+- **Modern Landing Page:** Highly responsive and aesthetic landing page built with custom Tailwind CSS and React Lucide icons.
+- **Unified Login Portal:** A single centralized login page that dynamically routes users (Participants, Admins, Juries, Coordinators) to their respective role-based dashboards using Firebase session cookies.
+- **Registration Page:** Strict team registration (1 Lead + 3 Members). Validates unique team names, enforces strong passwords, and dynamically checks availability in real-time.
+- **Session Management:** Enforces a strict session timeout via Next.js proxy middleware and Firebase Admin.
 - **Team Dashboard:** Protected route that decrypts team details server-side and securely presents them to the user.
+- **Role-Based Access Control (RBAC):** Dedicated restricted routes (`/admin`, `/jury-dashboard`, etc.) managed via a secure `roles` Firestore collection with encrypted credentials.
 - **Data Security:** Stores all user PII (Names, Contact Numbers, etc.) completely encrypted within Firestore.
 
 ## Getting Started
@@ -31,7 +33,7 @@ To run this project locally, you must connect it to a Firebase project.
 5. Go to **Project Settings > Service Accounts** and click **Generate new private key**. This will download a JSON file containing your Admin credentials.
 
 ### 3. Environment Variables
-Copy the `.env.local.example` file to `.env.local`:
+Copy the `.env.local.example` file to `.env.local` (or create a new `.env.local`):
 ```bash
 cp .env.local.example .env.local
 ```
@@ -49,5 +51,6 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Database Schema
-The Firestore schema and encryption documentation is actively maintained in [`database-schema.json`](./database-schema.json) in the root directory.
+## Database Schema & Rules
+The Firestore schema, role mapping structures, and encryption documentation are actively maintained in [`database-schema.json`](./database-schema.json). 
+Firestore security rules are maintained locally in `firestore.rules`.

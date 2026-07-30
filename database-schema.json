@@ -17,7 +17,7 @@
         "leadEmail": {
           "type": "string",
           "encrypted": false,
-          "description": "The email of the team lead. Must be @saranathan.ac.in domain."
+          "description": "The email of the team lead."
         },
         "leadData": {
           "type": "object",
@@ -50,6 +50,22 @@
           "type": "timestamp",
           "encrypted": false,
           "description": "Server timestamp when the team was registered."
+        }
+      }
+    },
+    "roles": {
+      "description": "Stores authentication and role information for privileged users (Admins, Jury, Coordinators).",
+      "documentId": "email (lowercase)",
+      "fields": {
+        "role": {
+          "type": "string",
+          "encrypted": false,
+          "description": "The role of the user (admin, jury, student-coord, faculty-coord)."
+        },
+        "encryptedCreds": {
+          "type": "string",
+          "encrypted": true,
+          "description": "AES-256-GCM encrypted string storing the password/credentials."
         }
       }
     },
