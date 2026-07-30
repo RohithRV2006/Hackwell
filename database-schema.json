@@ -52,6 +52,53 @@
           "description": "Server timestamp when the team was registered."
         }
       }
+    },
+    "jury": {
+      "description": "Stores information about jury members.",
+      "documentId": "Auto-generated Firestore document ID",
+      "fields": {
+        "juryName": {
+          "type": "string",
+          "encrypted": false,
+          "description": "The name of the jury member."
+        },
+        "institution": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Institution/Organization of the jury member."
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "encrypted": false,
+          "description": "Server timestamp when the jury was created."
+        }
+      }
+    },
+    "scores": {
+      "description": "Stores the score given to a team by its assigned jury.",
+      "documentId": "Auto-generated Firestore document ID",
+      "fields": {
+        "teamId": {
+          "type": "string",
+          "encrypted": false,
+          "description": "The document ID (or unique identifier) of the team."
+        },
+        "juryName": {
+          "type": "string",
+          "encrypted": false,
+          "description": "The assigned jury's name."
+        },
+        "score": {
+          "type": "number",
+          "encrypted": false,
+          "description": "The total score awarded by that jury."
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "encrypted": false,
+          "description": "Server timestamp when the score record was created."
+        }
+      }
     }
   }
 }
