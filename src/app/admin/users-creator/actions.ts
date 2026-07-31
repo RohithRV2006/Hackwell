@@ -7,6 +7,9 @@ import { encryptJSON } from '@/lib/encryption';
 export interface AdminUser {
   email: string;
   role: string;
+  name?: string;
+  department?: string;
+  institution?: string;
 }
 
 export async function getAllUsersAdmin(): Promise<{ success: boolean; users?: AdminUser[]; error?: string }> {
@@ -23,17 +26,26 @@ export async function getAllUsersAdmin(): Promise<{ success: boolean; users?: Ad
 
     // Fetch roles from Firestore
     const snapshot = await db.collection('roles').get();
-    const roleDocs: Record<string, string> = {};
-    
+    const roleDocs: Record<string, { role: string; name?: string; department?: string; institution?: string }> = {};
+
     snapshot.docs.forEach(doc => {
-      roleDocs[doc.id] = doc.data().role || 'unknown';
+      const data = doc.data();
+      roleDocs[doc.id] = {
+        role: data.role || 'unknown',
+        name: data.name,
+        department: data.department,
+        institution: data.institution,
+      };
     });
 
     const users: AdminUser[] = authUsers
-      .filter(user => user.email) // Ensure they have an email
+      .filter(user => user.email)
       .map(user => ({
         email: user.email as string,
-        role: roleDocs[user.email as string] || 'team'
+        role: roleDocs[user.email as string]?.role || 'team',
+        name: roleDocs[user.email as string]?.name,
+        department: roleDocs[user.email as string]?.department,
+        institution: roleDocs[user.email as string]?.institution,
       }));
 
     return { success: true, users };
@@ -43,7 +55,142 @@ export async function getAllUsersAdmin(): Promise<{ success: boolean; users?: Ad
   }
 }
 
-export async function createUserAdmin(email: string, password: string, role: string): Promise<{ success: boolean; error?: string }> {
+/**
+ * Create a Jury member login.
+ * - Creates Firebase Auth user
+ * - Stores role + profile in `roles` collection (keyed by email)
+ * - Stores jury profile in `jury` collection
+ */
+export async function createJuryUser(
+  name: string,
+  institution: string,
+  email: string,
+  password: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    if (!name?.trim() || !institution?.trim() || !email?.trim() || !password?.trim()) {
+      return { success: false, error: 'All fields (name, institution, email, password) are required.' };
+    }
+
+    const db = getAdminDb();
+    const auth = getAdminAuth();
+
+    // Check for duplicate in roles
+    const roleDocRef = db.collection('roles').doc(email.toLowerCase().trim());
+    const roleDocSnap = await roleDocRef.get();
+    if (roleDocSnap.exists) {
+      return { success: false, error: `A user with email "${email}" already exists.` };
+    }
+
+    // Create Firebase Auth user
+    try {
+      await auth.createUser({ email: email.trim(), password });
+    } catch (authErr: any) {
+      if (authErr.code !== 'auth/email-already-exists') throw authErr;
+    }
+
+    const now = new Date();
+    const encryptedCreds = encryptJSON({ password });
+
+    // Write to roles collection
+    await roleDocRef.set({
+      role: 'jury',
+      name: name.trim(),
+      institution: institution.trim(),
+      encryptedCreds,
+      createdAt: now,
+    });
+
+    // Write to jury collection
+    await db.collection('jury').add({
+      juryName: name.trim(),
+      institution: institution.trim(),
+      email: email.toLowerCase().trim(),
+      createdAt: now,
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error creating jury user:', error);
+    return { success: false, error: error.message || 'Failed to create jury user' };
+  }
+}
+
+/**
+ * Create a Coordinator login.
+ * - Creates Firebase Auth user
+ * - Stores role + profile in `roles` collection (keyed by email)
+ * - Stores coordinator profile in `coordinators` collection
+ */
+export async function createCoordinatorUser(
+  name: string,
+  department: string,
+  email: string,
+  password: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    if (!name?.trim() || !department?.trim() || !email?.trim() || !password?.trim()) {
+      return { success: false, error: 'All fields (name, department, email, password) are required.' };
+    }
+
+    const db = getAdminDb();
+    const auth = getAdminAuth();
+
+    // Check for duplicate in roles
+    const roleDocRef = db.collection('roles').doc(email.toLowerCase().trim());
+    const roleDocSnap = await roleDocRef.get();
+    if (roleDocSnap.exists) {
+      return { success: false, error: `A user with email "${email}" already exists.` };
+    }
+
+    // Create Firebase Auth user
+    try {
+      await auth.createUser({ email: email.trim(), password });
+    } catch (authErr: any) {
+      if (authErr.code !== 'auth/email-already-exists') throw authErr;
+    }
+
+    const now = new Date();
+    const encryptedCreds = encryptJSON({ password });
+
+    // Write to roles collection
+    await roleDocRef.set({
+      role: 'coordinator',
+      name: name.trim(),
+      department: department.trim(),
+      encryptedCreds,
+      createdAt: now,
+    });
+
+    // Write to coordinators collection
+    await db.collection('coordinators').add({
+      name: name.trim(),
+      department: department.trim(),
+      email: email.toLowerCase().trim(),
+      createdAt: now,
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error creating coordinator user:', error);
+    return { success: false, error: error.message || 'Failed to create coordinator user' };
+  }
+}
+
+/**
+ * Legacy generic create (kept for backward compatibility / admin role creation).
+ */
+export async function createUserAdmin(
+  email: string,
+  password: string,
+  role: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
@@ -51,33 +198,20 @@ export async function createUserAdmin(email: string, password: string, role: str
     const db = getAdminDb();
     const auth = getAdminAuth();
 
-    // Ensure the email doesn't already exist in roles
-    const docRef = db.collection('roles').doc(email);
+    const docRef = db.collection('roles').doc(email.toLowerCase().trim());
     const docSnap = await docRef.get();
     if (docSnap.exists) {
       return { success: false, error: 'User already exists in roles database' };
     }
 
-    // 1. Create Firebase Auth user
     try {
-      await auth.createUser({
-        email,
-        password,
-      });
+      await auth.createUser({ email, password });
     } catch (authErr: any) {
-      // If user already exists in auth but not in roles, we might just want to update roles
-      if (authErr.code !== 'auth/email-already-exists') {
-        throw authErr;
-      }
-      // If it exists in auth but not roles, we'll just link the role below
+      if (authErr.code !== 'auth/email-already-exists') throw authErr;
     }
 
-    // 2. Encrypt credentials and store in roles
     const encryptedCreds = encryptJSON({ password });
-    await docRef.set({
-      role,
-      encryptedCreds
-    });
+    await docRef.set({ role, encryptedCreds, createdAt: new Date() });
 
     return { success: true };
   } catch (error: any) {
@@ -94,15 +228,29 @@ export async function deleteUserAdmin(email: string): Promise<{ success: boolean
     const db = getAdminDb();
     const auth = getAdminAuth();
 
-    // 1. Delete from Roles DB
-    await db.collection('roles').doc(email).delete();
+    // Get role before deleting so we can clean up sub-collections
+    const roleDoc = await db.collection('roles').doc(email.toLowerCase()).get();
+    const role = roleDoc.data()?.role;
 
-    // 2. Delete from Auth (if possible)
+    // 1. Delete from roles collection
+    await db.collection('roles').doc(email.toLowerCase()).delete();
+
+    // 2. Delete from jury or coordinators collection if applicable
+    if (role === 'jury') {
+      const jurySnap = await db.collection('jury').where('email', '==', email.toLowerCase()).get();
+      const deletions = jurySnap.docs.map(doc => doc.ref.delete());
+      await Promise.all(deletions);
+    } else if (role === 'coordinator') {
+      const coordSnap = await db.collection('coordinators').where('email', '==', email.toLowerCase()).get();
+      const deletions = coordSnap.docs.map(doc => doc.ref.delete());
+      await Promise.all(deletions);
+    }
+
+    // 3. Delete from Firebase Auth
     try {
       const userRecord = await auth.getUserByEmail(email);
       await auth.deleteUser(userRecord.uid);
     } catch (authErr: any) {
-      // If user doesn't exist in Auth, just ignore
       if (authErr.code !== 'auth/user-not-found') {
         console.error('Failed to delete auth user', authErr);
       }
