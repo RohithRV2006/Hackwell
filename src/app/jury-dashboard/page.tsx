@@ -1,457 +1,1016 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  addJuryMember,
-  getAllJuryMembers,
-  getTeamsWithScores,
-  submitOrUpdateScore,
-  getAllScores,
-  JuryMember,
+  verifyJurySession,
+  getJuryDashboardData,
+  getTeamDetails,
+  saveEvaluation,
+  toggleHighlight,
+  freezeJuryScores,
   SimpleTeam,
-  TeamScore,
+  DetailedTeam,
+  EvaluationData,
 } from './actions';
+import { clearSessionCookie } from '@/app/actions/session';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+import {
+  Search,
+  Filter,
+  ArrowUpDown,
+  Lock,
+  Unlock,
+  Star,
+  ArrowLeft,
+  ArrowRight,
+  Save,
+  RefreshCw,
+  User,
+  BookOpen,
+  Code,
+  ExternalLink,
+  CheckCircle2,
+  AlertTriangle,
+  TrendingUp,
+} from 'lucide-react';
 
-export default function JuryPage() {
-  const [activeTab, setActiveTab] = useState<'evaluate' | 'addJury' | 'allScores'>('evaluate');
+export default function JuryDashboardPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPendingTransition, startTransition] = useTransition();
 
-  // Data States
-  const [juryList, setJuryList] = useState<JuryMember[]>([]);
+  // Authentication & Session state
+  const [session, setSession] = useState<{
+    email: string;
+    juryName: string;
+    institution: string;
+    scoresFrozen: boolean;
+    frozenAt: string | null;
+  } | null>(null);
+
+  // Dashboard Data states
   const [teams, setTeams] = useState<SimpleTeam[]>([]);
-  const [scoresList, setScoresList] = useState<TeamScore[]>([]);
+  const [assignmentsSupported, setAssignmentsSupported] = useState<boolean>(true);
+  const [scoresFrozen, setScoresFrozen] = useState<boolean>(false);
+  const [frozenAt, setFrozenAt] = useState<string | null>(null);
+  
+  // Loading & Error states
+  const [loading, setLoading] = useState<boolean>(true);
+  const [detailsLoading, setDetailsLoading] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [freezing, setFreezing] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string>('');
+  const [successMsg, setSuccessMsg] = useState<string>('');
 
-  // Form States - Add Jury
-  const [juryName, setJuryName] = useState('');
-  const [institution, setInstitution] = useState('');
-  const [addingJury, setAddingJury] = useState(false);
+  // Selected Team Details
+  const [selectedTeam, setSelectedTeam] = useState<DetailedTeam | null>(null);
+  const [evaluation, setEvaluation] = useState<EvaluationData>({
+    innovation: 0,
+    technicalFeasibility: 0,
+    impact: 0,
+    presentation: 0,
+    remarks: '',
+    highlighted: false,
+    score: 0,
+  });
 
-  // Form States - Scoring
-  const [selectedJury, setSelectedJury] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState('');
-  const [scoreInput, setScoreInput] = useState<number | ''>('');
-  const [submittingScore, setSubmittingScore] = useState(false);
+  // Dialog State
+  const [showFreezeModal, setShowFreezeModal] = useState<boolean>(false);
 
-  // UI Message States
-  const [loading, setLoading] = useState(true);
-  const [successMsg, setSuccessMsg] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
+  // URL State values
+  const urlSearch = searchParams.get('search') || '';
+  const urlFilter = searchParams.get('filter') || 'All';
+  const urlSort = searchParams.get('sort') || 'teamNumber';
+  const urlTeam = searchParams.get('team') || '';
 
+  // Local state for instant search input
+  const [searchInput, setSearchInput] = useState<string>(urlSearch);
+
+  // Load Session and initialize
   useEffect(() => {
-    loadAllData();
+    async function initSession() {
+      const check = await verifyJurySession();
+      if (!check.success || !check.email) {
+        window.location.replace('/login');
+        return;
+      }
+      setSession({
+        email: check.email,
+        juryName: check.juryName || '',
+        institution: check.institution || '',
+        scoresFrozen: check.scoresFrozen || false,
+        frozenAt: check.frozenAt || null,
+      });
+      setScoresFrozen(check.scoresFrozen || false);
+      setFrozenAt(check.frozenAt || null);
+      loadDashboardData();
+    }
+    initSession();
   }, []);
 
-  const loadAllData = async () => {
+  // Fetch Dashboard Data
+  const loadDashboardData = async () => {
     setLoading(true);
     setErrorMsg('');
-
-    const [resJury, resTeams, resScores] = await Promise.all([
-      getAllJuryMembers(),
-      getTeamsWithScores(),
-      getAllScores(),
-    ]);
-
-    if (resJury.success && resJury.juryList) setJuryList(resJury.juryList);
-    if (resTeams.success && resTeams.teams) setTeams(resTeams.teams);
-    if (resScores.success && resScores.scoresList) setScoresList(resScores.scoresList);
-
+    const res = await getJuryDashboardData();
+    if (res.success) {
+      if (res.assignmentsSupported === false) {
+        setAssignmentsSupported(false);
+      } else {
+        setAssignmentsSupported(true);
+        setTeams(res.teams || []);
+        if (res.scoresFrozen !== undefined) {
+          setScoresFrozen(res.scoresFrozen);
+          setFrozenAt(res.frozenAt || null);
+        }
+      }
+    } else {
+      setErrorMsg(res.error || 'Failed to load dashboard data.');
+    }
     setLoading(false);
   };
 
-  const handleAddJury = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!juryName.trim() || !institution.trim()) {
-      setErrorMsg('Please enter both Jury Name and Institution.');
-      return;
-    }
+  // Sync Search input state when URL param updates
+  useEffect(() => {
+    setSearchInput(urlSearch);
+  }, [urlSearch]);
 
-    setAddingJury(true);
+  // Load Team Details if selected in URL
+  useEffect(() => {
+    if (urlTeam && session) {
+      fetchDetails(urlTeam);
+    } else {
+      setSelectedTeam(null);
+    }
+  }, [urlTeam, session]);
+
+  // Fetch team details for evaluation
+  const fetchDetails = async (teamId: string) => {
+    setDetailsLoading(true);
     setErrorMsg('');
     setSuccessMsg('');
-
-    const res = await addJuryMember(juryName, institution);
-    setAddingJury(false);
-
-    if (res.success) {
-      setSuccessMsg(`Jury member "${juryName}" added successfully to database!`);
-      setJuryName('');
-      setInstitution('');
-      loadAllData();
-      setTimeout(() => setSuccessMsg(''), 4000);
+    const res = await getTeamDetails(teamId);
+    if (res.success && res.teamDetails) {
+      setSelectedTeam(res.teamDetails);
+      if (res.scoreData) {
+        setEvaluation(res.scoreData);
+      } else {
+        setEvaluation({
+          innovation: 0,
+          technicalFeasibility: 0,
+          impact: 0,
+          presentation: 0,
+          remarks: '',
+          highlighted: res.teamDetails.highlighted,
+          score: 0,
+        });
+      }
     } else {
-      setErrorMsg(res.error || 'Failed to add jury member');
+      setErrorMsg(res.error || 'Failed to load team details.');
+      updateUrlParams({ team: '' });
+    }
+    setDetailsLoading(false);
+  };
+
+  // Helper to update URL params
+  const updateUrlParams = (newParams: Record<string, string>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    Object.entries(newParams).forEach(([key, value]) => {
+      if (value) {
+        params.set(key, value);
+      } else {
+        params.delete(key);
+      }
+    });
+    startTransition(() => {
+      router.push(`?${params.toString()}`);
+    });
+  };
+
+  // Handle Logout
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      await clearSessionCookie();
+      window.location.replace('/login');
+    } catch (e) {
+      console.error('Logout failed', e);
     }
   };
 
-  const handleSubmitScore = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedTeamId) {
-      setErrorMsg('Please select a team.');
-      return;
-    }
-    if (!selectedJury) {
-      setErrorMsg('Please select an evaluating Jury member.');
-      return;
-    }
-    if (scoreInput === '' || isNaN(Number(scoreInput))) {
-      setErrorMsg('Please enter a valid score (0-100).');
+  // Handle Search Input Change
+  const handleSearchChange = (val: string) => {
+    setSearchInput(val);
+    updateUrlParams({ search: val });
+  };
+
+  // Handle Numeric Rubric Change (only integer 0-10)
+  const handleScoreChange = (field: keyof Omit<EvaluationData, 'remarks' | 'highlighted' | 'score'>, val: string) => {
+    if (scoresFrozen) return;
+    
+    if (val === '') {
+      setEvaluation(prev => {
+        const next = { ...prev, [field]: 0 };
+        next.score = next.innovation + next.technicalFeasibility + next.impact + next.presentation;
+        return next;
+      });
       return;
     }
 
-    setSubmittingScore(true);
+    const num = parseInt(val, 10);
+    if (isNaN(num) || num < 0 || num > 10) return;
+
+    setEvaluation(prev => {
+      const next = { ...prev, [field]: num };
+      next.score = next.innovation + next.technicalFeasibility + next.impact + next.presentation;
+      return next;
+    });
+  };
+
+  // Save Team Evaluation
+  const handleSaveEvaluation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeam || scoresFrozen) return;
+
+    setSubmitting(true);
     setErrorMsg('');
     setSuccessMsg('');
 
-    const res = await submitOrUpdateScore(selectedTeamId, selectedJury, Number(scoreInput));
-    setSubmittingScore(false);
+    const res = await saveEvaluation(
+      selectedTeam.id,
+      {
+        innovation: evaluation.innovation,
+        technicalFeasibility: evaluation.technicalFeasibility,
+        impact: evaluation.impact,
+        presentation: evaluation.presentation,
+      },
+      evaluation.remarks,
+      evaluation.highlighted
+    );
 
     if (res.success) {
-      const selectedTeam = teams.find((t) => t.id === selectedTeamId);
-      setSuccessMsg(
-        `Score ${scoreInput}/100 submitted successfully for team "${selectedTeam?.teamName || selectedTeamId}" by ${selectedJury}!`
+      setSuccessMsg(`Evaluation saved successfully for ${selectedTeam.teamName}!`);
+      // Update team status in local list
+      setTeams(prev =>
+        prev.map(t =>
+          t.id === selectedTeam.id
+            ? {
+                ...t,
+                evaluationStatus: 'Evaluated',
+                score: evaluation.innovation + evaluation.technicalFeasibility + evaluation.impact + evaluation.presentation,
+                highlighted: evaluation.highlighted,
+              }
+            : t
+        )
       );
-      setScoreInput('');
-      loadAllData();
       setTimeout(() => setSuccessMsg(''), 4000);
     } else {
-      setErrorMsg(res.error || 'Failed to submit score');
+      setErrorMsg(res.error || 'Failed to save evaluation.');
     }
+    setSubmitting(false);
+  };
+
+  // Toggle Highlight Star
+  const handleStarToggle = async (teamId: string, currentHighlighted: boolean) => {
+    if (scoresFrozen) return;
+    
+    const newHighlight = !currentHighlighted;
+    
+    // Optimistically update details if open
+    if (selectedTeam && selectedTeam.id === teamId) {
+      setEvaluation(prev => ({ ...prev, highlighted: newHighlight }));
+    }
+
+    // Optimistically update list
+    setTeams(prev =>
+      prev.map(t => (t.id === teamId ? { ...t, highlighted: newHighlight } : t))
+    );
+
+    const res = await toggleHighlight(teamId, newHighlight);
+    if (!res.success) {
+      setErrorMsg(res.error || 'Failed to toggle highlight.');
+      // Revert states on error
+      setTeams(prev =>
+        prev.map(t => (t.id === teamId ? { ...t, highlighted: currentHighlighted } : t))
+      );
+      if (selectedTeam && selectedTeam.id === teamId) {
+        setEvaluation(prev => ({ ...prev, highlighted: currentHighlighted }));
+      }
+    }
+  };
+
+  // Freeze Scores Action
+  const handleFreezeScores = async () => {
+    setFreezing(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    setShowFreezeModal(false);
+
+    const res = await freezeJuryScores();
+    if (res.success) {
+      setScoresFrozen(true);
+      setFrozenAt(new Date().toISOString());
+      setSuccessMsg('All evaluations successfully locked and frozen!');
+      loadDashboardData();
+    } else {
+      setErrorMsg(res.error || 'Failed to freeze scores.');
+    }
+    setFreezing(false);
+  };
+
+  // Filtering and Sorting logic
+  const filteredTeams = teams
+    .filter(t => {
+      // 1. Search Query
+      const query = urlSearch.toLowerCase().trim();
+      const matchQuery =
+        !query ||
+        t.teamName.toLowerCase().includes(query) ||
+        t.id.toLowerCase().includes(query) ||
+        (t.leadName && t.leadName.toLowerCase().includes(query)) ||
+        (t.teamNumber && t.teamNumber.toLowerCase().includes(query)) ||
+        (t.labNumber && t.labNumber.toLowerCase().includes(query));
+
+      // 2. Filters
+      let matchFilter = true;
+      if (urlFilter === 'Pending') matchFilter = t.evaluationStatus === 'Pending';
+      if (urlFilter === 'Evaluated') matchFilter = t.evaluationStatus === 'Evaluated';
+      if (urlFilter === 'Highlighted') matchFilter = t.highlighted === true;
+      if (urlFilter.startsWith('Lab_')) {
+        const lab = urlFilter.replace('Lab_', '');
+        matchFilter = t.labNumber === lab;
+      }
+
+      return matchQuery && matchFilter;
+    })
+    .sort((a, b) => {
+      // Sorting
+      if (urlSort === 'teamNumber') return (a.teamNumber || '').localeCompare(b.teamNumber || '');
+      if (urlSort === 'teamName') return a.teamName.localeCompare(b.teamName);
+      if (urlSort === 'teamLeader') return (a.leadName || '').localeCompare(b.leadName || '');
+      if (urlSort === 'labNumber') return (a.labNumber || '').localeCompare(b.labNumber || '');
+      if (urlSort === 'evaluated') return a.evaluationStatus === 'Evaluated' ? -1 : 1;
+      if (urlSort === 'pending') return a.evaluationStatus === 'Pending' ? -1 : 1;
+      if (urlSort === 'highlighted') return a.highlighted === b.highlighted ? 0 : a.highlighted ? -1 : 1;
+      return 0;
+    });
+
+  // Unique Lab Numbers list for filter dropdown
+  const uniqueLabs = Array.from(new Set(teams.map(t => t.labNumber).filter(Boolean)));
+
+  // Statistics calculations
+  const totalAssigned = teams.length;
+  const evaluatedCount = teams.filter(t => t.evaluationStatus === 'Evaluated').length;
+  const pendingCount = totalAssigned - evaluatedCount;
+  const highlightedCount = teams.filter(t => t.highlighted).length;
+  const progressPercent = totalAssigned > 0 ? Math.round((evaluatedCount / totalAssigned) * 100) : 0;
+
+  // Next / Previous team navigation helper
+  const navigateTeam = (direction: 'prev' | 'next') => {
+    if (filteredTeams.length === 0 || !selectedTeam) return;
+    const currentIndex = filteredTeams.findIndex(t => t.id === selectedTeam.id);
+    if (currentIndex === -1) return;
+
+    let targetIndex = currentIndex;
+    if (direction === 'prev') {
+      targetIndex = currentIndex > 0 ? currentIndex - 1 : filteredTeams.length - 1;
+    } else {
+      targetIndex = currentIndex < filteredTeams.length - 1 ? currentIndex + 1 : 0;
+    }
+
+    const targetTeam = filteredTeams[targetIndex];
+    setSuccessMsg('');
+    setErrorMsg('');
+    updateUrlParams({ team: targetTeam.id });
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12">
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/80 backdrop-blur-md p-8 rounded-3xl border border-slate-800 shadow-2xl">
+    <main className="min-h-screen bg-gray-50 text-gray-900 flex flex-col font-sans selection:bg-blue-500 selection:text-white">
+      {/* Header Banner - Matches existing Admin Layout styling */}
+      <header className="border-b border-gray-200 bg-white sticky top-0 z-40 px-4 md:px-8 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 bg-blue-600 rounded-xl flex items-center justify-center font-black text-xl text-white shadow-md">
+            H
+          </div>
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-extrabold text-white tracking-tight">Jury & Score Management</h1>
-              <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs px-3 py-1 rounded-full font-medium">
-                Official Portal
+            <h1 className="text-xl font-extrabold tracking-tight text-blue-600 flex items-center gap-2">
+              Hackwell Jury
+              <span className="bg-green-100 text-green-700 border border-green-200 text-xs px-2.5 py-0.5 rounded-full font-bold">
+                Jury Area
               </span>
-            </div>
-            <p className="text-slate-400 text-sm mt-1">
-              Evaluate hackathon teams and record scores directly into Firestore.
-            </p>
+            </h1>
+            {session && (
+              <p className="text-xs text-gray-500 mt-1">
+                Logged in as <span className="text-blue-600 font-mono font-medium">{session.email}</span> ({session.juryName})
+              </p>
+            )}
           </div>
+        </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 bg-slate-800/80 p-1.5 rounded-2xl border border-slate-700/60">
-            <button
-              onClick={() => setActiveTab('evaluate')}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
-                activeTab === 'evaluate'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              ⚖️ Evaluate Team
-            </button>
-            <button
-              onClick={() => setActiveTab('addJury')}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
-                activeTab === 'addJury'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              🧑‍⚖️ Add Jury Member
-            </button>
-            <button
-              onClick={() => setActiveTab('allScores')}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${
-                activeTab === 'allScores'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              📋 Scores Table ({scoresList.length})
-            </button>
-          </div>
-        </header>
+        <div className="flex items-center gap-3">
+          {scoresFrozen ? (
+            <span className="bg-amber-100 text-amber-800 border border-amber-200 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm">
+              <Lock size={14} className="text-amber-600" /> Scores Frozen
+            </span>
+          ) : (
+            <span className="bg-green-100 text-green-700 border border-green-200 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm">
+              <Unlock size={14} className="text-green-600" /> Open for Scoring
+            </span>
+          )}
+          
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-bold transition duration-200 cursor-pointer"
+          >
+            Logout
+          </button>
+        </div>
+      </header>
 
-        {/* Notifications */}
+      <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-8 space-y-6">
+        
+        {/* Status Alerts */}
         {successMsg && (
-          <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-2xl text-sm font-medium">
-            ✅ {successMsg}
+          <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 text-green-700 rounded-2xl text-sm font-semibold shadow-sm transition animate-fadeIn">
+            <CheckCircle2 size={18} className="text-green-600" />
+            <span>{successMsg}</span>
           </div>
         )}
         {errorMsg && (
-          <div className="p-4 bg-red-500/10 border border-red-500/30 text-red-400 rounded-2xl text-sm font-medium">
-            ⚠️ {errorMsg}
+          <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-sm font-semibold shadow-sm transition animate-fadeIn">
+            <AlertTriangle size={18} className="text-red-600" />
+            <span>{errorMsg}</span>
           </div>
         )}
 
-        {/* TAB 1: EVALUATE TEAM */}
-        {activeTab === 'evaluate' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Score Submission Form */}
-            <div className="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <span>📝 Submit Team Score</span>
-              </h2>
+        {/* LOADING SKELETON */}
+        {loading ? (
+          <div className="space-y-6 animate-pulse">
+            {/* Stats Loader */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-28 bg-white rounded-3xl border border-gray-200 shadow-sm" />
+              ))}
+            </div>
+            {/* List Loader */}
+            <div className="space-y-4">
+              <div className="h-12 bg-white rounded-2xl border border-gray-200 shadow-sm" />
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-24 bg-white rounded-2xl border border-gray-200 shadow-sm" />
+              ))}
+            </div>
+          </div>
+        ) : !assignmentsSupported ? (
+          /* FALLBACK STATEMENT: NO TEAM ASSIGNMENTS AVAILABLE */
+          <div className="bg-white border border-gray-200 rounded-3xl p-8 md:p-12 text-center max-w-lg mx-auto shadow-md flex flex-col items-center gap-4 mt-12 animate-fadeIn">
+            <div className="h-16 w-16 bg-amber-50 border border-amber-200 text-amber-600 rounded-full flex items-center justify-center">
+              <AlertTriangle size={32} />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 tracking-tight">Assignments Required</h2>
+            <p className="text-gray-500 text-sm leading-relaxed">
+              Admin Team Assignment is required before the Jury Dashboard can display assigned teams.
+            </p>
+            <p className="text-xs text-gray-400">
+              Please contact the Administrator to assign teams to your profile ({session?.email}).
+            </p>
+            <button
+              onClick={loadDashboardData}
+              className="mt-2 flex items-center gap-2 px-5 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold border border-gray-300 transition"
+            >
+              <RefreshCw size={14} className={isPendingTransition ? 'animate-spin' : ''} /> Check Again
+            </button>
+          </div>
+        ) : (
+          /* ACTIVE JURY DASHBOARD IMPLEMENTATION */
+          <div className="space-y-6">
+            
+            {/* STATS OVERVIEW CARDS (Light Theme) */}
+            {!urlTeam && (
+              <section className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                  <span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Total Assigned</span>
+                  <span className="text-3xl font-extrabold text-gray-900 mt-2">{totalAssigned}</span>
+                  <span className="text-[10px] text-gray-400 mt-1">Teams assigned to you</span>
+                </div>
 
-              <form onSubmit={handleSubmitScore} className="space-y-5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
-                    Select Evaluating Jury Member
-                  </label>
-                  {juryList.length === 0 ? (
-                    <p className="text-xs text-amber-400 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
-                      No Jury members found. Click &quot;Add Jury Member&quot; tab to create one first.
-                    </p>
-                  ) : (
+                <div className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                  <span className="text-[10px] uppercase tracking-wider text-green-600 font-bold">Evaluated</span>
+                  <span className="text-3xl font-extrabold text-green-600 mt-2">{evaluatedCount}</span>
+                  <span className="text-[10px] text-gray-400 mt-1">Scoring completed</span>
+                </div>
+
+                <div className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                  <span className="text-[10px] uppercase tracking-wider text-amber-600 font-bold">Pending</span>
+                  <span className="text-3xl font-extrabold text-amber-600 mt-2">{pendingCount}</span>
+                  <span className="text-[10px] text-gray-400 mt-1">Remaining evaluations</span>
+                </div>
+
+                <div className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                  <span className="text-[10px] uppercase tracking-wider text-blue-600 font-bold">Highlighted</span>
+                  <span className="text-3xl font-extrabold text-blue-600 mt-2">{highlightedCount}</span>
+                  <span className="text-[10px] text-gray-400 mt-1">Starred teams ⭐</span>
+                </div>
+
+                <div className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between col-span-2 lg:col-span-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Progress</span>
+                    <span className="text-xs font-extrabold text-gray-900">{progressPercent}%</span>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="w-full bg-gray-100 rounded-full h-2 mt-4 border border-gray-200">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-gray-400 mt-2 flex items-center gap-1">
+                    <TrendingUp size={10} className="text-blue-500" /> Progress Rate
+                  </span>
+                </div>
+              </section>
+            )}
+
+            {/* DASHBOARD VIEW: LIST & DETAILS SPLIT OR CARDS */}
+            {!urlTeam ? (
+              /* TAB 1: TEAM LIST VIEW */
+              <div className="space-y-4">
+                
+                {/* Search / Filter / Sort Bar (Light Theme) */}
+                <div className="flex flex-col md:flex-row gap-3 bg-white border border-gray-200 p-3.5 rounded-2xl shadow-sm">
+                  {/* Search Input */}
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3.5 top-3.5 text-gray-400" size={16} />
+                    <input
+                      type="text"
+                      placeholder="Search Team Name, Leader, Number, or Lab..."
+                      value={searchInput}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-950 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-1 focus:ring-blue-500 transition duration-150"
+                    />
+                  </div>
+
+                  {/* Filter Dropdown */}
+                  <div className="flex items-center gap-2">
+                    <Filter className="text-gray-400" size={16} />
                     <select
-                      required
-                      value={selectedJury}
-                      onChange={(e) => setSelectedJury(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
+                      value={urlFilter}
+                      onChange={(e) => updateUrlParams({ filter: e.target.value })}
+                      className="bg-gray-50 border border-gray-300 rounded-xl px-3 py-2.5 text-xs text-gray-950 focus:outline-none focus:border-blue-500 focus:bg-white cursor-pointer transition duration-150"
                     >
-                      <option value="">-- Choose Jury Member --</option>
-                      {juryList.map((j) => (
-                        <option key={j.id} value={j.juryName}>
-                          {j.juryName} ({j.institution})
-                        </option>
+                      <option value="All">All Statuses</option>
+                      <option value="Pending">Pending Evaluation</option>
+                      <option value="Evaluated">Evaluated</option>
+                      <option value="Highlighted">Highlighted ⭐</option>
+                      {uniqueLabs.map(lab => (
+                        <option key={lab} value={`Lab_${lab}`}>Lab {lab}</option>
                       ))}
                     </select>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
-                    Select Team to Evaluate
-                  </label>
-                  <select
-                    required
-                    value={selectedTeamId}
-                    onChange={(e) => {
-                      setSelectedTeamId(e.target.value);
-                      const existing = teams.find((t) => t.id === e.target.value);
-                      if (existing?.currentScore !== undefined) {
-                        setScoreInput(existing.currentScore);
-                      } else {
-                        setScoreInput('');
-                      }
-                    }}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="">-- Choose Team --</option>
-                    {teams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.teamName} ({t.problemStatement})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-amber-400 uppercase mb-2">
-                    Score (0 - 100)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    required
-                    placeholder="Enter total score e.g. 88"
-                    value={scoreInput}
-                    onChange={(e) => setScoreInput(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-amber-500/40 rounded-xl px-4 py-3 text-lg font-bold text-amber-300 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submittingScore || juryList.length === 0}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-4 rounded-xl shadow-lg transition disabled:opacity-50"
-                >
-                  {submittingScore ? 'Submitting Score...' : 'Submit / Update Score'}
-                </button>
-              </form>
-            </div>
-
-            {/* Teams List Cards */}
-            <div className="lg:col-span-2 space-y-4">
-              <h2 className="text-xl font-bold text-white mb-4">Registered Teams & Current Evaluations</h2>
-              {loading ? (
-                <div className="p-8 text-center text-slate-400">Loading teams...</div>
-              ) : teams.length === 0 ? (
-                <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl text-center text-slate-400">
-                  No registered teams found in Firestore.
-                </div>
-              ) : (
-                teams.map((team) => (
-                  <div
-                    key={team.id}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-700 transition"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-bold text-white">{team.teamName}</h3>
-                        <span className="bg-slate-800 text-slate-400 text-[10px] px-2.5 py-0.5 rounded-full font-mono">
-                          ID: {team.id}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Problem Statement: <span className="text-slate-200 font-medium">{team.problemStatement}</span>
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl text-center">
-                        <span className="block text-[9px] font-semibold text-slate-400 uppercase">Jury</span>
-                        <span className="text-xs font-semibold text-slate-200">{team.assignedJury}</span>
-                      </div>
-                      <div className="bg-amber-500/10 border border-amber-500/20 px-4 py-1.5 rounded-xl text-center min-w-[80px]">
-                        <span className="block text-[9px] font-semibold text-amber-400 uppercase">Score</span>
-                        <span className="text-base font-extrabold text-amber-300">
-                          {team.currentScore !== undefined ? `${team.currentScore}/100` : 'Not Scored'}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setSelectedTeamId(team.id);
-                          setScoreInput(team.currentScore !== undefined ? team.currentScore : '');
-                        }}
-                        className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-medium transition"
-                      >
-                        Evaluate
-                      </button>
-                    </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
 
-        {/* TAB 2: ADD JURY MEMBER */}
-        {activeTab === 'addJury' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Add Jury Form */}
-            <div className="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <span>🧑‍⚖️ Add Jury Member</span>
-              </h2>
-
-              <form onSubmit={handleAddJury} className="space-y-5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
-                    Jury Member Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Dr. A. Kumar"
-                    value={juryName}
-                    onChange={(e) => setJuryName(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
-                    Institution / Organization
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Saranathan College of Engineering"
-                    value={institution}
-                    onChange={(e) => setInstitution(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={addingJury}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-4 rounded-xl shadow-lg transition disabled:opacity-50"
-                >
-                  {addingJury ? 'Adding Jury Member...' : 'Save Jury Member'}
-                </button>
-              </form>
-            </div>
-
-            {/* Existing Jury List */}
-            <div className="lg:col-span-2 space-y-4">
-              <h2 className="text-xl font-bold text-white mb-4">Registered Jury Members (`jury` collection)</h2>
-              {juryList.length === 0 ? (
-                <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl text-center text-slate-400">
-                  No jury members added yet. Use the form on the left to add one.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {juryList.map((j) => (
-                    <div
-                      key={j.id}
-                      className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 hover:border-slate-700 transition"
+                  {/* Sort Dropdown */}
+                  <div className="flex items-center gap-2">
+                    <ArrowUpDown className="text-gray-400" size={16} />
+                    <select
+                      value={urlSort}
+                      onChange={(e) => updateUrlParams({ sort: e.target.value })}
+                      className="bg-gray-50 border border-gray-300 rounded-xl px-3 py-2.5 text-xs text-gray-950 focus:outline-none focus:border-blue-500 focus:bg-white cursor-pointer transition duration-150"
                     >
-                      <div className="flex justify-between items-start">
-                        <h3 className="text-lg font-bold text-white">{j.juryName}</h3>
-                        <span className="bg-indigo-500/10 text-indigo-400 text-[10px] px-2.5 py-0.5 rounded-full font-mono">
-                          {j.id}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        Institution: <span className="text-slate-200 font-medium">{j.institution}</span>
-                      </p>
-                      {j.createdAt && (
-                        <p className="text-[10px] text-slate-500 pt-2 border-t border-slate-800">
-                          Added: {new Date(j.createdAt).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                      <option value="teamNumber">Sort by Team Number</option>
+                      <option value="teamName">Sort by Team Name</option>
+                      <option value="teamLeader">Sort by Team Leader</option>
+                      <option value="labNumber">Sort by Lab Number</option>
+                      <option value="evaluated">Sort by Evaluated</option>
+                      <option value="pending">Sort by Pending</option>
+                      <option value="highlighted">Sort by Highlighted</option>
+                    </select>
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
-        )}
 
-        {/* TAB 3: ALL SCORES TABLE */}
-        {activeTab === 'allScores' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
-            <h2 className="text-xl font-bold text-white">Scores Collection (`scores`) Records</h2>
+                {/* Team List Results (Light Theme Cards matching Admin) */}
+                {filteredTeams.length === 0 ? (
+                  <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-500 shadow-sm">
+                    No teams found matching search, filter, or sorting criteria.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredTeams.map((t) => (
+                      <div
+                        key={t.id}
+                        onClick={() => updateUrlParams({ team: t.id })}
+                        className="group bg-white border border-gray-200 hover:border-blue-500/50 rounded-2xl p-5 flex items-start justify-between gap-4 hover:bg-gray-50/50 transition duration-200 cursor-pointer shadow-sm"
+                      >
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="bg-gray-100 border border-gray-200 text-gray-600 font-mono text-[10px] px-2.5 py-0.5 rounded-full font-bold">
+                              No. {t.teamNumber || 'N/A'}
+                            </span>
+                            <span className="bg-gray-100 border border-gray-200 text-gray-600 font-mono text-[10px] px-2.5 py-0.5 rounded-full font-bold">
+                              Lab {t.labNumber || 'N/A'}
+                            </span>
+                            {t.evaluationStatus === 'Evaluated' ? (
+                              <span className="bg-green-50 text-green-700 border border-green-200 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> Evaluated
+                              </span>
+                            ) : (
+                              <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Pending
+                              </span>
+                            )}
+                          </div>
 
-            {scoresList.length === 0 ? (
-              <div className="p-8 text-center text-slate-400">
-                No score records found in `scores` collection. Evaluate a team to create a record.
+                          <div>
+                            <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition">
+                              {t.teamName}
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-1">
+                              Problem: <span className="text-gray-700 font-medium">{t.problemStatement}</span>
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100 mt-1">
+                            <span className="flex items-center gap-1">
+                              <User size={12} className="text-gray-400" /> Lead: <strong className="text-gray-600 font-semibold">{t.leadName}</strong>
+                            </span>
+                            <span>{t.membersCount} members</span>
+                          </div>
+                        </div>
+
+                        {/* Interactive highlights & values */}
+                        <div className="flex flex-col items-end justify-between self-stretch">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStarToggle(t.id, t.highlighted);
+                            }}
+                            className={`p-2 rounded-xl transition duration-150 ${
+                              scoresFrozen ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-100 cursor-pointer'
+                            }`}
+                            disabled={scoresFrozen}
+                          >
+                            <Star
+                              size={20}
+                              className={t.highlighted ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300 hover:text-gray-400'}
+                            />
+                          </button>
+
+                          <div className="text-right">
+                            {t.evaluationStatus === 'Evaluated' && t.score !== undefined ? (
+                              <div className="bg-blue-50 border border-blue-200 px-3.5 py-1.5 rounded-xl">
+                                <span className="block text-[8px] uppercase tracking-wider text-gray-500 font-bold leading-none">Score</span>
+                                <span className="text-sm font-extrabold text-blue-600 leading-none mt-1 inline-block">{t.score}/40</span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-gray-400 italic">Not evaluated</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* FREEZE SCORES ACTION BAR (Light Theme) */}
+                {totalAssigned > 0 && !scoresFrozen && (
+                  <section className="bg-white border border-gray-200 p-6 rounded-2xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 mt-8">
+                    <div>
+                      <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                        <Lock size={16} className="text-amber-500" />
+                        Freeze Evaluation Scores
+                      </h4>
+                      <p className="text-xs text-gray-500 mt-1 max-w-xl">
+                        When all assigned teams have been evaluated, you must freeze your evaluations. This submits your scores permanently and locks them from future edits.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setShowFreezeModal(true)}
+                      disabled={pendingCount > 0}
+                      className="px-6 py-3 font-bold rounded-xl text-sm transition duration-200 flex items-center gap-2 shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      Freeze Scores
+                    </button>
+                  </section>
+                )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-300">
-                  <thead className="bg-slate-800/80 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    <tr>
-                      <th className="p-4 rounded-l-xl">Document ID</th>
-                      <th className="p-4">Team ID</th>
-                      <th className="p-4">Assigned Jury</th>
-                      <th className="p-4">Awarded Score</th>
-                      <th className="p-4 rounded-r-xl">Timestamp</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {scoresList.map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-800/40 transition">
-                        <td className="p-4 font-mono text-xs text-slate-400">{s.id}</td>
-                        <td className="p-4 font-semibold text-white">{s.teamId}</td>
-                        <td className="p-4 text-indigo-400 font-medium">{s.juryName}</td>
-                        <td className="p-4">
-                          <span className="bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs px-3 py-1 rounded-full font-bold">
-                            {s.score} / 100
+              /* TAB 2: DETAILED TEAM EVALUATION VIEW */
+              <div className="space-y-6">
+                
+                {/* Navigation Header */}
+                <div className="flex items-center justify-between border-b border-gray-200 pb-4">
+                  <button
+                    onClick={() => updateUrlParams({ team: '' })}
+                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 transition duration-200 cursor-pointer"
+                  >
+                    <ArrowLeft size={16} /> Back to Dashboard
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => navigateTeam('prev')}
+                      className="p-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-xl text-gray-500 hover:text-gray-900 transition cursor-pointer shadow-sm"
+                      title="Previous Team"
+                    >
+                      <ChevronLeftIcon />
+                    </button>
+                    <span className="text-xs font-mono text-gray-500 bg-white border border-gray-300 px-3 py-1 rounded-xl shadow-sm">
+                      {filteredTeams.findIndex(t => t.id === urlTeam) + 1} / {filteredTeams.length}
+                    </span>
+                    <button
+                      onClick={() => navigateTeam('next')}
+                      className="p-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-xl text-gray-500 hover:text-gray-900 transition cursor-pointer shadow-sm"
+                      title="Next Team"
+                    >
+                      <ChevronRightIcon />
+                    </button>
+                  </div>
+                </div>
+
+                {detailsLoading || !selectedTeam ? (
+                  <div className="p-12 text-center text-gray-500 animate-pulse">Loading team data...</div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start animate-fadeIn">
+                    
+                    {/* LEFT COLUMN: TEAM INFO & DETAILS */}
+                    <div className="lg:col-span-2 space-y-6">
+                      
+                      {/* Team Header Info */}
+                      <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-sm relative overflow-hidden">
+                        <div className="flex items-center gap-3">
+                          <span className="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-3 py-1 rounded-xl font-bold font-mono">
+                            No. {selectedTeam.teamNumber || 'N/A'}
                           </span>
-                        </td>
-                        <td className="p-4 text-xs text-slate-500">
-                          {s.createdAt ? new Date(s.createdAt).toLocaleString() : 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <span className="bg-blue-50 text-blue-700 border border-blue-200 text-xs px-3 py-1 rounded-xl font-bold font-mono">
+                            Lab {selectedTeam.labNumber || 'N/A'}
+                          </span>
+                        </div>
+                        <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight mt-3">{selectedTeam.teamName}</h2>
+                        
+                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-500 pt-4 border-t border-gray-150">
+                          <div>
+                            <span className="block text-[10px] uppercase font-bold text-gray-400 tracking-wider">Problem Statement</span>
+                            <span className="text-gray-800 font-bold">{selectedTeam.problemStatement}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[10px] uppercase font-bold text-gray-400 tracking-wider">Team Lead</span>
+                            <span className="text-gray-800 font-medium">{selectedTeam.leadData.name} ({selectedTeam.leadEmail})</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Project Details */}
+                      <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-sm space-y-5">
+                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 border-b border-gray-250 pb-3">
+                          <BookOpen size={18} className="text-blue-500" />
+                          Project Details
+                        </h3>
+
+                        <div className="space-y-4 text-sm leading-relaxed">
+                          {selectedTeam.abstract && selectedTeam.abstract !== 'N/A' && (
+                            <div>
+                              <h4 className="font-bold text-gray-700">Abstract</h4>
+                              <p className="text-gray-600 mt-1">{selectedTeam.abstract}</p>
+                            </div>
+                          )}
+
+                          {selectedTeam.proposedSolution && selectedTeam.proposedSolution !== 'N/A' && (
+                            <div>
+                              <h4 className="font-bold text-gray-700">Proposed Solution</h4>
+                              <p className="text-gray-600 mt-1">{selectedTeam.proposedSolution}</p>
+                            </div>
+                          )}
+
+                          {selectedTeam.projectDescription && selectedTeam.projectDescription !== 'N/A' && (
+                            <div>
+                              <h4 className="font-bold text-gray-700">Project Description</h4>
+                              <p className="text-gray-600 mt-1">{selectedTeam.projectDescription}</p>
+                            </div>
+                          )}
+
+                          {selectedTeam.techStack && selectedTeam.techStack !== 'N/A' && (
+                            <div className="flex items-start gap-2 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                              <Code size={18} className="text-blue-500 mt-0.5" />
+                              <div>
+                                <h4 className="font-bold text-gray-700 text-xs uppercase tracking-wider">Tech Stack</h4>
+                                <p className="text-gray-600 mt-1">{selectedTeam.techStack}</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedTeam.submissionLink && (
+                            <div className="pt-2">
+                              <a
+                                href={selectedTeam.submissionLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                              >
+                                View Submission Link <ExternalLink size={12} />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Team Members List */}
+                      <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-sm space-y-4">
+                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 border-b border-gray-250 pb-3">
+                          <User size={18} className="text-blue-500" />
+                          Team Members ({selectedTeam.membersCount})
+                        </h3>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Lead card */}
+                          <div className="bg-gray-50 border border-gray-200 p-4 rounded-xl flex flex-col justify-between">
+                            <div>
+                              <div className="flex justify-between items-center">
+                                <h4 className="font-bold text-gray-950 text-sm">{selectedTeam.leadData.name}</h4>
+                                <span className="bg-blue-100 text-blue-700 border border-blue-200 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">Lead</span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-1.5">
+                                Batch: <span className="text-gray-900 font-semibold">{selectedTeam.leadData.batchNumber}</span> | Dept: <span className="text-gray-900 font-semibold">{selectedTeam.leadData.department}</span>
+                              </p>
+                              <p className="text-xs text-gray-600 mt-0.5">
+                                Year: <span className="text-gray-900 font-semibold">{selectedTeam.leadData.year}</span> | Section: <span className="text-gray-900 font-semibold">{selectedTeam.leadData.section}</span>
+                              </p>
+                            </div>
+                            <div className="text-xs text-gray-500 pt-2 border-t border-gray-200 mt-3 font-mono">
+                              Tel: {selectedTeam.leadData.contactNumber}
+                            </div>
+                          </div>
+
+                          {/* Member cards */}
+                          {selectedTeam.membersData.map((m, i) => (
+                            <div key={i} className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
+                              <div className="flex justify-between items-center">
+                                <h4 className="font-bold text-gray-950 text-sm">{m.name}</h4>
+                                <span className="bg-gray-200 text-gray-600 border border-gray-300 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase">Member</span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-1.5">
+                                Batch: <span className="text-gray-900 font-semibold">{m.batchNumber}</span> | Dept: <span className="text-gray-900 font-semibold">{m.department}</span>
+                              </p>
+                              <p className="text-xs text-gray-600 mt-0.5">
+                                Year: <span className="text-gray-900 font-semibold">{m.year}</span> | Section: <span className="text-gray-900 font-semibold">{m.section}</span>
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* RIGHT COLUMN: SCORE INPUT FORM */}
+                    <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-sm space-y-6 sticky top-24">
+                      <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+                        <h3 className="text-lg font-bold text-gray-950 flex items-center gap-2">
+                          Evaluation Form
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => handleStarToggle(selectedTeam.id, evaluation.highlighted)}
+                          disabled={scoresFrozen}
+                          className={`p-2 rounded-xl transition duration-150 ${
+                            scoresFrozen ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100 cursor-pointer'
+                          }`}
+                        >
+                          <Star
+                            size={22}
+                            className={evaluation.highlighted ? 'fill-yellow-400 text-yellow-400 animate-scaleIn' : 'text-gray-300 hover:text-gray-400'}
+                          />
+                        </button>
+                      </div>
+
+                      <form onSubmit={handleSaveEvaluation} className="space-y-5">
+                        
+                        {/* Rubrics (0 - 10) */}
+                        <div className="space-y-4">
+                          {[
+                            { key: 'innovation', label: 'Innovation' },
+                            { key: 'technicalFeasibility', label: 'Technical Feasibility' },
+                            { key: 'impact', label: 'Impact' },
+                            { key: 'presentation', label: 'Presentation' },
+                          ].map(({ key, label }) => (
+                            <div key={key} className="flex items-center justify-between gap-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                              <div>
+                                <label htmlFor={key} className="block text-xs font-bold text-gray-700">{label}</label>
+                                <span className="text-[10px] text-gray-400">Range: 0 – 10 (Integer)</span>
+                              </div>
+                              <input
+                                id={key}
+                                type="number"
+                                min="0"
+                                max="10"
+                                required
+                                value={evaluation[key as keyof Omit<EvaluationData, 'remarks' | 'highlighted' | 'score'>] || ''}
+                                onChange={(e) => handleScoreChange(key as any, e.target.value)}
+                                disabled={scoresFrozen}
+                                className="w-16 bg-white border border-gray-300 focus:border-blue-500 rounded-xl px-3 py-2 text-center text-base font-extrabold text-gray-900 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed font-mono"
+                              />
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Remarks */}
+                        <div className="space-y-2">
+                          <label htmlFor="remarks" className="block text-xs font-bold text-gray-700">Jury Remarks</label>
+                          <textarea
+                            id="remarks"
+                            rows={3}
+                            placeholder="Add evaluation comments..."
+                            value={evaluation.remarks}
+                            onChange={(e) => !scoresFrozen && setEvaluation(prev => ({ ...prev, remarks: e.target.value }))}
+                            disabled={scoresFrozen}
+                            className="w-full bg-gray-50 border border-gray-300 focus:border-blue-500 rounded-xl p-3 text-xs text-gray-950 placeholder:text-gray-400 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+                          />
+                        </div>
+
+                        {/* Calculated Total Score */}
+                        <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-center justify-between">
+                          <div>
+                            <span className="block text-[10px] uppercase font-bold text-gray-600 tracking-wider">Total Score</span>
+                            <span className="text-[10px] text-gray-500">Sum of the 4 Rubrics</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-2xl font-black text-blue-600 font-mono">{evaluation.score}</span>
+                            <span className="text-xs text-gray-500 font-mono"> / 40</span>
+                          </div>
+                        </div>
+
+                        {/* Save Action */}
+                        {scoresFrozen ? (
+                          <div className="bg-amber-100 border border-amber-200 p-3 rounded-xl text-center text-xs text-amber-800 font-semibold flex items-center justify-center gap-1.5 animate-pulse shadow-sm">
+                            <Lock size={14} className="text-amber-600" /> Scores Frozen: Read-Only
+                          </div>
+                        ) : (
+                          <button
+                            type="submit"
+                            disabled={submitting}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Save size={16} />
+                            {submitting ? 'Saving Evaluation...' : 'Save Evaluation'}
+                          </button>
+                        )}
+
+                      </form>
+
+                    </div>
+
+                  </div>
+                )}
               </div>
             )}
+
           </div>
         )}
       </div>
+
+      {/* CONFIRMATION FREEZE MODAL */}
+      {showFreezeModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white border border-gray-200 rounded-3xl p-6 md:p-8 max-w-md w-full space-y-6 shadow-2xl animate-scaleIn animate-duration-150">
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 bg-red-100 border border-red-200 text-red-600 rounded-2xl flex items-center justify-center shrink-0">
+                <Lock size={24} />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-lg font-bold text-gray-950">Freeze All Scores?</h3>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  After freezing, scores cannot be edited. Do you want to continue?
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowFreezeModal(false)}
+                disabled={freezing}
+                className="px-4 py-2.5 bg-gray-150 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold border border-gray-200 transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFreezeScores}
+                disabled={freezing}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold shadow-md transition cursor-pointer disabled:opacity-50"
+              >
+                {freezing ? 'Freezing...' : 'Freeze'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
+}
+
+// Helpers for navigation buttons inside page (custom icons)
+function ChevronLeftIcon() {
+  return <ArrowLeft size={16} />;
+}
+
+function ChevronRightIcon() {
+  return <ArrowRight size={16} />;
 }
