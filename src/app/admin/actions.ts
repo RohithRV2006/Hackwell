@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { encryptJSON, decryptJSON } from '@/lib/encryption';
 import { getUserRole } from '@/app/actions/session';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export async function verifyAdminSession() {
   const cookieStore = await cookies();
@@ -338,5 +339,229 @@ export async function seedDummyTeamsAdmin() {
   } catch (error: any) {
     console.error('Error seeding dummy teams:', error);
     return { success: false, error: error.message || 'Failed to seed dummy teams' };
+  }
+}
+
+export interface Rubric {
+  idea: number;
+  output: number;
+  innovation: number;
+  presentation: number;
+  finalOutput: number;
+}
+
+export interface AdminScoreData {
+  id: string;
+  teamId: string;
+  teamName?: string;
+  problemStatement?: string;
+  juryName: string;
+  rubric: Rubric;
+  totalScore: number;
+  feedback: string;
+  starred: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  score?: number; // for backward compatibility
+}
+
+export async function getAllScoresAdmin() {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized', scores: [] };
+  }
+
+  try {
+    const db = getAdminDb();
+    const snapshot = await db.collection('scores').orderBy('createdAt', 'desc').get();
+    
+    // Fetch teams to map names and problem statements
+    const teamsSnap = await db.collection('teams').get();
+    const teamMap = new Map<string, { teamName: string; problemStatement: string }>();
+    teamsSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      teamMap.set(doc.id, {
+        teamName: data.teamName || doc.id,
+        problemStatement: data.problemStatement || 'N/A',
+      });
+    });
+
+    const scores: AdminScoreData[] = [];
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      
+      // Fallback for old documents that only had score
+      const scoreVal = typeof data.score === 'number' ? data.score : 0;
+      const base = Math.floor(scoreVal / 5);
+      const remainder = scoreVal % 5;
+      const rubricObj: Rubric = data.rubric || {
+        idea: base + (remainder >= 1 ? 1 : 0),
+        output: base + (remainder >= 2 ? 1 : 0),
+        innovation: base + (remainder >= 3 ? 1 : 0),
+        presentation: base + (remainder >= 4 ? 1 : 0),
+        finalOutput: base,
+      };
+      
+      const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : scoreVal;
+      const feedbackVal = data.feedback || '';
+      const starredVal = typeof data.starred === 'boolean' ? data.starred : false;
+      
+      const createdAtStr = data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : '';
+      const updatedAtStr = data.updatedAt ? new Date(data.updatedAt.toDate ? data.updatedAt.toDate() : data.updatedAt).toISOString() : createdAtStr;
+
+      const teamInfo = teamMap.get(data.teamId || '');
+
+      scores.push({
+        id: doc.id,
+        teamId: data.teamId || '',
+        teamName: teamInfo?.teamName || data.teamId || 'Unknown Team',
+        problemStatement: teamInfo?.problemStatement || 'N/A',
+        juryName: data.juryName || 'Anonymous',
+        rubric: rubricObj,
+        totalScore: totalScoreVal,
+        score: totalScoreVal, // compatibility
+        feedback: feedbackVal,
+        starred: starredVal,
+        createdAt: createdAtStr,
+        updatedAt: updatedAtStr,
+      });
+    }
+
+    return { success: true, scores };
+  } catch (error: any) {
+    console.error('Error fetching scores for admin:', error);
+    return { success: false, error: error.message || 'Failed to fetch scores', scores: [] };
+  }
+}
+
+export async function createScoreAdmin(scoreData: {
+  teamId: string;
+  juryName: string;
+  rubric: Rubric;
+  feedback?: string;
+  starred?: boolean;
+}) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const db = getAdminDb();
+    const scoresRef = db.collection('scores');
+
+    // Ensure team exists
+    const teamDoc = await db.collection('teams').doc(scoreData.teamId).get();
+    if (!teamDoc.exists) {
+      return { success: false, error: `Team ID "${scoreData.teamId}" does not exist.` };
+    }
+
+    // Check if score record already exists for this team (enforce single score record rule)
+    const existingSnap = await scoresRef.where('teamId', '==', scoreData.teamId).limit(1).get();
+    if (!existingSnap.empty) {
+      return { success: false, error: 'A score record already exists for this team. Pass updated rubric to edit the record instead.' };
+    }
+
+    const { idea, output, innovation, presentation, finalOutput } = scoreData.rubric;
+    const totalScore = Number(idea) + Number(output) + Number(innovation) + Number(presentation) + Number(finalOutput);
+    const now = new Date();
+
+    const newDoc = scoresRef.doc();
+    await newDoc.set({
+      teamId: scoreData.teamId,
+      juryName: scoreData.juryName.trim(),
+      rubric: {
+        idea: Number(idea),
+        output: Number(output),
+        innovation: Number(innovation),
+        presentation: Number(presentation),
+        finalOutput: Number(finalOutput),
+      },
+      totalScore,
+      feedback: scoreData.feedback?.trim() || '',
+      starred: !!scoreData.starred,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { success: true, id: newDoc.id };
+  } catch (error: any) {
+    console.error('Error creating score:', error);
+    return { success: false, error: error.message || 'Failed to create score' };
+  }
+}
+
+export async function updateScoreAdmin(
+  scoreId: string,
+  updatedFields: {
+    juryName?: string;
+    rubric?: Rubric;
+    feedback?: string;
+    starred?: boolean;
+  }
+) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const db = getAdminDb();
+    const docRef = db.collection('scores').doc(scoreId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return { success: false, error: 'Score record not found' };
+    }
+
+    const payload: Record<string, any> = {};
+    if (updatedFields.juryName !== undefined) {
+      payload.juryName = updatedFields.juryName.trim();
+    }
+    if (updatedFields.feedback !== undefined) {
+      payload.feedback = updatedFields.feedback.trim();
+    }
+    if (updatedFields.starred !== undefined) {
+      payload.starred = !!updatedFields.starred;
+    }
+
+    if (updatedFields.rubric !== undefined) {
+      const { idea, output, innovation, presentation, finalOutput } = updatedFields.rubric;
+      const parsedRubric = {
+        idea: Number(idea),
+        output: Number(output),
+        innovation: Number(innovation),
+        presentation: Number(presentation),
+        finalOutput: Number(finalOutput),
+      };
+      payload.rubric = parsedRubric;
+      payload.totalScore = parsedRubric.idea + parsedRubric.output + parsedRubric.innovation + parsedRubric.presentation + parsedRubric.finalOutput;
+    }
+
+    payload.updatedAt = new Date();
+    payload.score = FieldValue.delete();
+
+    await docRef.update(payload);
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error updating score:', error);
+    return { success: false, error: error.message || 'Failed to update score' };
+  }
+}
+
+export async function deleteScoreAdmin(scoreId: string) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const db = getAdminDb();
+    await db.collection('scores').doc(scoreId).delete();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting score:', error);
+    return { success: false, error: error.message || 'Failed to delete score' };
   }
 }
