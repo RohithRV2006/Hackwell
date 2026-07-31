@@ -9,6 +9,7 @@ import { auth } from '@/lib/firebase';
 import { checkTeamNameUnique, registerTeamData } from '@/app/actions/auth';
 import { useRouter } from 'next/navigation';
 import Select from 'react-select';
+import { Eye, EyeOff } from 'lucide-react';
 
 const depts = ["AID", "CSBS", "CSE", "CSE(AIML)", "IT"] as const;
 const years = ["II", "III", "IV"] as const;
@@ -72,6 +73,7 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [nameChecking, setNameChecking] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { register, handleSubmit, control, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -156,7 +158,7 @@ export default function Register() {
         throw new Error(result.error);
       }
 
-      router.push('/login?registered=true');
+      router.replace('/login?registered=true');
     } catch (err: any) {
       setError(err.message || 'An error occurred during registration');
     } finally {
@@ -247,7 +249,20 @@ export default function Register() {
               
               <div className="lg:col-span-2">
                 <label className="block text-sm font-medium mb-1">Password *</label>
-                <input type="password" {...register('lead.password')} className="w-full p-2 border rounded-md" />
+                <div className="relative">
+                  <input 
+                    {...register('lead.password')} 
+                    type={showPassword ? 'text' : 'password'} 
+                    className="w-full p-2 border rounded-md pr-10" 
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700 z-10"
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
                 {errors.lead?.password && <p className="text-red-500 text-xs mt-1">{errors.lead.password.message}</p>}
                 
                 {/* Password Constraints */}

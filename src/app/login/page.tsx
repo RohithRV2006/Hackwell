@@ -6,10 +6,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { createSessionCookie, getUserRole } from '@/app/actions/session';
+import { createSessionCookie } from '@/app/actions/session';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import Link from 'next/link';
+import { Eye, EyeOff } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
@@ -24,6 +25,7 @@ function LoginForm() {
   const [error, setError] = useState<string>('');
   const [msg, setMsg] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const registered = searchParams.get('registered');
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm<LoginData>({
@@ -45,18 +47,18 @@ function LoginForm() {
         throw new Error(result.error || 'Failed to create session');
       }
 
-      const role = await getUserRole(data.email);
+      const role = result.role || 'team';
 
       if (role === 'admin') {
-        router.push('/admin');
+        window.location.replace('/admin');
       } else if (role === 'jury') {
-        router.push('/jury-dashboard');
+        window.location.replace('/jury-dashboard');
       } else if (role === 'student-coord') {
-        router.push('/student-coord-dashboard');
+        window.location.replace('/student-coord-dashboard');
       } else if (role === 'faculty-coord') {
-        router.push('/faculty-coord-dashboard');
+        window.location.replace('/faculty-coord-dashboard');
       } else {
-        router.push('/team-dashboard');
+        window.location.replace('/team-dashboard');
       }
     } catch (err: any) {
       setError(err.message || 'Invalid credentials');
@@ -118,7 +120,20 @@ function LoginForm() {
 
         <div>
           <label className="block text-sm font-medium mb-1">Password</label>
-          <input type="password" {...register('password')} className="w-full p-2 border rounded-md" />
+          <div className="relative">
+            <input 
+              {...register('password')} 
+              type={showPassword ? 'text' : 'password'} 
+              className="w-full p-2 border rounded-md pr-10" 
+            />
+            <button 
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700 z-10"
+            >
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
+          </div>
           {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
         </div>
 

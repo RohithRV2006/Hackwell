@@ -2,11 +2,26 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+import { clearSessionCookie } from '@/app/actions/session';
 
 export default function NavBar({ session }: { session: any }) {
+  const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      await clearSessionCookie();
+      window.location.reload();
+    } catch (error) {
+      console.error('Logout failed', error);
+    }
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -37,9 +52,14 @@ export default function NavBar({ session }: { session: any }) {
             <a href="#rules" className="text-gray-700 hover:text-blue-600 font-medium transition">Rules</a>
             
             {session ? (
-              <Link href="/team-dashboard" className="px-5 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md transition">
-                Dashboard
-              </Link>
+              <div className="flex items-center space-x-4">
+                <Link href="/team-dashboard" className="px-5 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md transition">
+                  Dashboard
+                </Link>
+                <button onClick={handleLogout} className="px-5 py-2 rounded-lg border-2 border-red-500 text-red-500 font-bold hover:bg-red-50 transition">
+                  Logout
+                </button>
+              </div>
             ) : (
               <div className="flex items-center space-x-4">
                 <Link href="/login" className="text-blue-600 font-bold hover:text-blue-700 transition">Login</Link>
@@ -64,7 +84,10 @@ export default function NavBar({ session }: { session: any }) {
             <a href="#rules" onClick={() => setIsMobileOpen(false)} className="block px-3 py-3 text-gray-800 font-medium hover:bg-blue-50 hover:text-blue-600 rounded-lg">Rules</a>
             <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
               {session ? (
-                <Link href="/team-dashboard" className="block text-center px-4 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Dashboard</Link>
+                <>
+                  <Link href="/team-dashboard" className="block text-center px-4 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Dashboard</Link>
+                  <button onClick={handleLogout} className="block w-full text-center px-4 py-3 rounded-lg border-2 border-red-500 text-red-500 font-bold hover:bg-red-50 transition">Logout</button>
+                </>
               ) : (
                 <>
                   <Link href="/login" className="block text-center px-4 py-3 rounded-lg border-2 border-blue-600 text-blue-600 font-bold hover:bg-blue-50 transition">Login</Link>

@@ -51,14 +51,42 @@ export async function createSessionCookie(idToken: string) {
     // Set the cookie
     const cookieStore = await cookies();
     cookieStore.set('session', sessionCookie, {
-      maxAge: expiresIn,
+      maxAge: Math.floor(expiresIn / 1000),
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',
       sameSite: 'lax',
     });
     
-    return { success: true };
+    // Fetch user role
+    const sanitizedEmail = decodedIdToken.email?.trim().toLowerCase();
+    let role = 'team';
+    
+    if (sanitizedEmail === 'rohithrv2006@gmail.com') {
+      role = 'admin';
+    } else if (sanitizedEmail) {
+      try {
+        const roleDoc = await getAdminDb().collection('roles').doc(sanitizedEmail).get();
+        if (roleDoc.exists) {
+          const encryptedData = roleDoc.data();
+          if (encryptedData && encryptedData.encryptedRole) {
+            try {
+              const decrypted = decryptJSON(encryptedData.encryptedRole);
+              if (decrypted && decrypted.role) role = decrypted.role;
+            } catch (e) {
+              console.error("Failed to decrypt role", e);
+            }
+          }
+          if (role === 'team') {
+            role = encryptedData?.role || 'team';
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching role', error);
+      }
+    }
+
+    return { success: true, role };
   } catch (error: any) {
     console.error('Error creating session cookie', error);
     return { success: false, error: error.message };

@@ -6,7 +6,7 @@ export default function Hero() {
           Hackwell 2.O
         </h1>
         <p className="mt-4 max-w-2xl text-xl text-gray-500 mx-auto">
-          Innovate, Build, and Conquer. Join us for 24 hours of non-stop coding, creativity, and collaboration!
+          One platform. Countless ideas. Infinite possibilities.
         </p>
       </div>
     </section>
