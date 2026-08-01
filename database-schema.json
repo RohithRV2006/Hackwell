@@ -91,7 +91,7 @@
       }
     },
     "scores": {
-      "description": "Stores the score given to a team by its assigned jury.",
+      "description": "Stores the detailed rubric-based score given to a team by its assigned jury.",
       "documentId": "Auto-generated Firestore document ID",
       "fields": {
         "teamId": {
@@ -104,15 +104,42 @@
           "encrypted": false,
           "description": "The assigned jury's name."
         },
-        "score": {
+        "rubric": {
+          "type": "object",
+          "encrypted": false,
+          "description": "Detailed scoring breakdown across evaluation criteria.",
+          "properties": {
+            "idea": { "type": "number", "description": "Score for the idea / concept." },
+            "output": { "type": "number", "description": "Score for the output / implementation." },
+            "innovation": { "type": "number", "description": "Score for the innovation level." },
+            "presentation": { "type": "number", "description": "Score for the presentation / pitch." },
+            "finalOutput": { "type": "number", "description": "Score for the final output / demo." }
+          }
+        },
+        "totalScore": {
           "type": "number",
           "encrypted": false,
-          "description": "The total score awarded by that jury."
+          "description": "The sum of all rubric scores (idea + output + innovation + presentation + finalOutput)."
+        },
+        "feedback": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Optional comments/feedback from the jury."
+        },
+        "starred": {
+          "type": "boolean",
+          "encrypted": false,
+          "description": "Indicates whether the jury highlighted/starred the team."
         },
         "createdAt": {
           "type": "timestamp",
           "encrypted": false,
           "description": "Server timestamp when the score record was created."
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "encrypted": false,
+          "description": "Server timestamp when the score record was last modified."
         }
       }
     }

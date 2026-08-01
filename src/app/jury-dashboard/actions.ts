@@ -4,6 +4,8 @@ import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { decryptJSON } from '@/lib/encryption';
 import { getUserRole } from '@/app/actions/session';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export interface SimpleTeam {
   id: string; // teamName lowercase
@@ -40,6 +42,27 @@ export interface DetailedTeam extends SimpleTeam {
   abstract?: string;
   techStack?: string;
   submissionLink?: string;
+export interface Rubric {
+  idea: number;
+  output: number;
+  innovation: number;
+  presentation: number;
+  finalOutput: number;
+}
+
+export interface TeamScore {
+  id: string;
+  teamId: string;
+  juryName: string;
+  rubric?: Rubric;
+  totalScore?: number;
+  feedback?: string;
+  starred?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  
+  // Backward compatibility
+  score: number;
 }
 
 export interface EvaluationData {
@@ -195,6 +218,12 @@ export async function getJuryDashboardData() {
         scoreMap.set(data.teamId.trim().toLowerCase(), {
           score: typeof data.score === 'number' ? data.score : 0,
           highlighted: data.highlighted === true
+        const scoreVal = typeof data.score === 'number' ? data.score : 0;
+        const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : scoreVal;
+        scoreMap.set(data.teamId, {
+          id: doc.id,
+          juryName: data.juryName || '',
+          score: totalScoreVal,
         });
       }
     });
@@ -402,6 +431,17 @@ export async function saveEvaluation(
       .limit(1)
       .get();
 
+    const base = Math.floor(numericScore / 5);
+    const remainder = numericScore % 5;
+    const rubricObj = {
+      idea: base + (remainder >= 1 ? 1 : 0),
+      output: base + (remainder >= 2 ? 1 : 0),
+      innovation: base + (remainder >= 3 ? 1 : 0),
+      presentation: base + (remainder >= 4 ? 1 : 0),
+      finalOutput: base,
+    };
+    const now = new Date();
+
     if (!existingSnap.empty) {
       // Update existing record
       const docRef = existingSnap.docs[0].ref;
@@ -431,6 +471,11 @@ export async function saveEvaluation(
         highlighted,
         frozen: false,
         createdAt: new Date(),
+        juryName: juryName.trim(),
+        rubric: rubricObj,
+        totalScore: numericScore,
+        updatedAt: now,
+        score: FieldValue.delete(),
       });
       return { success: true, updated: false };
     }
@@ -487,6 +532,17 @@ export async function toggleHighlight(teamId: string, highlighted: boolean) {
         highlighted,
         frozen: false,
         createdAt: new Date(),
+      // Create new score record with auto-generated document ID
+      const newDocRef = scoresRef.doc();
+      await newDocRef.set({
+        teamId: teamId,
+        juryName: juryName.trim(),
+        rubric: rubricObj,
+        totalScore: numericScore,
+        feedback: '',
+        starred: false,
+        createdAt: now,
+        updatedAt: now,
       });
       return { success: true };
     }
@@ -542,6 +598,32 @@ export async function freezeJuryScores() {
         frozen: true,
         frozenAt: new Date(),
       });
+    const scoresList: TeamScore[] = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      const scoreVal = typeof data.score === 'number' ? data.score : 0;
+      const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : scoreVal;
+      const base = Math.floor(scoreVal / 5);
+      const remainder = scoreVal % 5;
+      const rubricObj: Rubric = data.rubric || {
+        idea: base + (remainder >= 1 ? 1 : 0),
+        output: base + (remainder >= 2 ? 1 : 0),
+        innovation: base + (remainder >= 3 ? 1 : 0),
+        presentation: base + (remainder >= 4 ? 1 : 0),
+        finalOutput: base,
+      };
+
+      return {
+        id: doc.id,
+        teamId: data.teamId || '',
+        juryName: data.juryName || '',
+        rubric: rubricObj,
+        totalScore: totalScoreVal,
+        score: totalScoreVal, // backward compatibility
+        feedback: data.feedback || '',
+        starred: typeof data.starred === 'boolean' ? data.starred : false,
+        createdAt: data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : '',
+        updatedAt: data.updatedAt ? new Date(data.updatedAt.toDate ? data.updatedAt.toDate() : data.updatedAt).toISOString() : (data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : ''),
+      };
     });
 
     // 4. Update freeze status in roles collection
