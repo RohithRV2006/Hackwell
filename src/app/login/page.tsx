@@ -10,7 +10,7 @@ import { createSessionCookie } from '@/app/actions/session';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import Link from 'next/link';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
@@ -90,8 +90,11 @@ function LoginForm() {
   };
 
   return (
-    <div className="w-full max-w-md bg-white shadow-xl rounded-2xl p-8">
-      <h1 className="text-3xl font-extrabold text-center mb-6 text-blue-600">Login</h1>
+    <div className="w-full max-w-md bg-white shadow-xl rounded-2xl p-8 border border-gray-100 relative">
+      <Link href="/" className="absolute top-4 left-4 text-gray-500 hover:text-gray-900 transition p-2 rounded-full hover:bg-gray-100">
+        <ArrowLeft size={24} />
+      </Link>
+      <h1 className="text-3xl font-extrabold text-center mb-8 text-blue-600">Login</h1>
       
       {registered && (
         <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-6">

@@ -6,43 +6,95 @@ import { encryptJSON } from '@/lib/encryption';
 export async function checkTeamNameUnique(teamName: string) {
   try {
     const sanitizedName = teamName.trim().toLowerCase();
-    const docRef = getAdminDb().collection('teams').doc(sanitizedName);
-    const docSnap = await docRef.get();
-    return { isUnique: !docSnap.exists };
+    
+    // Check legacy teams (where doc ID is the team name)
+    const legacyDoc = await getAdminDb().collection('teams').doc(sanitizedName).get();
+    if (legacyDoc.exists) {
+      return { isUnique: false };
+    }
+
+    // Check new teams (where teamNameLower field is set)
+    const snapshot = await getAdminDb().collection('teams').where('teamNameLower', '==', sanitizedName).limit(1).get();
+    return { isUnique: snapshot.empty };
   } catch (error: any) {
     console.error('Error checking team name', error);
     return { error: 'Failed to check team name uniqueness' };
   }
 }
 
+export async function checkBatchNumbers(batchNumbers: string[]) {
+  try {
+    const db = getAdminDb();
+    const snapshot = await db.collection('teams').get();
+    
+    // We fetch all teams and manually check batch numbers since they are inside arrays/objects
+    // In production with thousands of teams, this might need optimization or indexing, 
+    // but works fine for hackathon scale.
+    const takenBatchNumbers = new Set<string>();
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.leadData?.batchNumber) takenBatchNumbers.add(data.leadData.batchNumber);
+      if (data.membersData) {
+        data.membersData.forEach((m: any) => {
+          if (m.batchNumber) takenBatchNumbers.add(m.batchNumber);
+        });
+      }
+    });
+
+    const duplicates = batchNumbers.filter(b => takenBatchNumbers.has(b));
+    return { success: true, duplicates };
+  } catch (error: any) {
+    console.error('Error checking batch numbers', error);
+    return { success: false, error: 'Failed to check batch numbers' };
+  }
+}
+
 export async function registerTeamData(
   teamName: string,
-  problemStatement: string,
+  theme: string,
+  psId: string,
+  psName: string,
   leadEmail: string,
   leadData: any,
   membersData: any[]
 ) {
   try {
+    const db = getAdminDb();
     const sanitizedName = teamName.trim().toLowerCase();
     
     // Double check uniqueness
-    const docRef = getAdminDb().collection('teams').doc(sanitizedName);
-    const docSnap = await docRef.get();
-    if (docSnap.exists) {
+    const teamNameCheck = await checkTeamNameUnique(sanitizedName);
+    if (!teamNameCheck.isUnique) {
       return { success: false, error: 'Team name already taken.' };
     }
+
+    // Generate unique sequential ID using a transaction
+    const counterRef = db.collection('metadata').doc('teamCounter');
     
-    // Encrypt sensitive data
-    const encryptedLeadData = encryptJSON(leadData);
-    const encryptedMembersData = encryptJSON(membersData);
+    const teamId = await db.runTransaction(async (transaction) => {
+      const counterDoc = await transaction.get(counterRef);
+      
+      let newCount = 1;
+      if (counterDoc.exists) {
+        newCount = (counterDoc.data()?.count || 0) + 1;
+      }
+      
+      transaction.set(counterRef, { count: newCount }, { merge: true });
+      
+      return `H2O-${String(newCount).padStart(3, '0')}`;
+    });
     
-    // Save to Firestore
-    await docRef.set({
+    // Save to Firestore using the generated sequential teamId
+    await db.collection('teams').doc(teamId).set({
       teamName: teamName.trim(),
-      problemStatement,
+      teamNameLower: sanitizedName,
+      theme,
+      psId,
+      problemStatement: psName,
       leadEmail: leadEmail.trim().toLowerCase(),
-      leadData: encryptedLeadData,
-      membersData: encryptedMembersData,
+      leadData: leadData,
+      membersData: membersData,
       createdAt: new Date(),
     });
     
@@ -73,14 +125,33 @@ export async function getTeamDataByEmail(email: string) {
       team: {
         id: doc.id,
         teamName: data.teamName,
+        theme: data.theme,
+        psId: data.psId,
         problemStatement: data.problemStatement,
         leadEmail: data.leadEmail,
-        encryptedLeadData: data.leadData,
-        encryptedMembersData: data.membersData,
+        leadData: data.leadData,
+        membersData: data.membersData,
+        pptLink: data.pptLink || null,
+        prelimsStatus: data.prelimsStatus || 'pending',
+        venue: data.venue || null,
       }
     };
   } catch (error: any) {
     console.error('Error fetching team data', error);
     return { success: false, error: error.message };
+  }
+}
+
+export async function submitPPT(teamId: string, pptLink: string) {
+  try {
+    const db = getAdminDb();
+    await db.collection('teams').doc(teamId).update({
+      pptLink: pptLink.trim(),
+      updatedAt: new Date()
+    });
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error submitting PPT', error);
+    return { success: false, error: 'Failed to submit PPT link.' };
   }
 }
