@@ -2,9 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
-import { decryptJSON } from '@/lib/encryption';
 import { getUserRole } from '@/app/actions/session';
-import { getAdminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
 export interface SimpleTeam {
@@ -42,6 +40,8 @@ export interface DetailedTeam extends SimpleTeam {
   abstract?: string;
   techStack?: string;
   submissionLink?: string;
+}
+
 export interface Rubric {
   idea: number;
   output: number;
@@ -94,35 +94,50 @@ export async function verifyJurySession() {
       return { success: false, error: 'Unauthorized: Jury role required' };
     }
 
-    // Try to resolve juryName from 'jury' collection
-    const db = getAdminDb();
-    let juryName = email.split('@')[0];
-    juryName = juryName.charAt(0).toUpperCase() + juryName.slice(1); // fallback capitalization
-    let institution = 'N/A';
-
-    try {
-      const jurySnap = await db.collection('jury').where('email', '==', email).limit(1).get();
-      if (!jurySnap.empty) {
-        const data = jurySnap.docs[0].data();
-        juryName = data.juryName || juryName;
-        institution = data.institution || institution;
-      }
-    } catch (e) {
-      console.warn('Could not query jury collection for email. Using fallback name.', e);
-    }
-
-    // Check if jury scores are frozen in roles
+    // Check if jury scores are frozen in roles and get juryId
     let scoresFrozen = false;
     let frozenAt = null;
+    let juryId = '';
     try {
+      const db = getAdminDb();
       const roleDoc = await db.collection('roles').doc(email).get();
       if (roleDoc.exists) {
         const data = roleDoc.data();
         scoresFrozen = data?.scoresFrozen === true;
         frozenAt = data?.frozenAt ? (data.frozenAt.toDate ? data.frozenAt.toDate().toISOString() : data.frozenAt) : null;
+        juryId = data?.juryId || '';
       }
     } catch (e) {
       console.error('Error fetching role freeze status:', e);
+    }
+
+    // Try to resolve juryName from 'jury' collection if we didn't get it, or fallback
+    let juryName = email.split('@')[0];
+    juryName = juryName.charAt(0).toUpperCase() + juryName.slice(1);
+    let institution = 'N/A';
+
+    try {
+      const db = getAdminDb();
+      let jurySnap;
+      if (juryId) {
+        jurySnap = await db.collection('jury').doc(juryId).get();
+        if (jurySnap.exists) {
+          const data = jurySnap.data();
+          juryName = data?.juryName || juryName;
+          institution = data?.institution || institution;
+        }
+      } else {
+        jurySnap = await db.collection('jury').where('email', '==', email).limit(1).get();
+        if (!jurySnap.empty) {
+          const doc = jurySnap.docs[0];
+          juryId = doc.id; // Recover ID for legacy users
+          const data = doc.data();
+          juryName = data.juryName || juryName;
+          institution = data.institution || institution;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not query jury collection for email. Using fallback name.', e);
     }
 
     return { 
@@ -131,26 +146,12 @@ export async function verifyJurySession() {
       juryName, 
       institution,
       scoresFrozen,
-      frozenAt 
+      frozenAt,
+      juryId
     };
   } catch (error: any) {
     console.error('Error verifying jury session:', error);
     return { success: false, error: error.message || 'Session verification failed' };
-  }
-}
-
-/**
- * Check if the project supports team assignment.
- * Returns true if assignments collection is not empty.
- */
-export async function checkAssignmentSupport() {
-  try {
-    const db = getAdminDb();
-    const anyAssignmentsSnap = await db.collection('assignments').limit(1).get();
-    return !anyAssignmentsSnap.empty;
-  } catch (error) {
-    console.error('Error checking assignment support:', error);
-    return false;
   }
 }
 
@@ -166,20 +167,10 @@ export async function getJuryDashboardData() {
   try {
     const db = getAdminDb();
     
-    // 1. Check if assignments exist in the project
-    const assignmentsExist = await checkAssignmentSupport();
-    if (!assignmentsExist) {
-      return { success: true, assignmentsSupported: false, teams: [] };
-    }
-
-    // 2. Fetch teams assigned to this jury member
-    const assignmentsSnap = await db.collection('assignments')
-      .where('juryEmail', '==', session.email)
-      .get();
+    // 1. Fetch all teams (no assignment restriction)
+    const teamsSnap = await db.collection('teams').get();
     
-    const assignedTeamIds = assignmentsSnap.docs.map(doc => doc.data().teamId?.trim().toLowerCase()).filter(Boolean);
-
-    if (assignedTeamIds.length === 0) {
+    if (teamsSnap.empty) {
       return { 
         success: true, 
         assignmentsSupported: true, 
@@ -189,26 +180,11 @@ export async function getJuryDashboardData() {
       };
     }
 
-    // 3. Fetch team documents
-    // Firestore in query has a limit of 30 items
-    const chunks: string[][] = [];
-    for (let i = 0; i < assignedTeamIds.length; i += 30) {
-      chunks.push(assignedTeamIds.slice(i, i + 30));
-    }
+    const teamDocs = teamsSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
 
-    const teamDocs: any[] = [];
-    const teamSnapshots = await Promise.all(
-      chunks.map(chunk => db.collection('teams').where('__name__', 'in', chunk).get())
-    );
-    teamSnapshots.forEach(snap => {
-      snap.docs.forEach(doc => {
-        teamDocs.push({ id: doc.id, ...doc.data() });
-      });
-    });
-
-    // 4. Fetch score records submitted by this jury
-    const scoresSnap = await db.collection('scores')
-      .where('juryEmail', '==', session.email)
+    // 2. Fetch score records submitted by this jury
+    const scoresSnap = await db.collection('prelimsEvaluations')
+      .where('juryId', '==', session.juryId)
       .get();
 
     const scoreMap = new Map<string, { score: number; highlighted: boolean }>();
@@ -216,14 +192,8 @@ export async function getJuryDashboardData() {
       const data = doc.data();
       if (data.teamId) {
         scoreMap.set(data.teamId.trim().toLowerCase(), {
-          score: typeof data.score === 'number' ? data.score : 0,
+          score: typeof data.totalScore === 'number' ? data.totalScore : 0,
           highlighted: data.highlighted === true
-        const scoreVal = typeof data.score === 'number' ? data.score : 0;
-        const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : scoreVal;
-        scoreMap.set(data.teamId, {
-          id: doc.id,
-          juryName: data.juryName || '',
-          score: totalScoreVal,
         });
       }
     });
@@ -232,29 +202,8 @@ export async function getJuryDashboardData() {
     const teams: SimpleTeam[] = teamDocs.map(doc => {
       const scoreInfo = scoreMap.get(doc.id);
       
-      // Decrypt lead name to show on card
-      let leadName = 'N/A';
-      try {
-        if (doc.leadData) {
-          const lead = decryptJSON(doc.leadData);
-          leadName = lead.name || 'N/A';
-        }
-      } catch (e) {
-        console.error(`Failed to decrypt leadData for team card ${doc.id}`, e);
-      }
-
-      // Count members (decrypted)
-      let membersCount = 1; // lead is a member
-      try {
-        if (doc.membersData) {
-          const members = decryptJSON(doc.membersData);
-          if (Array.isArray(members)) {
-            membersCount += members.length;
-          }
-        }
-      } catch (e) {
-        console.error(`Failed to decrypt membersData for team card ${doc.id}`, e);
-      }
+      const leadName = doc.leadData?.name || 'N/A';
+      const membersCount = 1 + (Array.isArray(doc.membersData) ? doc.membersData.length : 0);
 
       return {
         id: doc.id,
@@ -298,41 +247,18 @@ export async function getTeamDetails(teamId: string) {
     const db = getAdminDb();
     const cleanTeamId = teamId.trim().toLowerCase();
     
-    // Check if team is assigned to this jury
-    const assignedCheck = await db.collection('assignments')
-      .where('juryEmail', '==', session.email)
-      .where('teamId', '==', cleanTeamId)
-      .limit(1)
-      .get();
-      
-    if (assignedCheck.empty) {
-      return { success: false, error: 'Unauthorized: This team is not assigned to you.' };
-    }
-
     const doc = await db.collection('teams').doc(cleanTeamId).get();
     if (!doc.exists) {
       return { success: false, error: 'Team not found' };
     }
 
     const data = doc.data()!;
-    let leadData = { name: 'N/A', batchNumber: 'N/A', department: 'N/A', year: 'N/A', section: 'N/A', contactNumber: 'N/A' };
-    let membersData: any[] = [];
-
-    try {
-      if (data.leadData) leadData = decryptJSON(data.leadData);
-    } catch (e) {
-      console.error(`Failed to decrypt leadData for team details ${doc.id}`, e);
-    }
-
-    try {
-      if (data.membersData) membersData = decryptJSON(data.membersData);
-    } catch (e) {
-      console.error(`Failed to decrypt membersData for team details ${doc.id}`, e);
-    }
+    let leadData = data.leadData || { name: 'N/A', batchNumber: 'N/A', department: 'N/A', year: 'N/A', section: 'N/A', contactNumber: 'N/A' };
+    let membersData = data.membersData || [];
 
     // Fetch score record for this jury and team
-    const scoresSnap = await db.collection('scores')
-      .where('juryEmail', '==', session.email)
+    const scoresSnap = await db.collection('prelimsEvaluations')
+      .where('juryId', '==', session.juryId)
       .where('teamId', '==', cleanTeamId)
       .limit(1)
       .get();
@@ -341,13 +267,13 @@ export async function getTeamDetails(teamId: string) {
     if (!scoresSnap.empty) {
       const scoreDoc = scoresSnap.docs[0].data();
       scoreData = {
-        innovation: scoreDoc.innovation ?? 0,
-        technicalFeasibility: scoreDoc.technicalFeasibility ?? 0,
-        impact: scoreDoc.impact ?? 0,
-        presentation: scoreDoc.presentation ?? 0,
+        innovation: scoreDoc.rubric?.innovation ?? 0,
+        technicalFeasibility: scoreDoc.rubric?.technicalFeasibility ?? 0,
+        impact: scoreDoc.rubric?.impact ?? 0,
+        presentation: scoreDoc.rubric?.presentation ?? 0,
         remarks: scoreDoc.remarks ?? '',
         highlighted: scoreDoc.highlighted === true,
-        score: scoreDoc.score ?? 0,
+        score: scoreDoc.totalScore ?? 0,
       };
     }
 
@@ -413,44 +339,32 @@ export async function saveEvaluation(
   try {
     const db = getAdminDb();
     
-    // Verify team is assigned to this jury
-    const assignedCheck = await db.collection('assignments')
-      .where('juryEmail', '==', session.email)
-      .where('teamId', '==', cleanTeamId)
-      .limit(1)
-      .get();
-      
-    if (assignedCheck.empty) {
-      return { success: false, error: 'Unauthorized: This team is not assigned to you.' };
+    // Verify team exists
+    const teamDoc = await db.collection('teams').doc(cleanTeamId).get();
+    if (!teamDoc.exists) {
+      return { success: false, error: 'Team not found.' };
     }
 
-    const scoresRef = db.collection('scores');
+    const scoresRef = db.collection('prelimsEvaluations');
     const existingSnap = await scoresRef
-      .where('juryEmail', '==', session.email)
+      .where('juryId', '==', session.juryId)
       .where('teamId', '==', cleanTeamId)
       .limit(1)
       .get();
 
-    const base = Math.floor(numericScore / 5);
-    const remainder = numericScore % 5;
-    const rubricObj = {
-      idea: base + (remainder >= 1 ? 1 : 0),
-      output: base + (remainder >= 2 ? 1 : 0),
-      innovation: base + (remainder >= 3 ? 1 : 0),
-      presentation: base + (remainder >= 4 ? 1 : 0),
-      finalOutput: base,
-    };
     const now = new Date();
 
     if (!existingSnap.empty) {
       // Update existing record
       const docRef = existingSnap.docs[0].ref;
       await docRef.update({
-        innovation: rubrics.innovation,
-        technicalFeasibility: rubrics.technicalFeasibility,
-        impact: rubrics.impact,
-        presentation: rubrics.presentation,
-        score: totalScore,
+        rubric: {
+          innovation: rubrics.innovation,
+          technicalFeasibility: rubrics.technicalFeasibility,
+          impact: rubrics.impact,
+          presentation: rubrics.presentation,
+        },
+        totalScore: totalScore,
         remarks: remarks.trim(),
         highlighted,
         updatedAt: new Date(),
@@ -460,22 +374,18 @@ export async function saveEvaluation(
       // Create new record
       await scoresRef.add({
         teamId: cleanTeamId,
-        juryEmail: session.email,
-        juryName: session.juryName,
-        innovation: rubrics.innovation,
-        technicalFeasibility: rubrics.technicalFeasibility,
-        impact: rubrics.impact,
-        presentation: rubrics.presentation,
-        score: totalScore,
+        juryId: session.juryId,
+        rubric: {
+          innovation: rubrics.innovation,
+          technicalFeasibility: rubrics.technicalFeasibility,
+          impact: rubrics.impact,
+          presentation: rubrics.presentation,
+        },
+        totalScore: totalScore,
         remarks: remarks.trim(),
         highlighted,
-        frozen: false,
+        isFrozen: false,
         createdAt: new Date(),
-        juryName: juryName.trim(),
-        rubric: rubricObj,
-        totalScore: numericScore,
-        updatedAt: now,
-        score: FieldValue.delete(),
       });
       return { success: true, updated: false };
     }
@@ -503,9 +413,9 @@ export async function toggleHighlight(teamId: string, highlighted: boolean) {
 
   try {
     const db = getAdminDb();
-    const scoresRef = db.collection('scores');
+    const scoresRef = db.collection('prelimsEvaluations');
     const existingSnap = await scoresRef
-      .where('juryEmail', '==', session.email)
+      .where('juryId', '==', session.juryId)
       .where('teamId', '==', cleanTeamId)
       .limit(1)
       .get();
@@ -521,28 +431,18 @@ export async function toggleHighlight(teamId: string, highlighted: boolean) {
       // If team score record does not exist yet, we initialize a blank evaluation with highlight toggled
       await scoresRef.add({
         teamId: cleanTeamId,
-        juryEmail: session.email,
-        juryName: session.juryName,
-        innovation: 0,
-        technicalFeasibility: 0,
-        impact: 0,
-        presentation: 0,
-        score: 0,
+        juryId: session.juryId,
+        rubric: {
+          innovation: 0,
+          technicalFeasibility: 0,
+          impact: 0,
+          presentation: 0,
+        },
+        totalScore: 0,
         remarks: '',
         highlighted,
-        frozen: false,
+        isFrozen: false,
         createdAt: new Date(),
-      // Create new score record with auto-generated document ID
-      const newDocRef = scoresRef.doc();
-      await newDocRef.set({
-        teamId: teamId,
-        juryName: juryName.trim(),
-        rubric: rubricObj,
-        totalScore: numericScore,
-        feedback: '',
-        starred: false,
-        createdAt: now,
-        updatedAt: now,
       });
       return { success: true };
     }
@@ -568,62 +468,22 @@ export async function freezeJuryScores() {
   try {
     const db = getAdminDb();
     
-    // 1. Get all assignments
-    const assignmentsSnap = await db.collection('assignments')
-      .where('juryEmail', '==', session.email)
-      .get();
-      
-    const assignedTeamIds = assignmentsSnap.docs.map(doc => doc.data().teamId?.trim().toLowerCase()).filter(Boolean);
-
-    if (assignedTeamIds.length === 0) {
-      return { success: false, error: 'You have no assigned teams to evaluate.' };
-    }
-
-    // 2. Fetch score records for these teams
-    const scoresSnap = await db.collection('scores')
-      .where('juryEmail', '==', session.email)
+    // 1. Fetch score records for this jury
+    const scoresSnap = await db.collection('prelimsEvaluations')
+      .where('juryId', '==', session.juryId)
       .get();
 
-    const evaluatedTeamIds = scoresSnap.docs.map(doc => doc.data().teamId?.trim().toLowerCase()).filter(Boolean);
-    const pendingCount = assignedTeamIds.filter(id => !evaluatedTeamIds.includes(id)).length;
-
-    if (pendingCount > 0) {
-      return { success: false, error: `Cannot freeze scores: You still have ${pendingCount} pending team(s) to evaluate.` };
+    if (scoresSnap.empty) {
+      return { success: false, error: 'You have not evaluated any teams yet.' };
     }
 
     // 3. Mark all score documents as frozen
     const batch = db.batch();
     scoresSnap.docs.forEach(doc => {
       batch.update(doc.ref, {
-        frozen: true,
+        isFrozen: true,
         frozenAt: new Date(),
       });
-    const scoresList: TeamScore[] = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      const scoreVal = typeof data.score === 'number' ? data.score : 0;
-      const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : scoreVal;
-      const base = Math.floor(scoreVal / 5);
-      const remainder = scoreVal % 5;
-      const rubricObj: Rubric = data.rubric || {
-        idea: base + (remainder >= 1 ? 1 : 0),
-        output: base + (remainder >= 2 ? 1 : 0),
-        innovation: base + (remainder >= 3 ? 1 : 0),
-        presentation: base + (remainder >= 4 ? 1 : 0),
-        finalOutput: base,
-      };
-
-      return {
-        id: doc.id,
-        teamId: data.teamId || '',
-        juryName: data.juryName || '',
-        rubric: rubricObj,
-        totalScore: totalScoreVal,
-        score: totalScoreVal, // backward compatibility
-        feedback: data.feedback || '',
-        starred: typeof data.starred === 'boolean' ? data.starred : false,
-        createdAt: data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : '',
-        updatedAt: data.updatedAt ? new Date(data.updatedAt.toDate ? data.updatedAt.toDate() : data.updatedAt).toISOString() : (data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : ''),
-      };
     });
 
     // 4. Update freeze status in roles collection
@@ -640,5 +500,32 @@ export async function freezeJuryScores() {
   } catch (error: any) {
     console.error('Error freezing scores:', error);
     return { success: false, error: error.message || 'Failed to freeze scores' };
+  }
+}
+
+export interface JuryMember {
+  id: string;
+  email: string;
+  juryName: string;
+  institution: string;
+}
+
+export async function getAllJuryMembers() {
+  try {
+    const db = getAdminDb();
+    const jurySnap = await db.collection('jury').get();
+    const juryList: JuryMember[] = jurySnap.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        email: data.email || '',
+        juryName: data.juryName || '',
+        institution: data.institution || 'N/A'
+      };
+    });
+    return { success: true, juryList };
+  } catch (error: any) {
+    console.error('Error fetching jury members:', error);
+    return { success: false, error: error.message || 'Failed to fetch jury members' };
   }
 }

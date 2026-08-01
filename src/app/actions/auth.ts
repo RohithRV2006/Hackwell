@@ -24,21 +24,21 @@ export async function checkTeamNameUnique(teamName: string) {
 
 export async function checkBatchNumbers(batchNumbers: string[]) {
   try {
-    const db = getAdminDb();
-    const snapshot = await db.collection('teams').get();
+    if (!batchNumbers || batchNumbers.length === 0) return { success: true, duplicates: [] };
     
-    // We fetch all teams and manually check batch numbers since they are inside arrays/objects
-    // In production with thousands of teams, this might need optimization or indexing, 
-    // but works fine for hackathon scale.
+    const db = getAdminDb();
+    
+    // We can check up to 10 batch numbers at once using array-contains-any
+    const snapshot = await db.collection('teams')
+      .where('allBatchNumbers', 'array-contains-any', batchNumbers)
+      .get();
+      
     const takenBatchNumbers = new Set<string>();
     
     snapshot.forEach(doc => {
       const data = doc.data();
-      if (data.leadData?.batchNumber) takenBatchNumbers.add(data.leadData.batchNumber);
-      if (data.membersData) {
-        data.membersData.forEach((m: any) => {
-          if (m.batchNumber) takenBatchNumbers.add(m.batchNumber);
-        });
+      if (data.allBatchNumbers) {
+        data.allBatchNumbers.forEach((b: string) => takenBatchNumbers.add(b));
       }
     });
 
@@ -69,10 +69,18 @@ export async function registerTeamData(
       return { success: false, error: 'Team name already taken.' };
     }
 
+    // Extract all batch numbers for indexing
+    const allBatchNumbers = [leadData.batchNumber];
+    if (membersData) {
+      membersData.forEach((m: any) => {
+        if (m.batchNumber) allBatchNumbers.push(m.batchNumber);
+      });
+    }
+
     // Generate unique sequential ID using a transaction
     const counterRef = db.collection('metadata').doc('teamCounter');
     
-    const teamId = await db.runTransaction(async (transaction) => {
+    const displayId = await db.runTransaction(async (transaction) => {
       const counterDoc = await transaction.get(counterRef);
       
       let newCount = 1;
@@ -85,8 +93,10 @@ export async function registerTeamData(
       return `H2O-${String(newCount).padStart(3, '0')}`;
     });
     
-    // Save to Firestore using the generated sequential teamId
-    await db.collection('teams').doc(teamId).set({
+    // Save to Firestore using an auto-generated doc ID, but store displayId
+    const teamDocRef = db.collection('teams').doc();
+    await teamDocRef.set({
+      displayId: displayId,
       teamName: teamName.trim(),
       teamNameLower: sanitizedName,
       theme,
@@ -95,6 +105,7 @@ export async function registerTeamData(
       leadEmail: leadEmail.trim().toLowerCase(),
       leadData: leadData,
       membersData: membersData,
+      allBatchNumbers: allBatchNumbers,
       createdAt: new Date(),
     });
     
@@ -124,6 +135,7 @@ export async function getTeamDataByEmail(email: string) {
       success: true,
       team: {
         id: doc.id,
+        displayId: data.displayId || doc.id,
         teamName: data.teamName,
         theme: data.theme,
         psId: data.psId,

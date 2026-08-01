@@ -36,7 +36,7 @@ export default function Themes() {
           <h2 className="text-4xl font-extrabold text-blue-600">Hackathon Themes</h2>
           <div className="mt-2 w-24 h-1 bg-blue-600 mx-auto rounded-full"></div>
           <p className="mt-4 text-gray-500 max-w-2xl mx-auto">
-            Choose a theme that matches your team's passion and build something incredible.
+            Choose a theme that matches your team&apos;s passion and build something incredible.
           </p>
         </div>
 

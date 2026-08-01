@@ -15,8 +15,10 @@ Hackwell 2.O is a full-stack web application built for managing hackathon events
 - **Unified Login Portal:** A single centralized login page that dynamically routes users (Participants, Admins, Juries, Coordinators) to their respective role-based dashboards using Firebase session cookies.
 - **Registration Page:** Strict team registration (1 Lead + 3 Members). Validates unique team names, enforces strong passwords, and dynamically checks availability in real-time.
 - **Session Management:** Enforces a strict session timeout via Next.js proxy middleware and Firebase Admin.
+- **Multi-Stage Evaluation Pipeline:** Built-in support for Prelims and Finale scoring, allowing juries to dynamically select and grade teams using a unified criteria rubric (`innovation`, `technicalFeasibility`, `impact`, `presentation`).
+- **Live XP Engine:** Student Coordinators can dynamically assign Game XP to teams via their dashboard, which aggregates into `totalGameXP` securely on the backend.
 - **Team Dashboard:** Protected route that decrypts team details server-side and securely presents them to the user.
-- **Role-Based Access Control (RBAC):** Dedicated restricted routes (`/admin`, `/jury-dashboard`, etc.) managed via a secure `roles` Firestore collection with encrypted credentials.
+- **Role-Based Access Control (RBAC):** Dedicated restricted routes (`/admin`, `/jury-dashboard`, `/student-coord-dashboard`, etc.) managed via a secure `roles` Firestore collection with encrypted credentials.
 - **Data Security:** Stores all user PII (Names, Contact Numbers, etc.) completely encrypted within Firestore.
 
 ## Getting Started

@@ -31,32 +31,37 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   const tabs = [
-    { name: 'Team Details', href: '/admin', exact: true },
-    { name: 'Scores Panel', href: '/admin/scores', exact: false },
+    { name: 'Overview', href: '/admin', exact: true },
+    { name: 'Team Details', href: '/admin/teams', exact: false },
+    { name: 'Prelims Scores', href: '/admin/prelims-scores', exact: false },
+    { name: 'Finale Scores', href: '/admin/finale-scores', exact: false },
+    { name: 'Game Scores', href: '/admin/game-scores', exact: false },
     { name: 'Users Creator', href: '/admin/users-creator', exact: false },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
+    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans selection:bg-blue-500 selection:text-white">
       {/* Common Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-extrabold tracking-tight text-blue-600">Hackwell Admin</h1>
-              <span className="bg-green-100 text-green-700 border border-green-200 text-xs px-2 py-0.5 rounded-full font-bold">
-                Admin Area
-              </span>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 bg-blue-600 flex items-center justify-center font-black text-xl text-white shadow-md rounded-sm">
+              H
             </div>
-            <p className="text-gray-500 text-sm mt-1">
-              Logged in as <span className="text-blue-600 font-mono font-medium">{adminEmail}</span>
-            </p>
+            <div>
+              <h1 className="text-xl font-extrabold tracking-tight text-blue-600">
+                Hackwell Admin Dashboard
+              </h1>
+              <p className="text-gray-500 text-xs mt-0.5">
+                Logged in as <span className="text-blue-600 font-mono font-medium">{adminEmail}</span>
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
             <button
               onClick={handleLogout}
-              className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-sm font-bold transition"
+              className="px-4 py-2 bg-white hover:bg-gray-100 text-blue-600 border border-gray-300 rounded-sm text-xs font-bold transition duration-200 cursor-pointer shadow-sm"
             >
               Logout
             </button>
@@ -65,7 +70,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Tabs */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
             {tabs.map((tab) => {
               const isActive = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
               return (
@@ -73,10 +78,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   key={tab.name}
                   href={tab.href}
                   className={`
-                    whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                    whitespace-nowrap py-3 px-1 border-b-2 font-bold text-sm transition-colors
                     ${isActive 
-                      ? 'border-blue-500 text-blue-600' 
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      ? 'border-blue-600 text-blue-600' 
+                      : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
                     }
                   `}
                 >
@@ -88,7 +93,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </header>
 
-      <main className="py-6">
+      <main className="py-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {children}
       </main>
     </div>

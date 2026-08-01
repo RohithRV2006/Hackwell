@@ -9,13 +9,10 @@ import Testimonials from '@/components/landing/Testimonials';
 import FAQ from '@/components/landing/FAQ';
 import Contact from '@/components/landing/Contact';
 
-export default async function Home() {
-  const cookieStore = await cookies();
-  const session = cookieStore.get('session');
-
+export default function Home() {
   return (
     <main className="min-h-screen bg-white">
-      <NavBar session={session} />
+      <NavBar />
       <Hero />
       <About />
       <Themes />

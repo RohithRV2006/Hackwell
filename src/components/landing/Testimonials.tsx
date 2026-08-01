@@ -24,14 +24,14 @@ export default function Testimonials() {
           <h2 className="text-4xl font-extrabold text-blue-600">Past Experiences</h2>
           <div className="mt-2 w-24 h-1 bg-blue-600 mx-auto rounded-full"></div>
           <p className="mt-4 text-gray-500 max-w-2xl mx-auto">
-            Hear what participants from Hackwell '26 had to say about their journey.
+            Hear what participants from Hackwell &apos;26 had to say about their journey.
           </p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
           {TESTIMONIALS.map((t, idx) => (
             <div key={idx} className="bg-gray-50 p-8 rounded-2xl border border-gray-100 shadow-sm relative">
-              <div className="text-4xl text-blue-200 absolute top-4 left-4 font-serif">"</div>
+              <div className="text-4xl text-blue-200 absolute top-4 left-4 font-serif">&quot;</div>
               <p className="text-gray-600 italic relative z-10 pt-4 mb-6">
                 {t.quote}
               </p>

@@ -4,194 +4,106 @@
       "description": "Stores information about registered hackathon teams and their members. Team name acts as the unique identifier.",
       "documentId": "teamName (lowercase, trimmed)",
       "fields": {
-        "teamName": {
-          "type": "string",
-          "encrypted": false,
-          "description": "The unique name of the team."
-        },
-        "problemStatement": {
-          "type": "string",
-          "encrypted": false,
-          "description": "The problem statement chosen by the team."
-        },
-        "leadEmail": {
-          "type": "string",
-          "encrypted": false,
-          "description": "The email of the team lead."
-        },
-        "leadData": {
-          "type": "object",
-          "encrypted": true,
-          "description": "AES-256-GCM encrypted JSON string containing the team lead's PII.",
-          "schema_before_encryption": {
-            "name": "string",
-            "batchNumber": "string",
-            "department": "string",
-            "year": "string",
-            "section": "string",
-            "contactNumber": "string"
-          }
-        },
-        "membersData": {
-          "type": "array",
-          "encrypted": true,
-          "description": "AES-256-GCM encrypted JSON string containing an array of 3 members' PII.",
-          "schema_before_encryption": [
-            {
-              "name": "string",
-              "batchNumber": "string",
-              "department": "string",
-              "year": "string",
-              "section": "string"
-            }
-          ]
-        },
-        "createdAt": {
-          "type": "timestamp",
-          "encrypted": false,
-          "description": "Server timestamp when the team was registered."
-        }
+        "teamName": { "type": "string", "encrypted": false },
+        "problemStatement": { "type": "string", "encrypted": false },
+        "leadEmail": { "type": "string", "encrypted": false },
+        "leadData": { "type": "object", "encrypted": false },
+        "membersData": { "type": "array", "encrypted": false },
+        "totalGameXP": { "type": "number", "encrypted": false, "description": "Sum of all XP from gameScores" },
+        "prelimsAverageScore": { "type": "number", "encrypted": false, "description": "Average of all prelimsEvaluations" },
+        "prelimsStatus": { "type": "string", "encrypted": false, "description": "e.g., 'selected', 'rejected', 'pending'" },
+        "finaleAverageScore": { "type": "number", "encrypted": false, "description": "Average of all finaleEvaluations" },
+        "createdAt": { "type": "timestamp", "encrypted": false }
       }
     },
     "roles": {
-      "description": "Stores authentication and role information for privileged users (Admins, Jury, Coordinators). Document ID is the user email (lowercase).",
+      "description": "Stores authentication and role mapping for privileged users. Document ID is the user email (lowercase).",
       "documentId": "email (lowercase)",
       "fields": {
-        "role": {
-          "type": "string",
-          "encrypted": false,
-          "description": "The role of the user: 'admin', 'jury', or 'coordinator'."
-        },
-        "name": {
-          "type": "string",
-          "encrypted": false,
-          "description": "Full name of the user (set for jury and coordinator roles)."
-        },
-        "institution": {
-          "type": "string",
-          "encrypted": false,
-          "description": "Institution / organisation name (set for jury role only)."
-        },
-        "department": {
-          "type": "string",
-          "encrypted": false,
-          "description": "Department name (set for coordinator role only)."
-        },
-        "encryptedCreds": {
-          "type": "string",
-          "encrypted": true,
-          "description": "AES-256-GCM encrypted string storing the password/credentials."
-        },
-        "createdAt": {
-          "type": "timestamp",
-          "encrypted": false,
-          "description": "Server timestamp when the account was created."
-        }
+        "role": { "type": "string", "encrypted": false, "description": "'admin', 'jury', 'student-coord', or 'faculty-coord'" },
+        "juryId": { "type": "string", "encrypted": false, "description": "Reference to jury collection" },
+        "coordId": { "type": "string", "encrypted": false, "description": "Reference to studentCoords collection" },
+        "facultyCoordId": { "type": "string", "encrypted": false, "description": "Reference to facultyCoords collection" },
+        "encryptedCreds": { "type": "string", "encrypted": true },
+        "scoresFrozen": { "type": "boolean", "encrypted": false },
+        "createdAt": { "type": "timestamp", "encrypted": false }
       }
     },
     "jury": {
-      "description": "Stores profile information for jury members. A document is created here whenever a jury login account is created via the admin panel.",
-      "documentId": "Auto-generated Firestore document ID",
+      "description": "Jury member profile details.",
+      "documentId": "Auto-generated ID",
       "fields": {
-        "juryName": {
-          "type": "string",
-          "encrypted": false,
-          "description": "The full name of the jury member."
-        },
-        "institution": {
-          "type": "string",
-          "encrypted": false,
-          "description": "Institution / Organisation of the jury member."
-        },
-        "email": {
-          "type": "string",
-          "encrypted": false,
-          "description": "Login email of the jury member. Used to link the jury profile to the Firebase Auth account."
-        },
-        "createdAt": {
-          "type": "timestamp",
-          "encrypted": false,
-          "description": "Server timestamp when the jury profile was created."
-        }
+        "juryName": { "type": "string", "encrypted": false },
+        "institution": { "type": "string", "encrypted": false },
+        "email": { "type": "string", "encrypted": false },
+        "createdAt": { "type": "timestamp", "encrypted": false }
       }
     },
-    "coordinators": {
-      "description": "Stores profile information for coordinators. A document is created here whenever a coordinator login account is created via the admin panel.",
-      "documentId": "Auto-generated Firestore document ID",
+    "studentCoords": {
+      "description": "Student Coordinator profile details.",
+      "documentId": "Auto-generated ID",
       "fields": {
-        "name": {
-          "type": "string",
-          "encrypted": false,
-          "description": "Full name of the coordinator."
-        },
-        "department": {
-          "type": "string",
-          "encrypted": false,
-          "description": "Department the coordinator belongs to."
-        },
-        "email": {
-          "type": "string",
-          "encrypted": false,
-          "description": "Login email of the coordinator. Used to link the profile to the Firebase Auth account."
-        },
-        "createdAt": {
-          "type": "timestamp",
-          "encrypted": false,
-          "description": "Server timestamp when the coordinator profile was created."
-        }
+        "name": { "type": "string", "encrypted": false },
+        "department": { "type": "string", "encrypted": false },
+        "email": { "type": "string", "encrypted": false },
+        "createdAt": { "type": "timestamp", "encrypted": false }
       }
     },
-    "scores": {
-      "description": "Stores the detailed rubric-based score given to a team by its assigned jury.",
-      "documentId": "Auto-generated Firestore document ID",
+    "facultyCoords": {
+      "description": "Faculty Coordinator profile details.",
+      "documentId": "Auto-generated ID",
       "fields": {
-        "teamId": {
-          "type": "string",
-          "encrypted": false,
-          "description": "The document ID (or unique identifier) of the team."
-        },
-        "juryName": {
-          "type": "string",
-          "encrypted": false,
-          "description": "The assigned jury's name."
-        },
+        "name": { "type": "string", "encrypted": false },
+        "department": { "type": "string", "encrypted": false },
+        "email": { "type": "string", "encrypted": false },
+        "createdAt": { "type": "timestamp", "encrypted": false }
+      }
+    },
+    "prelimsEvaluations": {
+      "description": "Prelims scoring submitted by Juries. Multiple juries can evaluate the same team.",
+      "documentId": "Auto-generated ID",
+      "fields": {
+        "teamId": { "type": "string", "encrypted": false },
+        "juryId": { "type": "string", "encrypted": false },
         "rubric": {
           "type": "object",
-          "encrypted": false,
-          "description": "Detailed scoring breakdown across evaluation criteria.",
-          "properties": {
-            "idea": { "type": "number", "description": "Score for the idea / concept." },
-            "output": { "type": "number", "description": "Score for the output / implementation." },
-            "innovation": { "type": "number", "description": "Score for the innovation level." },
-            "presentation": { "type": "number", "description": "Score for the presentation / pitch." },
-            "finalOutput": { "type": "number", "description": "Score for the final output / demo." }
-          }
+          "description": "{ innovation, technicalFeasibility, impact, presentation }"
         },
-        "totalScore": {
-          "type": "number",
-          "encrypted": false,
-          "description": "The sum of all rubric scores (idea + output + innovation + presentation + finalOutput)."
+        "totalScore": { "type": "number", "encrypted": false },
+        "remarks": { "type": "string", "encrypted": false },
+        "highlighted": { "type": "boolean", "encrypted": false },
+        "isFrozen": { "type": "boolean", "encrypted": false },
+        "createdAt": { "type": "timestamp", "encrypted": false },
+        "updatedAt": { "type": "timestamp", "encrypted": false }
+      }
+    },
+    "finaleEvaluations": {
+      "description": "Finale scoring submitted by Juries. Very similar to prelimsEvaluations.",
+      "documentId": "Auto-generated ID",
+      "fields": {
+        "teamId": { "type": "string", "encrypted": false },
+        "juryId": { "type": "string", "encrypted": false },
+        "rubric": {
+          "type": "object",
+          "description": "{ innovation, technicalFeasibility, impact, presentation }"
         },
-        "feedback": {
-          "type": "string",
-          "encrypted": false,
-          "description": "Optional comments/feedback from the jury."
-        },
-        "starred": {
-          "type": "boolean",
-          "encrypted": false,
-          "description": "Indicates whether the jury highlighted/starred the team."
-        },
-        "createdAt": {
-          "type": "timestamp",
-          "encrypted": false,
-          "description": "Server timestamp when the score record was created."
-        },
-        "updatedAt": {
-          "type": "timestamp",
-          "encrypted": false,
-          "description": "Server timestamp when the score record was last modified."
-        }
+        "totalScore": { "type": "number", "encrypted": false },
+        "remarks": { "type": "string", "encrypted": false },
+        "highlighted": { "type": "boolean", "encrypted": false },
+        "isFrozen": { "type": "boolean", "encrypted": false },
+        "createdAt": { "type": "timestamp", "encrypted": false },
+        "updatedAt": { "type": "timestamp", "encrypted": false }
+      }
+    },
+    "gameScores": {
+      "description": "Game XP assigned by student coordinators during the event.",
+      "documentId": "Auto-generated ID",
+      "fields": {
+        "teamId": { "type": "string", "encrypted": false },
+        "studentCoordId": { "type": "string", "encrypted": false },
+        "gameName": { "type": "string", "encrypted": false },
+        "xpPoints": { "type": "number", "encrypted": false },
+        "createdAt": { "type": "timestamp", "encrypted": false }
       }
     }
   }

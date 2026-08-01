@@ -6,6 +6,8 @@ import { submitPPT } from '@/app/actions/auth';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, MapPin } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function TeamDashboardClient({ team }: { team: any }) {
   const [activeTab, setActiveTab] = useState('details');
@@ -15,6 +17,23 @@ export default function TeamDashboardClient({ team }: { team: any }) {
   const [pptLink, setPptLink] = useState(team.pptLink || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pptMessage, setPptMessage] = useState('');
+  const router = useRouter();
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    if (resetMessage) {
+      timeout = setTimeout(() => setResetMessage(''), 5000);
+    }
+    return () => clearTimeout(timeout);
+  }, [resetMessage]);
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    if (pptMessage) {
+      timeout = setTimeout(() => setPptMessage(''), 5000);
+    }
+    return () => clearTimeout(timeout);
+  }, [pptMessage]);
 
   const leadData = team.leadData || {};
   const membersData = team.membersData || [];
@@ -23,16 +42,14 @@ export default function TeamDashboardClient({ team }: { team: any }) {
     try {
       await sendPasswordResetEmail(auth, team.leadEmail);
       setResetMessage('Password reset email sent! Check your inbox.');
-      setTimeout(() => setResetMessage(''), 5000);
     } catch (error: any) {
       setResetMessage(error.message || 'Failed to send reset email.');
-      setTimeout(() => setResetMessage(''), 5000);
     }
   };
 
   const handleLogout = async () => {
     await clearSessionCookie();
-    window.location.replace('/login');
+    router.push('/login');
   };
 
   const handlePPTSubmit = async (e: React.FormEvent) => {
@@ -48,7 +65,6 @@ export default function TeamDashboardClient({ team }: { team: any }) {
     } else {
       setPptMessage(res.error || 'Failed to submit PPT.');
     }
-    setTimeout(() => setPptMessage(''), 5000);
   };
 
   const isDeadlinePassed = new Date() > new Date('2026-08-20T23:59:59');
@@ -60,7 +76,7 @@ export default function TeamDashboardClient({ team }: { team: any }) {
         <div>
           <div className="flex items-center gap-3">
             <span className="bg-blue-100 text-blue-800 text-sm font-bold py-1 px-3 rounded-lg border border-blue-200">
-              {team.id}
+              {team.displayId || team.id}
             </span>
             <h1 className="text-3xl font-extrabold text-blue-900">{team.teamName}</h1>
           </div>
@@ -208,7 +224,7 @@ export default function TeamDashboardClient({ team }: { team: any }) {
                     placeholder="https://docs.google.com/presentation/d/..."
                     className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
                   />
-                  <p className="text-xs text-gray-500 mt-2">Ensure the link visibility is set to "Anyone with the link".</p>
+                  <p className="text-xs text-gray-500 mt-2">Ensure the link visibility is set to &quot;Anyone with the link&quot;.</p>
                 </div>
                 
                 <button 

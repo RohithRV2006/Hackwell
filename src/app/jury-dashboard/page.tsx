@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   verifyJurySession,
@@ -36,7 +36,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 
-export default function JuryDashboardPage() {
+function JuryDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPendingTransition, startTransition] = useTransition();
@@ -88,28 +88,6 @@ export default function JuryDashboardPage() {
   // Local state for instant search input
   const [searchInput, setSearchInput] = useState<string>(urlSearch);
 
-  // Load Session and initialize
-  useEffect(() => {
-    async function initSession() {
-      const check = await verifyJurySession();
-      if (!check.success || !check.email) {
-        window.location.replace('/login');
-        return;
-      }
-      setSession({
-        email: check.email,
-        juryName: check.juryName || '',
-        institution: check.institution || '',
-        scoresFrozen: check.scoresFrozen || false,
-        frozenAt: check.frozenAt || null,
-      });
-      setScoresFrozen(check.scoresFrozen || false);
-      setFrozenAt(check.frozenAt || null);
-      loadDashboardData();
-    }
-    initSession();
-  }, []);
-
   // Fetch Dashboard Data
   const loadDashboardData = async () => {
     setLoading(true);
@@ -131,20 +109,6 @@ export default function JuryDashboardPage() {
     }
     setLoading(false);
   };
-
-  // Sync Search input state when URL param updates
-  useEffect(() => {
-    setSearchInput(urlSearch);
-  }, [urlSearch]);
-
-  // Load Team Details if selected in URL
-  useEffect(() => {
-    if (urlTeam && session) {
-      fetchDetails(urlTeam);
-    } else {
-      setSelectedTeam(null);
-    }
-  }, [urlTeam, session]);
 
   // Fetch team details for evaluation
   const fetchDetails = async (teamId: string) => {
@@ -173,6 +137,42 @@ export default function JuryDashboardPage() {
     }
     setDetailsLoading(false);
   };
+
+  // Load Session and initialize
+  useEffect(() => {
+    async function initSession() {
+      const check = await verifyJurySession();
+      if (!check.success || !check.email) {
+        window.location.replace('/login');
+        return;
+      }
+      setSession({
+        email: check.email,
+        juryName: check.juryName || '',
+        institution: check.institution || '',
+        scoresFrozen: check.scoresFrozen || false,
+        frozenAt: check.frozenAt || null,
+      });
+      setScoresFrozen(check.scoresFrozen || false);
+      setFrozenAt(check.frozenAt || null);
+      loadDashboardData();
+    }
+    initSession();
+  }, []);
+
+  // Sync Search input state when URL param updates
+  useEffect(() => {
+    setSearchInput(urlSearch);
+  }, [urlSearch]);
+
+  // Load Team Details if selected in URL
+  useEffect(() => {
+    if (urlTeam && session) {
+      fetchDetails(urlTeam);
+    } else {
+      setSelectedTeam(null);
+    }
+  }, [urlTeam, session]);
 
   // Helper to update URL params
   const updateUrlParams = (newParams: Record<string, string>) => {
@@ -462,26 +462,6 @@ export default function JuryDashboardPage() {
               ))}
             </div>
           </div>
-        ) : !assignmentsSupported ? (
-          /* FALLBACK STATEMENT: NO TEAM ASSIGNMENTS AVAILABLE */
-          <div className="bg-white border border-gray-200 rounded-3xl p-8 md:p-12 text-center max-w-lg mx-auto shadow-md flex flex-col items-center gap-4 mt-12 animate-fadeIn">
-            <div className="h-16 w-16 bg-amber-50 border border-amber-200 text-amber-600 rounded-full flex items-center justify-center">
-              <AlertTriangle size={32} />
-            </div>
-            <h2 className="text-xl font-bold text-gray-900 tracking-tight">Assignments Required</h2>
-            <p className="text-gray-500 text-sm leading-relaxed">
-              Admin Team Assignment is required before the Jury Dashboard can display assigned teams.
-            </p>
-            <p className="text-xs text-gray-400">
-              Please contact the Administrator to assign teams to your profile ({session?.email}).
-            </p>
-            <button
-              onClick={loadDashboardData}
-              className="mt-2 flex items-center gap-2 px-5 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold border border-gray-300 transition"
-            >
-              <RefreshCw size={14} className={isPendingTransition ? 'animate-spin' : ''} /> Check Again
-            </button>
-          </div>
         ) : (
           /* ACTIVE JURY DASHBOARD IMPLEMENTATION */
           <div className="space-y-6">
@@ -490,9 +470,9 @@ export default function JuryDashboardPage() {
             {!urlTeam && (
               <section className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 <div className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
-                  <span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Total Assigned</span>
+                  <span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Total Teams</span>
                   <span className="text-3xl font-extrabold text-gray-900 mt-2">{totalAssigned}</span>
-                  <span className="text-[10px] text-gray-400 mt-1">Teams assigned to you</span>
+                  <span className="text-[10px] text-gray-400 mt-1">Available for evaluation</span>
                 </div>
 
                 <div className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
@@ -502,9 +482,9 @@ export default function JuryDashboardPage() {
                 </div>
 
                 <div className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
-                  <span className="text-[10px] uppercase tracking-wider text-amber-600 font-bold">Pending</span>
+                  <span className="text-[10px] uppercase tracking-wider text-amber-600 font-bold">Unevaluated</span>
                   <span className="text-3xl font-extrabold text-amber-600 mt-2">{pendingCount}</span>
-                  <span className="text-[10px] text-gray-400 mt-1">Remaining evaluations</span>
+                  <span className="text-[10px] text-gray-400 mt-1">Teams not yet scored</span>
                 </div>
 
                 <div className="bg-white border border-gray-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
@@ -680,13 +660,13 @@ export default function JuryDashboardPage() {
                         Freeze Evaluation Scores
                       </h4>
                       <p className="text-xs text-gray-500 mt-1 max-w-xl">
-                        When all assigned teams have been evaluated, you must freeze your evaluations. This submits your scores permanently and locks them from future edits.
+                        When you have finished evaluating your selected teams, freeze your scores. This submits your evaluations permanently and locks them from future edits.
                       </p>
                     </div>
 
                     <button
                       onClick={() => setShowFreezeModal(true)}
-                      disabled={pendingCount > 0}
+                      disabled={evaluatedCount === 0}
                       className="px-6 py-3 font-bold rounded-xl text-sm transition duration-200 flex items-center gap-2 shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700 text-white"
                     >
                       Freeze Scores
@@ -1013,4 +993,12 @@ function ChevronLeftIcon() {
 
 function ChevronRightIcon() {
   return <ArrowRight size={16} />;
+}
+
+export default function JuryDashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-gray-500 animate-pulse">Loading dashboard...</div></div>}>
+      <JuryDashboardContent />
+    </Suspense>
+  );
 }

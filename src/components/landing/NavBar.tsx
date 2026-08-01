@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
-import { signOut } from 'firebase/auth';
+import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { clearSessionCookie } from '@/app/actions/session';
 
-export default function NavBar({ session }: { session: any }) {
+export default function NavBar() {
+  const [user, setUser] = useState<User | null>(null);
   const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -36,6 +37,13 @@ export default function NavBar({ session }: { session: any }) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
+
   return (
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-white shadow-md py-2 border-b border-gray-100' : 'bg-transparent py-4 opacity-0 pointer-events-none'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -51,7 +59,7 @@ export default function NavBar({ session }: { session: any }) {
             <a href="#timeline" className="text-gray-700 hover:text-blue-600 font-medium transition">Timeline</a>
             <a href="#rules" className="text-gray-700 hover:text-blue-600 font-medium transition">Rules</a>
             
-            {session ? (
+            {user ? (
               <div className="flex items-center space-x-4">
                 <Link href="/team-dashboard" className="px-5 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md transition">
                   Dashboard
@@ -83,7 +91,7 @@ export default function NavBar({ session }: { session: any }) {
             <a href="#timeline" onClick={() => setIsMobileOpen(false)} className="block px-3 py-3 text-gray-800 font-medium hover:bg-blue-50 hover:text-blue-600 rounded-lg">Timeline</a>
             <a href="#rules" onClick={() => setIsMobileOpen(false)} className="block px-3 py-3 text-gray-800 font-medium hover:bg-blue-50 hover:text-blue-600 rounded-lg">Rules</a>
             <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
-              {session ? (
+              {user ? (
                 <>
                   <Link href="/team-dashboard" className="block text-center px-4 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Dashboard</Link>
                   <button onClick={handleLogout} className="block w-full text-center px-4 py-3 rounded-lg border-2 border-red-500 text-red-500 font-bold hover:bg-red-50 transition">Logout</button>

@@ -32,8 +32,6 @@ function LoginForm() {
     resolver: zodResolver(loginSchema),
   });
 
-  const emailValue = watch('email');
-
   const onSubmit = async (data: LoginData) => {
     setError('');
     setMsg('');
@@ -50,15 +48,15 @@ function LoginForm() {
       const role = result.role || 'team';
 
       if (role === 'admin') {
-        window.location.replace('/admin');
+        router.push('/admin');
       } else if (role === 'jury') {
-        window.location.replace('/jury-dashboard');
+        router.push('/jury-dashboard');
       } else if (role === 'student-coord') {
-        window.location.replace('/student-coord-dashboard');
+        router.push('/student-coord-dashboard');
       } else if (role === 'faculty-coord') {
-        window.location.replace('/faculty-coord-dashboard');
+        router.push('/faculty-coord-dashboard');
       } else {
-        window.location.replace('/team-dashboard');
+        router.push('/team-dashboard');
       }
     } catch (err: any) {
       setError(err.message || 'Invalid credentials');
@@ -70,7 +68,8 @@ function LoginForm() {
   const handleForgotPassword = async () => {
     setError('');
     setMsg('');
-    if (!emailValue || !emailValue.includes('@')) {
+    const emailVal = watch('email');
+    if (!emailVal || !emailVal.includes('@')) {
       setError('Please enter a valid email address first to receive the reset link.');
       return;
     }
@@ -80,7 +79,7 @@ function LoginForm() {
       const actionCodeSettings = {
         url: window.location.origin + '/reset-password',
       };
-      await sendPasswordResetEmail(auth, emailValue, actionCodeSettings);
+      await sendPasswordResetEmail(auth, watch('email'), actionCodeSettings);
       setMsg('Password reset email sent! Check your inbox (and spam folder).');
     } catch (err: any) {
       setError(err.message || 'Failed to send password reset email.');

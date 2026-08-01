@@ -2,7 +2,6 @@
 
 import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
-import { encryptJSON, decryptJSON } from '@/lib/encryption';
 import { getUserRole } from '@/app/actions/session';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -37,6 +36,7 @@ export interface Lead extends Member {
 
 export interface AdminTeamData {
   id: string;
+  displayId?: string;
   teamName: string;
   problemStatement: string;
   leadEmail: string;
@@ -46,6 +46,39 @@ export interface AdminTeamData {
   judge?: string;
   feedback?: string;
   createdAt?: string;
+}
+
+export async function getAdminOverviewStats() {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+  
+  try {
+    const db = getAdminDb();
+    
+    const [teamsSnap, rolesSnap, jurySnap, prelimsSnap, finaleSnap] = await Promise.all([
+      db.collection('teams').count().get(),
+      db.collection('roles').count().get(),
+      db.collection('jury').count().get(),
+      db.collection('prelimsEvaluations').count().get(),
+      db.collection('finaleEvaluations').count().get()
+    ]);
+    
+    return {
+      success: true,
+      stats: {
+        totalTeams: teamsSnap.data().count,
+        totalRoles: rolesSnap.data().count,
+        totalJuries: jurySnap.data().count,
+        totalPrelims: prelimsSnap.data().count,
+        totalFinale: finaleSnap.data().count
+      }
+    };
+  } catch (error: any) {
+    console.error('Error fetching admin stats:', error);
+    return { success: false, error: error.message || 'Failed to fetch stats' };
+  }
 }
 
 export async function getAllTeamsAdmin() {
@@ -62,23 +95,12 @@ export async function getAllTeamsAdmin() {
 
     for (const doc of snapshot.docs) {
       const data = doc.data();
-      let decryptedLead: Lead = { name: '', batchNumber: '', department: '', year: '', section: '', contactNumber: '' };
-      let decryptedMembers: Member[] = [];
-
-      try {
-        if (data.leadData) decryptedLead = decryptJSON(data.leadData);
-      } catch (e) {
-        console.error(`Failed to decrypt leadData for ${doc.id}`, e);
-      }
-
-      try {
-        if (data.membersData) decryptedMembers = decryptJSON(data.membersData);
-      } catch (e) {
-        console.error(`Failed to decrypt membersData for ${doc.id}`, e);
-      }
+      let decryptedLead: Lead = data.leadData || { name: '', batchNumber: '', department: '', year: '', section: '', contactNumber: '' };
+      let decryptedMembers: Member[] = data.membersData || [];
 
       teams.push({
         id: doc.id,
+        displayId: data.displayId || doc.id,
         teamName: data.teamName || doc.id,
         problemStatement: data.problemStatement || 'Not assigned',
         leadEmail: data.leadEmail || '',
@@ -132,11 +154,11 @@ export async function updateTeamAdmin(teamId: string, updatedFields: {
     if (updatedFields.feedback !== undefined) payload.feedback = updatedFields.feedback.trim();
 
     if (updatedFields.leadData) {
-      payload.leadData = encryptJSON(updatedFields.leadData);
+      payload.leadData = updatedFields.leadData;
     }
 
     if (updatedFields.membersData) {
-      payload.membersData = encryptJSON(updatedFields.membersData);
+      payload.membersData = updatedFields.membersData;
     }
 
     await docRef.update(payload);
@@ -319,8 +341,8 @@ export async function seedDummyTeamsAdmin() {
       const sanitizedId = team.teamName.trim().toLowerCase();
       const docRef = db.collection('teams').doc(sanitizedId);
 
-      const encryptedLeadData = encryptJSON(team.leadData);
-      const encryptedMembersData = encryptJSON(team.membersData);
+      const encryptedLeadData = team.leadData;
+      const encryptedMembersData = team.membersData;
 
       await docRef.set({
         teamName: team.teamName,
@@ -343,11 +365,10 @@ export async function seedDummyTeamsAdmin() {
 }
 
 export interface Rubric {
-  idea: number;
-  output: number;
   innovation: number;
+  technicalFeasibility: number;
+  impact: number;
   presentation: number;
-  finalOutput: number;
 }
 
 export interface AdminScoreData {
@@ -355,17 +376,18 @@ export interface AdminScoreData {
   teamId: string;
   teamName?: string;
   problemStatement?: string;
-  juryName: string;
+  juryId: string;
+  juryName?: string;
   rubric: Rubric;
   totalScore: number;
-  feedback: string;
-  starred: boolean;
+  remarks: string;
+  highlighted: boolean;
+  isFrozen: boolean;
   createdAt?: string;
   updatedAt?: string;
-  score?: number; // for backward compatibility
 }
 
-export async function getAllScoresAdmin() {
+export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations' | 'finaleEvaluations') {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) {
     return { success: false, error: 'Unauthorized', scores: [] };
@@ -373,7 +395,7 @@ export async function getAllScoresAdmin() {
 
   try {
     const db = getAdminDb();
-    const snapshot = await db.collection('scores').orderBy('createdAt', 'desc').get();
+    const snapshot = await db.collection(collectionName).orderBy('createdAt', 'desc').get();
     
     // Fetch teams to map names and problem statements
     const teamsSnap = await db.collection('teams').get();
@@ -386,43 +408,47 @@ export async function getAllScoresAdmin() {
       });
     });
 
+    const jurySnap = await db.collection('jury').get();
+    const juryMap = new Map<string, string>();
+    jurySnap.docs.forEach((doc) => {
+      juryMap.set(doc.id, doc.data().juryName || doc.id);
+    });
+
     const scores: AdminScoreData[] = [];
 
     for (const doc of snapshot.docs) {
       const data = doc.data();
       
-      // Fallback for old documents that only had score
-      const scoreVal = typeof data.score === 'number' ? data.score : 0;
-      const base = Math.floor(scoreVal / 5);
-      const remainder = scoreVal % 5;
       const rubricObj: Rubric = data.rubric || {
-        idea: base + (remainder >= 1 ? 1 : 0),
-        output: base + (remainder >= 2 ? 1 : 0),
-        innovation: base + (remainder >= 3 ? 1 : 0),
-        presentation: base + (remainder >= 4 ? 1 : 0),
-        finalOutput: base,
+        innovation: 0,
+        technicalFeasibility: 0,
+        impact: 0,
+        presentation: 0,
       };
       
-      const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : scoreVal;
-      const feedbackVal = data.feedback || '';
-      const starredVal = typeof data.starred === 'boolean' ? data.starred : false;
+      const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : 0;
+      const remarksVal = data.remarks || '';
+      const highlightedVal = typeof data.highlighted === 'boolean' ? data.highlighted : false;
+      const isFrozenVal = typeof data.isFrozen === 'boolean' ? data.isFrozen : false;
       
       const createdAtStr = data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : '';
       const updatedAtStr = data.updatedAt ? new Date(data.updatedAt.toDate ? data.updatedAt.toDate() : data.updatedAt).toISOString() : createdAtStr;
 
       const teamInfo = teamMap.get(data.teamId || '');
+      const juryName = juryMap.get(data.juryId) || 'Unknown Jury';
 
       scores.push({
         id: doc.id,
         teamId: data.teamId || '',
         teamName: teamInfo?.teamName || data.teamId || 'Unknown Team',
         problemStatement: teamInfo?.problemStatement || 'N/A',
-        juryName: data.juryName || 'Anonymous',
+        juryId: data.juryId || '',
+        juryName,
         rubric: rubricObj,
         totalScore: totalScoreVal,
-        score: totalScoreVal, // compatibility
-        feedback: feedbackVal,
-        starred: starredVal,
+        remarks: remarksVal,
+        highlighted: highlightedVal,
+        isFrozen: isFrozenVal,
         createdAt: createdAtStr,
         updatedAt: updatedAtStr,
       });
@@ -435,12 +461,48 @@ export async function getAllScoresAdmin() {
   }
 }
 
+export async function getAllGameScoresAdmin() {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized', scores: [] };
+  }
+
+  try {
+    const db = getAdminDb();
+    const snapshot = await db.collection('gameScores').orderBy('createdAt', 'desc').get();
+    
+    // Fetch teams to map names
+    const teamsSnap = await db.collection('teams').get();
+    const teamMap = new Map<string, { teamName: string }>();
+    teamsSnap.docs.forEach((doc) => {
+      teamMap.set(doc.id, { teamName: doc.data().teamName || doc.id });
+    });
+
+    const scores = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        teamId: data.teamId || '',
+        teamName: teamMap.get(data.teamId)?.teamName || data.teamId || 'Unknown Team',
+        gameName: data.gameName || 'Unknown Game',
+        xpAwarded: data.xpAwarded || 0,
+        createdAt: data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : '',
+      };
+    });
+
+    return { success: true, scores };
+  } catch (error: any) {
+    console.error('Error fetching game scores:', error);
+    return { success: false, error: error.message || 'Failed to fetch game scores', scores: [] };
+  }
+}
+
 export async function createScoreAdmin(scoreData: {
   teamId: string;
-  juryName: string;
+  juryId: string;
   rubric: Rubric;
-  feedback?: string;
-  starred?: boolean;
+  remarks?: string;
+  highlighted?: boolean;
 }) {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) {
@@ -449,7 +511,7 @@ export async function createScoreAdmin(scoreData: {
 
   try {
     const db = getAdminDb();
-    const scoresRef = db.collection('scores');
+    const scoresRef = db.collection('prelimsEvaluations');
 
     // Ensure team exists
     const teamDoc = await db.collection('teams').doc(scoreData.teamId).get();
@@ -458,29 +520,29 @@ export async function createScoreAdmin(scoreData: {
     }
 
     // Check if score record already exists for this team (enforce single score record rule)
-    const existingSnap = await scoresRef.where('teamId', '==', scoreData.teamId).limit(1).get();
+    const existingSnap = await scoresRef.where('teamId', '==', scoreData.teamId).where('juryId', '==', scoreData.juryId).limit(1).get();
     if (!existingSnap.empty) {
-      return { success: false, error: 'A score record already exists for this team. Pass updated rubric to edit the record instead.' };
+      return { success: false, error: 'A score record already exists for this team by this jury.' };
     }
 
-    const { idea, output, innovation, presentation, finalOutput } = scoreData.rubric;
-    const totalScore = Number(idea) + Number(output) + Number(innovation) + Number(presentation) + Number(finalOutput);
+    const { innovation, technicalFeasibility, impact, presentation } = scoreData.rubric;
+    const totalScore = Number(innovation) + Number(technicalFeasibility) + Number(impact) + Number(presentation);
     const now = new Date();
 
     const newDoc = scoresRef.doc();
     await newDoc.set({
       teamId: scoreData.teamId,
-      juryName: scoreData.juryName.trim(),
+      juryId: scoreData.juryId,
       rubric: {
-        idea: Number(idea),
-        output: Number(output),
         innovation: Number(innovation),
+        technicalFeasibility: Number(technicalFeasibility),
+        impact: Number(impact),
         presentation: Number(presentation),
-        finalOutput: Number(finalOutput),
       },
       totalScore,
-      feedback: scoreData.feedback?.trim() || '',
-      starred: !!scoreData.starred,
+      remarks: scoreData.remarks?.trim() || '',
+      highlighted: !!scoreData.highlighted,
+      isFrozen: false,
       createdAt: now,
       updatedAt: now,
     });
@@ -495,10 +557,10 @@ export async function createScoreAdmin(scoreData: {
 export async function updateScoreAdmin(
   scoreId: string,
   updatedFields: {
-    juryName?: string;
+    juryId?: string;
     rubric?: Rubric;
-    feedback?: string;
-    starred?: boolean;
+    remarks?: string;
+    highlighted?: boolean;
   }
 ) {
   const isAdmin = await verifyAdminSession();
@@ -508,7 +570,7 @@ export async function updateScoreAdmin(
 
   try {
     const db = getAdminDb();
-    const docRef = db.collection('scores').doc(scoreId);
+    const docRef = db.collection('prelimsEvaluations').doc(scoreId);
     const docSnap = await docRef.get();
 
     if (!docSnap.exists) {
@@ -516,31 +578,29 @@ export async function updateScoreAdmin(
     }
 
     const payload: Record<string, any> = {};
-    if (updatedFields.juryName !== undefined) {
-      payload.juryName = updatedFields.juryName.trim();
+    if (updatedFields.juryId !== undefined) {
+      payload.juryId = updatedFields.juryId;
     }
-    if (updatedFields.feedback !== undefined) {
-      payload.feedback = updatedFields.feedback.trim();
+    if (updatedFields.remarks !== undefined) {
+      payload.remarks = updatedFields.remarks.trim();
     }
-    if (updatedFields.starred !== undefined) {
-      payload.starred = !!updatedFields.starred;
+    if (updatedFields.highlighted !== undefined) {
+      payload.highlighted = !!updatedFields.highlighted;
     }
 
     if (updatedFields.rubric !== undefined) {
-      const { idea, output, innovation, presentation, finalOutput } = updatedFields.rubric;
+      const { innovation, technicalFeasibility, impact, presentation } = updatedFields.rubric;
       const parsedRubric = {
-        idea: Number(idea),
-        output: Number(output),
         innovation: Number(innovation),
+        technicalFeasibility: Number(technicalFeasibility),
+        impact: Number(impact),
         presentation: Number(presentation),
-        finalOutput: Number(finalOutput),
       };
       payload.rubric = parsedRubric;
-      payload.totalScore = parsedRubric.idea + parsedRubric.output + parsedRubric.innovation + parsedRubric.presentation + parsedRubric.finalOutput;
+      payload.totalScore = parsedRubric.innovation + parsedRubric.technicalFeasibility + parsedRubric.impact + parsedRubric.presentation;
     }
 
     payload.updatedAt = new Date();
-    payload.score = FieldValue.delete();
 
     await docRef.update(payload);
     return { success: true };
@@ -558,10 +618,52 @@ export async function deleteScoreAdmin(scoreId: string) {
 
   try {
     const db = getAdminDb();
-    await db.collection('scores').doc(scoreId).delete();
+    await db.collection('prelimsEvaluations').doc(scoreId).delete();
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting score:', error);
     return { success: false, error: error.message || 'Failed to delete score' };
+  }
+}
+
+export async function publishPrelimsResults() {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const db = getAdminDb();
+    
+    // 1. Fetch all prelimsEvaluations
+    const evalsSnap = await db.collection('prelimsEvaluations').get();
+    
+    // Group evaluations by teamId
+    const teamScores: Record<string, number[]> = {};
+    evalsSnap.docs.forEach(doc => {
+      const data = doc.data();
+      if (!teamScores[data.teamId]) teamScores[data.teamId] = [];
+      teamScores[data.teamId].push(data.totalScore || 0);
+    });
+
+    const batch = db.batch();
+    
+    // Calculate average and update team
+    for (const [teamId, scores] of Object.entries(teamScores)) {
+      if (scores.length > 0) {
+        const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        const teamRef = db.collection('teams').doc(teamId);
+        batch.update(teamRef, {
+          prelimsAverageScore: averageScore,
+          prelimsStatus: 'selected', // Default behavior for now, can be changed via admin dashboard later
+        });
+      }
+    }
+
+    await batch.commit();
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error publishing prelims results:', error);
+    return { success: false, error: error.message || 'Failed to publish results' };
   }
 }
