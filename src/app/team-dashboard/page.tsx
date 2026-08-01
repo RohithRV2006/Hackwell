@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { getAdminAuth } from '@/lib/firebase-admin';
 import { redirect } from 'next/navigation';
 import { getTeamDataByEmail } from '@/app/actions/auth';
+import { getUserRole } from '@/app/actions/session';
 import TeamDashboardClient from './TeamDashboardClient';
 
 export default async function TeamDashboard() {
@@ -22,6 +23,11 @@ export default async function TeamDashboard() {
   const email = decodedClaims.email;
   if (!email) {
     redirect('/login');
+  }
+
+  const role = await getUserRole(email);
+  if (role !== 'team') {
+    redirect('/');
   }
 
   const { success, team, error } = await getTeamDataByEmail(email);

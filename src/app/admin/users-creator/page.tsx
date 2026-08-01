@@ -10,6 +10,7 @@ import {
   deleteUserAdmin,
   AdminUser,
 } from './actions';
+import { useRouter } from 'next/navigation';
 import { verifyAdminSession } from '@/app/admin/actions';
 
 type ActiveForm = 'jury' | 'student-coord' | 'faculty-coord' | 'admin';
@@ -20,6 +21,7 @@ export default function UsersCreatorPage() {
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const router = useRouter();
   const [successMsg, setSuccessMsg] = useState('');
 
   // Active tab: which form to show
