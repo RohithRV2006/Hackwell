@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { getAdminAuth } from '@/lib/firebase-admin';
 import { redirect } from 'next/navigation';
 import { getTeamDataByEmail } from '@/app/actions/auth';
+import { getAdminDb } from '@/lib/firebase-admin';
 import { getUserRole } from '@/app/actions/session';
 import TeamDashboardClient from './TeamDashboardClient';
 
@@ -43,9 +44,33 @@ export default async function TeamDashboard() {
     );
   }
 
+  // Calculate Leaderboard Position
+  let leaderboardPosition = 'N/A';
+  try {
+    const db = getAdminDb();
+    const teamsSnap = await db.collection('teams')
+      .orderBy('totalGameXP', 'desc')
+      .get();
+    
+    let rank = 1;
+    for (const doc of teamsSnap.docs) {
+      if (doc.id === team.id) {
+        leaderboardPosition = rank.toString();
+        break;
+      }
+      // Only increment rank if XP is greater than 0, else they might tie at 0
+      rank++;
+    }
+  } catch (err) {
+    console.error('Error fetching leaderboard position', err);
+  }
+
+  // Pass rank to client
+  const enrichedTeam = { ...team, leaderboardPosition };
+
   return (
-    <main className="min-h-screen p-8 sm:p-24 bg-gray-50 text-gray-900">
-      <TeamDashboardClient team={team} />
+    <main className="min-h-screen p-4 sm:p-8 bg-gray-50 text-gray-900">
+      <TeamDashboardClient team={enrichedTeam} />
     </main>
   );
 }

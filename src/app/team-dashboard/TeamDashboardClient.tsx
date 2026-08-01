@@ -1,22 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { clearSessionCookie } from '@/app/actions/session';
-import { submitPPT } from '@/app/actions/auth';
+import { savePPTLink } from '@/app/actions/drive';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, MapPin } from 'lucide-react';
+import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, MapPin, Download, FileText, Users, Info, Trophy, FileUp, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 export default function TeamDashboardClient({ team }: { team: any }) {
-  const [activeTab, setActiveTab] = useState('details');
+  const [activeTab, setActiveTab] = useState('overview');
   const [resetMessage, setResetMessage] = useState('');
   
   // PPT Submission State
   const [pptLink, setPptLink] = useState(team.pptLink || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pptMessage, setPptMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const router = useRouter();
 
   useEffect(() => {
@@ -52,52 +54,122 @@ export default function TeamDashboardClient({ team }: { team: any }) {
     router.push('/login');
   };
 
-  const handlePPTSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pptLink.trim()) return;
-    
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.ppt') && !file.name.endsWith('.pptx')) {
+      setPptMessage('Please select a valid .ppt or .pptx file.');
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      setPptMessage('File size must be under 15MB.');
+      return;
+    }
+
     setIsSubmitting(true);
-    const res = await submitPPT(team.id, pptLink);
-    setIsSubmitting(false);
-    
-    if (res.success) {
-      setPptMessage('PPT Link submitted successfully!');
-    } else {
-      setPptMessage(res.error || 'Failed to submit PPT.');
+    setPptMessage('Uploading presentation to Google Drive, please wait...');
+
+    try {
+      // Create standardized file name: TeamID_PrelimsVenue_TeamName_PSID
+      const venueStr = team.venue ? team.venue.replace(/\s+/g, '') : 'NoVenue';
+      const safeTeamName = (team.teamName || 'Unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const ext = file.name.split('.').pop();
+      const fileName = `${team.id}_${venueStr}_${safeTeamName}_${team.psId}.${ext}`;
+
+      // Convert file to base64 for direct upload to Google Script
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64Data = (reader.result as string).split(',')[1];
+        
+        const scriptUrl = process.env.NEXT_PUBLIC_GOOGLE_SCRIPT_URL;
+        if (!scriptUrl) {
+          setIsSubmitting(false);
+          setPptMessage('Error: NEXT_PUBLIC_GOOGLE_SCRIPT_URL is not configured.');
+          return;
+        }
+
+        try {
+          // Direct fetch to Google Apps Script to bypass Next.js size limits
+          const response = await fetch(scriptUrl, {
+            method: 'POST',
+            body: JSON.stringify({
+              fileName: fileName,
+              mimeType: file.type,
+              base64Data: base64Data
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Network response was not ok: ${response.status} ${response.statusText} - ${errorText}`);
+          }
+
+          const res = await response.json();
+          
+          if (res.status === 'success') {
+            // Only use Server Action to save the final URL
+            const saveRes = await savePPTLink(team.id, res.url, res.fileId);
+            setIsSubmitting(false);
+            if (saveRes.success) {
+              setPptMessage('PPT submitted successfully!');
+              setPptLink(res.url);
+            } else {
+              setPptMessage(saveRes.error || 'Failed to save PPT link.');
+            }
+          } else {
+            setIsSubmitting(false);
+            setPptMessage(res.message || 'Failed to upload PPT to Drive.');
+          }
+        } catch (err: any) {
+          setIsSubmitting(false);
+          setPptMessage('Network error during upload.');
+          console.error(err);
+        }
+      };
+      
+      reader.onerror = () => {
+        setIsSubmitting(false);
+        setPptMessage('Failed to read file.');
+      };
+      
+    } catch (error: any) {
+      setIsSubmitting(false);
+      setPptMessage('An unexpected error occurred.');
+      console.error(error);
     }
   };
 
   const isDeadlinePassed = new Date() > new Date('2026-08-20T23:59:59');
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="w-full space-y-8">
       {/* Header */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100 gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <span className="bg-blue-100 text-blue-800 text-sm font-bold py-1 px-3 rounded-lg border border-blue-200">
-              {team.displayId || team.id}
-            </span>
-            <h1 className="text-3xl font-extrabold text-blue-900">{team.teamName}</h1>
+            <h1 className="text-3xl font-extrabold text-blue-900">
+              <span className="text-gray-400 font-medium mr-2">#{team.displayId || team.id}</span>
+              {team.teamName}
+            </h1>
           </div>
-          <p className="text-gray-500 mt-2">
-            Theme: <span className="font-semibold text-gray-700">{team.theme || 'N/A'}</span>
-          </p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
           <button 
             onClick={handleResetPassword}
-            className="flex items-center justify-center gap-2 flex-1 md:flex-none bg-gray-100 text-gray-700 hover:bg-gray-200 font-semibold py-2.5 px-4 rounded-xl transition"
+            title="Reset Password"
+            className="flex items-center justify-center p-3 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl transition"
           >
-            <KeyRound size={18} />
-            Reset Password
+            <KeyRound size={20} />
           </button>
           <button 
             onClick={handleLogout}
-            className="flex items-center justify-center gap-2 flex-1 md:flex-none bg-red-100 text-red-700 hover:bg-red-200 font-semibold py-2.5 px-4 rounded-xl transition"
+            title="Logout"
+            className="flex items-center justify-center p-3 bg-red-100 text-red-700 hover:bg-red-200 rounded-xl transition"
           >
-            <LogOut size={18} />
-            Logout
+            <LogOut size={20} />
           </button>
         </div>
       </header>
@@ -109,190 +181,308 @@ export default function TeamDashboardClient({ team }: { team: any }) {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 overflow-x-auto hide-scrollbar">
+      <div className="flex border-b border-gray-200 overflow-x-auto hide-scrollbar bg-white rounded-t-xl px-2">
         <button
-          onClick={() => setActiveTab('details')}
-          className={`px-6 py-4 font-semibold text-sm transition-colors whitespace-nowrap border-b-2 ${
-            activeTab === 'details' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          onClick={() => setActiveTab('overview')}
+          className={`flex items-center gap-2 px-6 py-4 font-semibold text-sm transition-colors whitespace-nowrap border-b-2 ${
+            activeTab === 'overview' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           }`}
         >
-          Team Details
+          <Info size={16} /> Overview
         </button>
         <button
-          onClick={() => setActiveTab('ppt')}
-          className={`px-6 py-4 font-semibold text-sm transition-colors whitespace-nowrap border-b-2 ${
-            activeTab === 'ppt' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          onClick={() => setActiveTab('members')}
+          className={`flex items-center gap-2 px-6 py-4 font-semibold text-sm transition-colors whitespace-nowrap border-b-2 ${
+            activeTab === 'members' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           }`}
         >
-          PPT Submission
+          <Users size={16} /> Members
         </button>
         <button
-          onClick={() => setActiveTab('status')}
-          className={`px-6 py-4 font-semibold text-sm transition-colors whitespace-nowrap border-b-2 ${
-            activeTab === 'status' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          onClick={() => setActiveTab('submission')}
+          className={`flex items-center gap-2 px-6 py-4 font-semibold text-sm transition-colors whitespace-nowrap border-b-2 ${
+            activeTab === 'submission' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           }`}
         >
-          Prelims & Status
+          <UploadCloud size={16} /> Submission
+        </button>
+        <button
+          onClick={() => setActiveTab('consent')}
+          className={`flex items-center gap-2 px-6 py-4 font-semibold text-sm transition-colors whitespace-nowrap border-b-2 ${
+            activeTab === 'consent' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          <FileText size={16} /> Consent Letter
         </button>
       </div>
 
       {/* Tab Content */}
       <div className="mt-6">
-        {/* TAB 1: DETAILS */}
-        {activeTab === 'details' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100">
-              <h3 className="text-xl font-bold text-blue-900 mb-2">Problem Statement</h3>
-              <p className="text-gray-700 font-medium">
-                <span className="text-blue-600 font-bold">{team.psId}:</span> {team.problemStatement}
-              </p>
+        
+        {/* TAB 1: OVERVIEW */}
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {/* Essential Info */}
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4">
+              <h2 className="text-xl font-bold text-gray-900 border-b pb-2 mb-2">Team Overview</h2>
+              <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                <span className="text-gray-500 font-medium">Email</span>
+                <span className="font-semibold text-gray-800">{team.leadEmail}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                <span className="text-gray-500 font-medium">Theme</span>
+                <span className="font-semibold text-gray-800">{team.theme || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                <span className="text-gray-500 font-medium whitespace-nowrap mr-4">PS ID & Title</span>
+                <span className="font-semibold text-blue-600 text-right">
+                  {team.psId} - {team.problemStatement || 'N/A'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                <span className="text-gray-500 font-medium">Submission Status</span>
+                {pptLink ? (
+                  <span className="font-bold text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm">Submitted</span>
+                ) : (
+                  <span className="font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full text-sm">Pending Upload</span>
+                )}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Team Lead Info */}
-              <section className="bg-white p-8 rounded-2xl shadow-sm border-t-4 border-blue-500">
-                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                  <span className="bg-blue-100 text-blue-800 text-sm py-1 px-3 rounded-full">Lead</span>
-                  {leadData.name}
-                </h2>
-                <div className="space-y-3 text-gray-600">
-                  <p><strong className="text-gray-900">Email:</strong> {team.leadEmail}</p>
-                  <p><strong className="text-gray-900">Contact:</strong> {leadData.contactNumber}</p>
-                  <p><strong className="text-gray-900">Batch:</strong> {leadData.batchNumber}</p>
-                  <p><strong className="text-gray-900">Department:</strong> {leadData.department}</p>
-                  <p><strong className="text-gray-900">Year / Section:</strong> {leadData.year} / {leadData.section}</p>
-                </div>
-              </section>
+            {/* Event Progress */}
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4">
+              <h2 className="text-xl font-bold text-gray-900 border-b pb-2 mb-2">Event Progress</h2>
+              <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                <span className="text-gray-500 font-medium">Prelims Status</span>
+                <span className={`font-semibold ${team.prelimsStatus === 'selected' ? 'text-green-600' : team.prelimsStatus === 'rejected' ? 'text-red-600' : 'text-yellow-600'}`}>
+                  {team.prelimsStatus ? team.prelimsStatus.toUpperCase() : 'PENDING'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                <span className="text-gray-500 font-medium">Prelims Venue</span>
+                <span className="font-semibold text-gray-800">{team.venue || 'TBA'}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                <span className="text-gray-500 font-medium">Finals Status</span>
+                <span className="font-semibold text-gray-400">TBA</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                <span className="text-gray-500 font-medium">Finals Venue</span>
+                <span className="font-semibold text-gray-400">TBA</span>
+              </div>
+            </div>
 
-              {/* Members Info */}
-              <section className="bg-white p-8 rounded-2xl shadow-sm">
-                <h2 className="text-2xl font-bold mb-6">Team Members</h2>
-                <div className="space-y-6">
-                  {membersData.map((member: any, index: number) => (
-                    <div key={index} className="pb-4 border-b border-gray-100 last:border-0 last:pb-0">
-                      <h3 className="text-lg font-semibold text-gray-800">{member.name}</h3>
-                      <div className="grid grid-cols-2 gap-2 mt-2 text-sm text-gray-600">
-                        <p><strong className="text-gray-900">Batch:</strong> {member.batchNumber}</p>
-                        <p><strong className="text-gray-900">Dept:</strong> {member.department}</p>
-                        <p><strong className="text-gray-900">Year:</strong> {member.year}</p>
-                        <p><strong className="text-gray-900">Section:</strong> {member.section}</p>
-                      </div>
-                    </div>
-                  ))}
+            {/* Leaderboard & XP */}
+            <div className="grid grid-cols-2 gap-4 md:col-span-2">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="bg-blue-100 p-4 rounded-full">
+                  <Trophy size={28} className="text-blue-600" />
                 </div>
-              </section>
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">Leaderboard Rank</p>
+                  <p className="text-2xl font-bold text-gray-900">#{team.leaderboardPosition || 'N/A'}</p>
+                </div>
+              </div>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="bg-green-100 p-4 rounded-full">
+                  <CheckCircle2 size={28} className="text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">Total Game XP</p>
+                  <p className="text-2xl font-bold text-gray-900">{team.totalGameXP || 0} XP</p>
+                </div>
+              </div>
             </div>
           </div>
         )}
 
-        {/* TAB 2: PPT SUBMISSION */}
-        {activeTab === 'ppt' && (
-          <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="bg-blue-100 p-3 rounded-xl text-blue-600">
-                <UploadCloud size={24} />
-              </div>
+        {/* TAB 2: MEMBERS */}
+        {activeTab === 'members' && (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
+            
+            {/* Contact Info */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">PPT Submission</h2>
-                <p className="text-gray-500 text-sm">Submit your Google Drive presentation link</p>
+                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Primary Contact</h3>
+                <div className="flex flex-wrap gap-x-8 gap-y-2 text-lg">
+                  <p><span className="font-semibold text-gray-700">Email:</span> <a href={`mailto:${team.leadEmail}`} className="text-blue-600 hover:underline">{team.leadEmail}</a></p>
+                  <p><span className="font-semibold text-gray-700">Phone:</span> {leadData.contactNumber || 'N/A'}</p>
+                </div>
               </div>
             </div>
 
-            {isDeadlinePassed ? (
-              <div className="bg-red-50 border border-red-200 text-red-800 p-6 rounded-xl flex flex-col items-center text-center">
-                <Clock size={32} className="mb-3 text-red-500" />
-                <h3 className="text-lg font-bold">Submission Closed</h3>
-                <p className="mt-1">The deadline (August 20, 2026) has passed. You can no longer submit or update your PPT.</p>
-                {team.pptLink && (
-                  <div className="mt-4 pt-4 border-t border-red-200 w-full">
-                    <p className="text-sm font-semibold mb-1 text-left">Your Final Submission:</p>
-                    <a href={team.pptLink} target="_blank" rel="noreferrer" className="text-blue-600 underline text-left block truncate">
-                      {team.pptLink}
+            {/* Members Table */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-sm uppercase text-gray-500 font-semibold">
+                      <th className="py-4 px-6">Role</th>
+                      <th className="py-4 px-6">Name</th>
+                      <th className="py-4 px-6">Batch</th>
+                      <th className="py-4 px-6">Dept</th>
+                      <th className="py-4 px-6">Year</th>
+                      <th className="py-4 px-6">Section</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    <tr className="hover:bg-gray-50 transition">
+                      <td className="py-4 px-6"><span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">LEAD</span></td>
+                      <td className="py-4 px-6 font-semibold text-gray-900">{leadData.name}</td>
+                      <td className="py-4 px-6 text-gray-600">{leadData.batchNumber}</td>
+                      <td className="py-4 px-6 text-gray-600">{leadData.department}</td>
+                      <td className="py-4 px-6 text-gray-600">{leadData.year}</td>
+                      <td className="py-4 px-6 text-gray-600">{leadData.section}</td>
+                    </tr>
+                    {membersData.map((member: any, i: number) => (
+                      <tr key={i} className="hover:bg-gray-50 transition">
+                        <td className="py-4 px-6"><span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">MEMBER</span></td>
+                        <td className="py-4 px-6 font-semibold text-gray-900">{member.name}</td>
+                        <td className="py-4 px-6 text-gray-600">{member.batchNumber}</td>
+                        <td className="py-4 px-6 text-gray-600">{member.department}</td>
+                        <td className="py-4 px-6 text-gray-600">{member.year}</td>
+                        <td className="py-4 px-6 text-gray-600">{member.section}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: PPT SUBMISSION */}
+        {activeTab === 'submission' && (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
+            
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+              <div className="flex items-center gap-3 mb-6 border-b pb-4">
+                <div className="bg-blue-100 p-3 rounded-xl text-blue-600">
+                  <FileUp size={24} />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Upload Presentation</h2>
+                  <p className="text-gray-500 text-sm">Upload your PPT file to the committee</p>
+                </div>
+              </div>
+
+              {isDeadlinePassed ? (
+                <div className="bg-red-50 border border-red-200 text-red-800 p-6 rounded-xl flex flex-col items-center text-center">
+                  <Clock size={32} className="mb-3 text-red-500" />
+                  <h3 className="text-lg font-bold">Submission Closed</h3>
+                  <p className="mt-1">The deadline (August 20, 2026) has passed. You can no longer submit or update your PPT.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Download Template Box */}
+                  <div className="bg-blue-50 border border-blue-100 p-6 rounded-xl flex justify-between items-center">
+                    <div>
+                      <h3 className="font-semibold text-blue-900">Step 1: Download Template</h3>
+                      <p className="text-sm text-blue-700">Please format your presentation using the official hackathon template.</p>
+                    </div>
+                    <a href="/template.pptx" download className="flex items-center gap-2 bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 px-4 py-2 rounded-lg font-semibold transition shadow-sm">
+                      <Download size={18} />
+                      Template
                     </a>
                   </div>
-                )}
-              </div>
-            ) : (
-              <form onSubmit={handlePPTSubmit} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Google Drive Link *</label>
-                  <input 
-                    type="url" 
-                    required 
-                    value={pptLink}
-                    onChange={(e) => setPptLink(e.target.value)}
-                    placeholder="https://docs.google.com/presentation/d/..."
-                    className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">Ensure the link visibility is set to &quot;Anyone with the link&quot;.</p>
-                </div>
-                
-                <button 
-                  type="submit" 
-                  disabled={isSubmitting}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit Presentation'}
-                </button>
-                
-                {pptMessage && (
-                  <div className={`p-4 rounded-xl text-sm font-semibold ${pptMessage.includes('Failed') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
-                    {pptMessage}
+
+                  {/* Upload Box */}
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">Step 2: Upload Presentation (.ppt or .pptx)</h3>
+                    <input 
+                      type="file" 
+                      accept=".ppt,.pptx"
+                      ref={fileInputRef}
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                    
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isSubmitting}
+                      className="w-full h-32 border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition rounded-xl flex flex-col items-center justify-center text-gray-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSubmitting ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                          <span className="font-semibold text-blue-600">Uploading to Google Drive...</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2">
+                          <UploadCloud size={32} className="text-gray-400" />
+                          <span className="font-semibold text-gray-700">Click to browse or Drag & Drop</span>
+                          <span className="text-xs">Max size: 15MB</span>
+                        </div>
+                      )}
+                    </button>
+                    
+                    {pptMessage && (
+                      <div className={`mt-4 p-4 rounded-xl text-sm font-semibold ${pptMessage.includes('Failed') || pptMessage.includes('error') || pptMessage.includes('Please') || pptMessage.includes('size') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                        {pptMessage}
+                      </div>
+                    )}
                   </div>
-                )}
-              </form>
-            )}
+                </div>
+              )}
+            </div>
+
+            {/* View Uploaded PPT */}
+            <div className="bg-gray-50 p-8 rounded-2xl border border-gray-200 w-full">
+              <h2 className="text-lg font-bold text-gray-900 mb-4 border-b border-gray-200 pb-2">Current Submission</h2>
+              {pptLink ? (
+                <div className="flex flex-col gap-4">
+                  <div className="bg-white p-4 rounded-xl border border-gray-200 flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <FileText className="text-blue-600 flex-shrink-0" size={24} />
+                      <div className="overflow-hidden">
+                        <p className="font-semibold text-sm text-gray-900 truncate" title="View Presentation">Official Submission</p>
+                        <p className="text-xs text-green-600 font-semibold mt-1">Uploaded Successfully</p>
+                      </div>
+                    </div>
+                    <a 
+                      href={pptLink} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-xl transition"
+                    >
+                      <ExternalLink size={18} />
+                      View Presentation
+                    </a>
+                  </div>
+                  {!isDeadlinePassed && (
+                    <p className="text-xs text-gray-500 text-left mt-2">
+                      Uploading a new file will automatically overwrite this submission.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-32 text-center text-gray-400">
+                  <FileText size={48} className="mb-2 opacity-20" />
+                  <p className="font-medium">No presentation uploaded yet.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* TAB 3: PRELIMS & STATUS */}
-        {activeTab === 'status' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                <CheckCircle2 className="text-blue-600" />
-                Prelims Status
-              </h2>
-              
-              <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-xl border border-gray-200 text-center h-[200px]">
-                {team.prelimsStatus === 'pending' && (
-                  <>
-                    <span className="bg-yellow-100 text-yellow-800 font-bold px-4 py-1.5 rounded-full mb-3 text-sm">Under Review</span>
-                    <p className="text-gray-600">Your submission is currently being reviewed by the jury. Please check back later.</p>
-                  </>
-                )}
-                {team.prelimsStatus === 'selected' && (
-                  <>
-                    <span className="bg-green-100 text-green-800 font-bold px-4 py-1.5 rounded-full mb-3 text-sm">Selected for Prelims!</span>
-                    <p className="text-gray-600">Congratulations! Your team has been selected to present in the preliminary round.</p>
-                  </>
-                )}
-                {team.prelimsStatus === 'rejected' && (
-                  <>
-                    <span className="bg-red-100 text-red-800 font-bold px-4 py-1.5 rounded-full mb-3 text-sm">Not Selected</span>
-                    <p className="text-gray-600">Unfortunately, your team was not selected for the preliminary round this time.</p>
-                  </>
-                )}
-              </div>
+        {/* TAB 4: CONSENT LETTER */}
+        {activeTab === 'consent' && (
+          <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 max-w-2xl mx-auto text-center animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="bg-blue-50 w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-6">
+              <FileText className="text-blue-600" size={32} />
             </div>
-
-            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                <MapPin className="text-blue-600" />
-                Venue / Lab Allocation
-              </h2>
-              
-              <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-xl border border-gray-200 text-center h-[200px]">
-                {team.venue ? (
-                  <>
-                    <p className="text-sm text-gray-500 font-medium mb-1">Your assigned location:</p>
-                    <p className="text-2xl font-extrabold text-blue-900">{team.venue}</p>
-                  </>
-                ) : (
-                  <p className="text-gray-500 italic">No venue allocated yet.</p>
-                )}
-              </div>
-            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">Consent Letter</h2>
+            <p className="text-gray-600 mb-8 max-w-md mx-auto">
+              All participating teams must download, sign, and carry the official consent letter during the offline event. Please ensure it is signed by your Head of Department.
+            </p>
+            <a 
+              href="/consent-form.pdf" 
+              download
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl transition shadow-md hover:shadow-lg"
+            >
+              <Download size={20} />
+              Download Consent Letter
+            </a>
           </div>
         )}
       </div>
