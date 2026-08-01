@@ -54,39 +54,90 @@
       }
     },
     "roles": {
-      "description": "Stores authentication and role information for privileged users (Admins, Jury, Coordinators).",
+      "description": "Stores authentication and role information for privileged users (Admins, Jury, Coordinators). Document ID is the user email (lowercase).",
       "documentId": "email (lowercase)",
       "fields": {
         "role": {
           "type": "string",
           "encrypted": false,
-          "description": "The role of the user (admin, jury, student-coord, faculty-coord)."
+          "description": "The role of the user: 'admin', 'jury', or 'coordinator'."
+        },
+        "name": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Full name of the user (set for jury and coordinator roles)."
+        },
+        "institution": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Institution / organisation name (set for jury role only)."
+        },
+        "department": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Department name (set for coordinator role only)."
         },
         "encryptedCreds": {
           "type": "string",
           "encrypted": true,
           "description": "AES-256-GCM encrypted string storing the password/credentials."
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "encrypted": false,
+          "description": "Server timestamp when the account was created."
         }
       }
     },
     "jury": {
-      "description": "Stores information about jury members.",
+      "description": "Stores profile information for jury members. A document is created here whenever a jury login account is created via the admin panel.",
       "documentId": "Auto-generated Firestore document ID",
       "fields": {
         "juryName": {
           "type": "string",
           "encrypted": false,
-          "description": "The name of the jury member."
+          "description": "The full name of the jury member."
         },
         "institution": {
           "type": "string",
           "encrypted": false,
-          "description": "Institution/Organization of the jury member."
+          "description": "Institution / Organisation of the jury member."
+        },
+        "email": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Login email of the jury member. Used to link the jury profile to the Firebase Auth account."
         },
         "createdAt": {
           "type": "timestamp",
           "encrypted": false,
-          "description": "Server timestamp when the jury was created."
+          "description": "Server timestamp when the jury profile was created."
+        }
+      }
+    },
+    "coordinators": {
+      "description": "Stores profile information for coordinators. A document is created here whenever a coordinator login account is created via the admin panel.",
+      "documentId": "Auto-generated Firestore document ID",
+      "fields": {
+        "name": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Full name of the coordinator."
+        },
+        "department": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Department the coordinator belongs to."
+        },
+        "email": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Login email of the coordinator. Used to link the profile to the Firebase Auth account."
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "encrypted": false,
+          "description": "Server timestamp when the coordinator profile was created."
         }
       }
     },

@@ -1,79 +1,109 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getAllUsersAdmin, createUserAdmin, deleteUserAdmin, AdminUser } from './actions';
+import React, { useState, useEffect } from 'react';
+import {
+  getAllUsersAdmin,
+  createJuryUser,
+  createCoordinatorUser,
+  deleteUserAdmin,
+  AdminUser,
+} from './actions';
 import { verifyAdminSession } from '@/app/admin/actions';
 
+type ActiveForm = 'jury' | 'coordinator';
+
+const ROLE_BADGE: Record<string, { label: string; className: string }> = {
+  admin:       { label: 'Admin',       className: 'bg-purple-100 text-purple-800 border border-purple-200' },
+  jury:        { label: 'Jury',        className: 'bg-amber-100  text-amber-800  border border-amber-200'  },
+  coordinator: { label: 'Coordinator', className: 'bg-blue-100   text-blue-800   border border-blue-200'   },
+  team:        { label: 'Team',        className: 'bg-slate-100  text-slate-700  border border-slate-200'  },
+};
+
+function badgeFor(role: string) {
+  return ROLE_BADGE[role] ?? { label: role, className: 'bg-gray-100 text-gray-600 border border-gray-200' };
+}
+
 export default function UsersCreatorPage() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [users, setUsers]                     = useState<AdminUser[]>([]);
+  const [loading, setLoading]                 = useState(false);
+  const [creating, setCreating]               = useState(false);
+  const [errorMsg, setErrorMsg]               = useState('');
+  const [successMsg, setSuccessMsg]           = useState('');
 
-  // Form State
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState('student-coord');
+  // Active tab: which form to show
+  const [activeForm, setActiveForm] = useState<ActiveForm>('jury');
 
-  useEffect(() => {
-    checkSession();
-  }, []);
+  // Jury form
+  const [juryName, setJuryName]               = useState('');
+  const [juryInstitution, setJuryInstitution] = useState('');
+  const [juryEmail, setJuryEmail]             = useState('');
+  const [juryPassword, setJuryPassword]       = useState('');
+
+  // Coordinator form
+  const [coordName, setCoordName]             = useState('');
+  const [coordDept, setCoordDept]             = useState('');
+  const [coordEmail, setCoordEmail]           = useState('');
+  const [coordPassword, setCoordPassword]     = useState('');
+
+  useEffect(() => { checkSession(); }, []);
 
   const checkSession = async () => {
     const valid = await verifyAdminSession();
     setIsAuthenticated(valid);
-    if (valid) {
-      loadUsers();
-    }
+    if (valid) loadUsers();
   };
 
   const loadUsers = async () => {
     setLoading(true);
     const res = await getAllUsersAdmin();
-    if (res.success && res.users) {
-      setUsers(res.users);
-    } else {
-      setErrorMsg(res.error || 'Failed to load users');
-    }
+    if (res.success && res.users) setUsers(res.users);
+    else setErrorMsg(res.error || 'Failed to load users');
     setLoading(false);
   };
 
-  const handleCreateUser = async (e: React.FormEvent) => {
+  const clearMessages = () => { setErrorMsg(''); setSuccessMsg(''); };
+
+  /* ── Jury submit ────────────────────────────────────────────── */
+  const handleCreateJury = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || !role) {
-      setErrorMsg('All fields are required');
-      return;
-    }
-
+    clearMessages();
     setCreating(true);
-    setErrorMsg('');
-    setSuccessMsg('');
-
-    const res = await createUserAdmin(email, password, role);
+    const res = await createJuryUser(juryName, juryInstitution, juryEmail, juryPassword);
+    setCreating(false);
     if (res.success) {
-      setSuccessMsg(`User ${email} created successfully as ${role}!`);
-      setEmail('');
-      setPassword('');
-      setRole('student-coord');
+      setSuccessMsg(`Jury account for "${juryName}" (${juryEmail}) created successfully!`);
+      setJuryName(''); setJuryInstitution(''); setJuryEmail(''); setJuryPassword('');
       loadUsers();
     } else {
-      setErrorMsg(res.error || 'Failed to create user');
+      setErrorMsg(res.error || 'Failed to create jury account');
     }
-    setCreating(false);
   };
 
-  const handleDeleteUser = async (userEmail: string) => {
-    if (!confirm(`Are you sure you want to completely delete ${userEmail}?\nThis action is permanent and cannot be undone.`)) {
-      return;
-    }
-    setLoading(true);
-    setErrorMsg('');
-    
-    const res = await deleteUserAdmin(userEmail);
+  /* ── Coordinator submit ─────────────────────────────────────── */
+  const handleCreateCoordinator = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearMessages();
+    setCreating(true);
+    const res = await createCoordinatorUser(coordName, coordDept, coordEmail, coordPassword);
+    setCreating(false);
     if (res.success) {
-      setSuccessMsg(`User ${userEmail} deleted successfully.`);
+      setSuccessMsg(`Coordinator account for "${coordName}" (${coordEmail}) created successfully!`);
+      setCoordName(''); setCoordDept(''); setCoordEmail(''); setCoordPassword('');
+      loadUsers();
+    } else {
+      setErrorMsg(res.error || 'Failed to create coordinator account');
+    }
+  };
+
+  /* ── Delete ─────────────────────────────────────────────────── */
+  const handleDeleteUser = async (email: string, role: string) => {
+    if (!confirm(`Delete ${role} account "${email}"?\nThis action is permanent and cannot be undone.`)) return;
+    clearMessages();
+    setLoading(true);
+    const res = await deleteUserAdmin(email);
+    if (res.success) {
+      setSuccessMsg(`Account "${email}" deleted successfully.`);
       loadUsers();
     } else {
       setErrorMsg(res.error || 'Failed to delete user');
@@ -81,6 +111,7 @@ export default function UsersCreatorPage() {
     }
   };
 
+  /* ── Auth guards ────────────────────────────────────────────── */
   if (isAuthenticated === null) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
@@ -88,7 +119,6 @@ export default function UsersCreatorPage() {
       </div>
     );
   }
-
   if (!isAuthenticated) {
     return (
       <div className="p-8 text-center text-red-600 font-bold text-xl">
@@ -97,9 +127,13 @@ export default function UsersCreatorPage() {
     );
   }
 
+  /* ── Filter users by role for stats ────────────────────────── */
+  const juryCount = users.filter(u => u.role === 'jury').length;
+  const coordCount = users.filter(u => u.role === 'coordinator').length;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-      
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+
       {/* Notifications */}
       {successMsg && (
         <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm font-medium">
@@ -112,117 +146,266 @@ export default function UsersCreatorPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Create User Form */}
-        <div className="lg:col-span-1">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-md sticky top-24">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Create New User</h2>
-            <form onSubmit={handleCreateUser} className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="user@example.com"
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition"
-                  required
-                  minLength={6}
-                />
-              </div>
+      {/* Quick stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Accounts</p>
+          <p className="text-3xl font-extrabold text-gray-900 mt-1">{users.length}</p>
+        </div>
+        <div className="bg-white border border-amber-200 rounded-2xl p-5 shadow-sm">
+          <p className="text-xs font-bold text-amber-500 uppercase tracking-wider">Jury Members</p>
+          <p className="text-3xl font-extrabold text-amber-600 mt-1">{juryCount}</p>
+        </div>
+        <div className="bg-white border border-blue-200 rounded-2xl p-5 shadow-sm">
+          <p className="text-xs font-bold text-blue-500 uppercase tracking-wider">Coordinators</p>
+          <p className="text-3xl font-extrabold text-blue-600 mt-1">{coordCount}</p>
+        </div>
+      </div>
 
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Role</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition"
-                >
-                  <option value="admin">Administrator</option>
-                  <option value="student-coord">Student Coordinator</option>
-                  <option value="faculty-coord">Faculty Coordinator</option>
-                  <option value="jury">Jury Member</option>
-                </select>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
 
+        {/* ── LEFT: Form area ─────────────────────────────────────── */}
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-md sticky top-24 overflow-hidden">
+
+            {/* Form Tabs */}
+            <div className="flex border-b border-gray-200">
               <button
-                type="submit"
-                disabled={creating}
-                className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-md transition disabled:opacity-50"
+                onClick={() => { setActiveForm('jury'); clearMessages(); }}
+                className={`flex-1 py-3.5 text-sm font-bold transition ${
+                  activeForm === 'jury'
+                    ? 'bg-amber-50 text-amber-700 border-b-2 border-amber-500'
+                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                }`}
               >
-                {creating ? 'Creating User...' : 'Create User'}
+                ⚖️ Add Jury Member
               </button>
-            </form>
+              <button
+                onClick={() => { setActiveForm('coordinator'); clearMessages(); }}
+                className={`flex-1 py-3.5 text-sm font-bold transition ${
+                  activeForm === 'coordinator'
+                    ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-500'
+                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                }`}
+              >
+                🎓 Add Coordinator
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* ── JURY FORM ───────────────────────────────────── */}
+              {activeForm === 'jury' && (
+                <form onSubmit={handleCreateJury} className="space-y-4">
+                  <p className="text-xs text-gray-400 -mt-1 mb-2">
+                    Creates a login account for the jury member and stores their profile in the database.
+                  </p>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Dr. A. Kumar"
+                      value={juryName}
+                      onChange={e => setJuryName(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Institution / Organisation</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. IIT Madras"
+                      value={juryInstitution}
+                      onChange={e => setJuryInstitution(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Login Email</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="jury@example.com"
+                      value={juryEmail}
+                      onChange={e => setJuryEmail(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Login Password</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="Min. 6 characters"
+                      value={juryPassword}
+                      onChange={e => setJuryPassword(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={creating}
+                    className="w-full mt-2 bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 px-4 rounded-xl shadow-md transition disabled:opacity-50"
+                  >
+                    {creating ? 'Creating Jury Account...' : '⚖️ Create Jury Account'}
+                  </button>
+                </form>
+              )}
+
+              {/* ── COORDINATOR FORM ─────────────────────────────── */}
+              {activeForm === 'coordinator' && (
+                <form onSubmit={handleCreateCoordinator} className="space-y-4">
+                  <p className="text-xs text-gray-400 -mt-1 mb-2">
+                    Creates a login account for the coordinator and stores their profile in the database.
+                  </p>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Prof. R. Lakshmi"
+                      value={coordName}
+                      onChange={e => setCoordName(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Department</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. CSE, IT, AI&DS..."
+                      value={coordDept}
+                      onChange={e => setCoordDept(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Login Email</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="coordinator@college.ac.in"
+                      value={coordEmail}
+                      onChange={e => setCoordEmail(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Login Password</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="Min. 6 characters"
+                      value={coordPassword}
+                      onChange={e => setCoordPassword(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={creating}
+                    className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-md transition disabled:opacity-50"
+                  >
+                    {creating ? 'Creating Coordinator Account...' : '🎓 Create Coordinator Account'}
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Users Table */}
-        <div className="lg:col-span-2">
+        {/* ── RIGHT: Users Table ─────────────────────────────────── */}
+        <div className="lg:col-span-3">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-              <h2 className="text-lg font-bold text-gray-900">Registered Users Directory</h2>
+              <h2 className="text-lg font-bold text-gray-900">Registered User Accounts</h2>
               <button
                 onClick={loadUsers}
                 disabled={loading}
-                className="text-sm font-bold text-blue-600 hover:text-blue-800"
+                className="text-sm font-bold text-blue-600 hover:text-blue-800 transition"
               >
-                {loading ? 'Refreshing...' : 'Refresh'}
+                {loading ? 'Refreshing...' : '🔄 Refresh'}
               </button>
             </div>
-            
+
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-white border-b border-gray-200">
-                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Email Account</th>
-                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Role</th>
-                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                  <tr className="bg-white border-b border-gray-100">
+                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Role</th>
+                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Details</th>
+                    <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {users.length === 0 ? (
+                  {loading && users.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="px-6 py-8 text-center text-gray-500">
-                        No users found in database.
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
+                        <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+                      </td>
+                    </tr>
+                  ) : users.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500 text-sm">
+                        No accounts found in the database.
                       </td>
                     </tr>
                   ) : (
-                    users.map((user) => (
-                      <tr key={user.email} className="hover:bg-gray-50 transition">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{user.email}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
-                            ${user.role === 'admin' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 
-                              user.role === 'jury' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
-                              'bg-blue-100 text-blue-800 border border-blue-200'}`}
-                          >
-                            {user.role}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            onClick={() => handleDeleteUser(user.email)}
-                            className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition"
-                          >
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    users.map(user => {
+                      const badge = badgeFor(user.role);
+                      return (
+                        <tr key={user.email} className="hover:bg-gray-50 transition">
+                          <td className="px-6 py-4">
+                            <span className="text-sm font-semibold text-gray-900">
+                              {user.name || <span className="italic text-gray-400">—</span>}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-sm text-gray-600">{user.email}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2.5 py-1 inline-flex text-xs font-semibold rounded-full ${badge.className}`}>
+                              {badge.label}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-gray-500">
+                            {user.role === 'jury' && user.institution && (
+                              <span>{user.institution}</span>
+                            )}
+                            {user.role === 'coordinator' && user.department && (
+                              <span>Dept: {user.department}</span>
+                            )}
+                            {user.role === 'admin' && (
+                              <span className="text-purple-600 font-medium">System Admin</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => handleDeleteUser(user.email, badge.label)}
+                              className="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
