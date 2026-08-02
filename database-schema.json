@@ -17,45 +17,15 @@
       }
     },
     "roles": {
-      "description": "Stores authentication and role mapping for privileged users. Document ID is the user email (lowercase).",
+      "description": "Stores authentication and role mapping for privileged users. Document ID is the user email (lowercase). Teams do NOT get a role document (fallback logic is used).",
       "documentId": "email (lowercase)",
       "fields": {
         "role": { "type": "string", "encrypted": false, "description": "'admin', 'jury', 'student-coord', or 'faculty-coord'" },
-        "juryId": { "type": "string", "encrypted": false, "description": "Reference to jury collection" },
-        "coordId": { "type": "string", "encrypted": false, "description": "Reference to studentCoords collection" },
-        "facultyCoordId": { "type": "string", "encrypted": false, "description": "Reference to facultyCoords collection" },
-        "encryptedCreds": { "type": "string", "encrypted": true },
-        "scoresFrozen": { "type": "boolean", "encrypted": false },
-        "createdAt": { "type": "timestamp", "encrypted": false }
-      }
-    },
-    "jury": {
-      "description": "Jury member profile details.",
-      "documentId": "Auto-generated ID",
-      "fields": {
-        "juryName": { "type": "string", "encrypted": false },
-        "institution": { "type": "string", "encrypted": false },
-        "email": { "type": "string", "encrypted": false },
-        "createdAt": { "type": "timestamp", "encrypted": false }
-      }
-    },
-    "studentCoords": {
-      "description": "Student Coordinator profile details.",
-      "documentId": "Auto-generated ID",
-      "fields": {
-        "name": { "type": "string", "encrypted": false },
-        "department": { "type": "string", "encrypted": false },
-        "email": { "type": "string", "encrypted": false },
-        "createdAt": { "type": "timestamp", "encrypted": false }
-      }
-    },
-    "facultyCoords": {
-      "description": "Faculty Coordinator profile details.",
-      "documentId": "Auto-generated ID",
-      "fields": {
-        "name": { "type": "string", "encrypted": false },
-        "department": { "type": "string", "encrypted": false },
-        "email": { "type": "string", "encrypted": false },
+        "name": { "type": "string", "encrypted": false, "description": "User's full name (used by Jury, Coords)" },
+        "department": { "type": "string", "encrypted": false, "description": "Optional: User's department" },
+        "institution": { "type": "string", "encrypted": false, "description": "Optional: User's institution" },
+        "encryptedCreds": { "type": "string", "encrypted": true, "description": "Symmetrically encrypted original password for admin recovery" },
+        "scoresFrozen": { "type": "boolean", "encrypted": false, "description": "Used by juries to indicate their scores are finalized" },
         "createdAt": { "type": "timestamp", "encrypted": false }
       }
     },
@@ -64,7 +34,7 @@
       "documentId": "Auto-generated ID",
       "fields": {
         "teamId": { "type": "string", "encrypted": false },
-        "juryId": { "type": "string", "encrypted": false },
+        "juryId": { "type": "string", "encrypted": false, "description": "Stores the jury's email address" },
         "rubric": {
           "type": "object",
           "description": "{ innovation, technicalFeasibility, impact, presentation }"
@@ -82,7 +52,7 @@
       "documentId": "Auto-generated ID",
       "fields": {
         "teamId": { "type": "string", "encrypted": false },
-        "juryId": { "type": "string", "encrypted": false },
+        "juryId": { "type": "string", "encrypted": false, "description": "Stores the jury's email address" },
         "rubric": {
           "type": "object",
           "description": "{ innovation, technicalFeasibility, impact, presentation }"
@@ -100,7 +70,7 @@
       "documentId": "Auto-generated ID",
       "fields": {
         "teamId": { "type": "string", "encrypted": false },
-        "studentCoordId": { "type": "string", "encrypted": false },
+        "studentCoordId": { "type": "string", "encrypted": false, "description": "Stores the student coordinator's email address" },
         "gameName": { "type": "string", "encrypted": false },
         "xpPoints": { "type": "number", "encrypted": false },
         "createdAt": { "type": "timestamp", "encrypted": false }

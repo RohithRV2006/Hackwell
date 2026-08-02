@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { createSessionCookie } from '@/app/actions/session';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import Link from 'next/link';
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 
@@ -31,6 +31,13 @@ function LoginForm() {
   const { register, handleSubmit, watch, formState: { errors } } = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
   });
+
+  // If a user lands on the login page but Firebase Auth thinks they are logged in locally
+  // (e.g. they were logged out from the server but the client SDK didn't get cleared),
+  // we force clear the client auth state to prevent UI desyncs.
+  useEffect(() => {
+    signOut(auth).catch(() => {});
+  }, []);
 
   const onSubmit = async (data: LoginData) => {
     setError('');

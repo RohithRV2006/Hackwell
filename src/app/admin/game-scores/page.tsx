@@ -11,6 +11,7 @@ export default function AdminGameScoresPage() {
   const [scores, setScores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
 
   const loadData = async () => {
@@ -35,6 +36,7 @@ export default function AdminGameScoresPage() {
       loadData();
     } else {
       setLoading(false);
+      router.replace('/');
     }
   };
 
@@ -56,11 +58,7 @@ export default function AdminGameScoresPage() {
   }
 
   if (isAuthenticated === false) {
-    return (
-      <div className="p-12 text-center text-gray-500 font-bold">
-        Access Denied. You must be an administrator.
-      </div>
-    );
+    return null;
   }
 
   return (

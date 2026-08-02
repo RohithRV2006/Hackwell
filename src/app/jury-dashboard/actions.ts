@@ -95,10 +95,13 @@ export async function verifyJurySession() {
       return { success: false, error: 'Unauthorized: Jury role required' };
     }
 
-    // Check if jury scores are frozen in roles and get juryId
+    // Check if jury scores are frozen in roles
     let scoresFrozen = false;
     let frozenAt = null;
     let juryId = '';
+    let juryName = email.split('@')[0];
+    juryName = juryName.charAt(0).toUpperCase() + juryName.slice(1);
+    let institution = 'N/A';
 
     try {
       const db = getAdminDb();
@@ -107,39 +110,12 @@ export async function verifyJurySession() {
         const data = roleDoc.data();
         scoresFrozen = data?.scoresFrozen === true;
         frozenAt = data?.frozenAt ? (data.frozenAt.toDate ? data.frozenAt.toDate().toISOString() : data.frozenAt) : null;
-        juryId = data?.juryId || '';
+        juryId = data?.juryId || email; // use email as juryId if missing
+        juryName = data?.name || juryName;
+        institution = data?.institution || institution;
       }
     } catch (e) {
-      console.error('Error fetching role freeze status:', e);
-    }
-
-    // Try to resolve juryName from 'jury' collection if we didn't get it, or fallback
-    let juryName = email.split('@')[0];
-    juryName = juryName.charAt(0).toUpperCase() + juryName.slice(1);
-    let institution = 'N/A';
-
-    try {
-      const db = getAdminDb();
-      let jurySnap;
-      if (juryId) {
-        jurySnap = await db.collection('jury').doc(juryId).get();
-        if (jurySnap.exists) {
-          const data = jurySnap.data();
-          juryName = data?.juryName || juryName;
-          institution = data?.institution || institution;
-        }
-      } else {
-        jurySnap = await db.collection('jury').where('email', '==', email).limit(1).get();
-        if (!jurySnap.empty) {
-          const doc = jurySnap.docs[0];
-          juryId = doc.id; // Recover ID for legacy users
-          const data = doc.data();
-          juryName = data.juryName || juryName;
-          institution = data.institution || institution;
-        }
-      }
-    } catch (e) {
-      console.warn('Could not query jury collection for email. Using fallback name.', e);
+      console.error('Error fetching role details:', e);
     }
 
     return { 

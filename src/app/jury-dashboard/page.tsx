@@ -145,7 +145,7 @@ function JuryDashboardContent() {
     async function initSession() {
       const check = await verifyJurySession();
       if (!check.success || !check.email) {
-        window.location.replace('/login');
+        router.replace('/');
         return;
       }
       setSession({
@@ -196,7 +196,7 @@ function JuryDashboardContent() {
     try {
       await signOut(auth);
       await clearSessionCookie();
-      window.location.replace('/login');
+      router.replace('/');
     } catch (e) {
       console.error('Logout failed', e);
     }

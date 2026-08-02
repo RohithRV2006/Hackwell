@@ -66,7 +66,7 @@ export async function getAdminOverviewStats() {
     const [teamsSnap, rolesSnap, jurySnap, prelimsSnap, finaleSnap] = await Promise.all([
       db.collection('teams').count().get(),
       db.collection('roles').count().get(),
-      db.collection('jury').count().get(),
+      db.collection('roles').where('role', '==', 'jury').count().get(),
       db.collection('prelimsEvaluations').count().get(),
       db.collection('finaleEvaluations').count().get()
     ]);
@@ -355,10 +355,14 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
       });
     });
 
-    const jurySnap = await db.collection('jury').get();
+    const jurySnap = await db.collection('roles').where('role', '==', 'jury').get();
     const juryMap = new Map<string, string>();
     jurySnap.docs.forEach((doc) => {
-      juryMap.set(doc.id, doc.data().juryName || doc.id);
+      const data = doc.data();
+      // data.juryId is legacy ID, doc.id is email. We support mapping by either.
+      const name = data.name || doc.id;
+      juryMap.set(doc.id, name);
+      if (data.juryId) juryMap.set(data.juryId, name);
     });
 
     const scores: AdminScoreData[] = [];

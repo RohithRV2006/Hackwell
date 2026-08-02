@@ -10,6 +10,8 @@ export default function AdminTeamsPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  const router = useRouter();
+  
   // Search state
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -168,11 +170,7 @@ export default function AdminTeamsPage() {
   }
 
   if (isAuthenticated === false) {
-    return (
-      <div className="p-12 text-center text-gray-500 font-bold">
-        Access Denied. You must be an administrator.
-      </div>
-    );
+    return null;
   }
 
   return (
