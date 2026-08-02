@@ -3,15 +3,25 @@
 import { useState, useRef } from 'react';
 import { clearSessionCookie } from '@/app/actions/session';
 import { savePPTLink } from '@/app/actions/drive';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, MapPin, Download, FileText, Users, Info, Trophy, FileUp, ExternalLink } from 'lucide-react';
+import { changeTeamPassword } from '@/app/actions/forgot-password';
+import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, MapPin, Download, FileText, Users, Info, Trophy, FileUp, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 export default function TeamDashboardClient({ team }: { team: any }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [resetMessage, setResetMessage] = useState('');
+  
+  // Change Password Modal States
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   
   // PPT Submission State
   const [pptLink, setPptLink] = useState(team.pptLink || '');
@@ -40,12 +50,54 @@ export default function TeamDashboardClient({ team }: { team: any }) {
   const leadData = team.leadData || {};
   const membersData = team.membersData || [];
 
-  const handleResetPassword = async () => {
+  const pwdLength = newPassword.length >= 8;
+  const pwdUpper = /[A-Z]/.test(newPassword);
+  const pwdLower = /[a-z]/.test(newPassword);
+  const pwdNum = /[0-9]/.test(newPassword);
+  const pwdSpec = /[^A-Za-z0-9]/.test(newPassword);
+  const isNewPasswordValid = pwdLength && pwdUpper && pwdLower && pwdNum && pwdSpec;
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (!oldPassword) {
+      setPasswordError('Old password is required.');
+      return;
+    }
+    if (!newPassword) {
+      setPasswordError('New password is required.');
+      return;
+    }
+    if (!isNewPasswordValid) {
+      setPasswordError('New password does not meet complexity requirements.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.');
+      return;
+    }
+
+    setPasswordLoading(true);
     try {
-      await sendPasswordResetEmail(auth, team.leadEmail);
-      setResetMessage('Password reset email sent! Check your inbox.');
-    } catch (error: any) {
-      setResetMessage(error.message || 'Failed to send reset email.');
+      const res = await changeTeamPassword(team.leadEmail, oldPassword, newPassword);
+      if (res.success) {
+        setPasswordSuccess('Password updated successfully!');
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => {
+          setShowPasswordModal(false);
+          setPasswordSuccess('');
+        }, 2000);
+      } else {
+        setPasswordError(res.error || 'Failed to update password.');
+      }
+    } catch (err: any) {
+      setPasswordError(err.message || 'An error occurred.');
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -158,8 +210,8 @@ export default function TeamDashboardClient({ team }: { team: any }) {
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
           <button 
-            onClick={handleResetPassword}
-            title="Reset Password"
+            onClick={() => setShowPasswordModal(true)}
+            title="Change Password"
             className="flex items-center justify-center p-3 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl transition"
           >
             <KeyRound size={20} />
@@ -486,6 +538,111 @@ export default function TeamDashboardClient({ team }: { team: any }) {
           </div>
         )}
       </div>
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-bold text-gray-900 border-b pb-3 mb-4">Change Password</h2>
+            
+            {passwordError && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4 text-xs font-semibold">
+                {passwordError}
+              </div>
+            )}
+            
+            {passwordSuccess && (
+              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg relative mb-4 text-xs font-semibold">
+                {passwordSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-gray-700">Old Password *</label>
+                <div className="relative">
+                  <input 
+                    type={showOldPassword ? 'text' : 'password'} 
+                    value={oldPassword} 
+                    onChange={(e) => setOldPassword(e.target.value)} 
+                    className="w-full p-2 border border-gray-300 rounded-lg text-sm pr-10" 
+                    placeholder="Enter old password"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowOldPassword(!showOldPassword)} 
+                    className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700"
+                  >
+                    {showOldPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-gray-700">New Password *</label>
+                <div className="relative">
+                  <input 
+                    type={showNewPassword ? 'text' : 'password'} 
+                    value={newPassword} 
+                    onChange={(e) => setNewPassword(e.target.value)} 
+                    className="w-full p-2 border border-gray-300 rounded-lg text-sm pr-10" 
+                    placeholder="Enter new password"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowNewPassword(!showNewPassword)} 
+                    className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700"
+                  >
+                    {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                
+                {/* Password constraints indicator */}
+                <div className="mt-2 text-[10px] grid grid-cols-2 gap-1 bg-gray-50 p-2 rounded border border-gray-100">
+                  <span className={pwdLength ? "text-green-600 font-semibold" : "text-gray-400"}>✓ Min 8 chars</span>
+                  <span className={pwdUpper ? "text-green-600 font-semibold" : "text-gray-400"}>✓ 1 Uppercase</span>
+                  <span className={pwdLower ? "text-green-600 font-semibold" : "text-gray-400"}>✓ 1 Lowercase</span>
+                  <span className={pwdNum ? "text-green-600 font-semibold" : "text-gray-400"}>✓ 1 Number</span>
+                  <span className={pwdSpec ? "text-green-600 font-semibold" : "text-gray-400"}>✓ 1 Special Char</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-gray-700">Confirm New Password *</label>
+                <input 
+                  type="password" 
+                  value={confirmPassword} 
+                  onChange={(e) => setConfirmPassword(e.target.value)} 
+                  className="w-full p-2 border border-gray-300 rounded-lg text-sm" 
+                  placeholder="Confirm new password"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setOldPassword('');
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setPasswordError('');
+                  }} 
+                  className="px-4 py-2 text-sm font-semibold bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl transition"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={passwordLoading || !oldPassword || !newPassword || !isNewPasswordValid || newPassword !== confirmPassword}
+                  className="px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition disabled:opacity-50"
+                >
+                  {passwordLoading ? 'Updating...' : 'Update Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

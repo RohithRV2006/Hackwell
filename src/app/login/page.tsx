@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { createSessionCookie } from '@/app/actions/session';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -72,29 +72,6 @@ function LoginForm() {
     }
   };
 
-  const handleForgotPassword = async () => {
-    setError('');
-    setMsg('');
-    const emailVal = watch('email');
-    if (!emailVal || !emailVal.includes('@')) {
-      setError('Please enter a valid email address first to receive the reset link.');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const actionCodeSettings = {
-        url: window.location.origin + '/reset-password',
-      };
-      await sendPasswordResetEmail(auth, watch('email'), actionCodeSettings);
-      setMsg('Password reset email sent! Check your inbox (and spam folder).');
-    } catch (err: any) {
-      setError(err.message || 'Failed to send password reset email.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="w-full max-w-md bg-white shadow-xl rounded-2xl p-8 border border-gray-100 relative">
       <Link href="/" className="absolute top-4 left-4 text-gray-500 hover:text-gray-900 transition p-2 rounded-full hover:bg-gray-100">
@@ -150,13 +127,12 @@ function LoginForm() {
           <Link href="/register" className="text-sm text-blue-600 hover:underline">
             Don't have an account? Register
           </Link>
-          <button 
-            type="button" 
-            onClick={handleForgotPassword}
+          <Link 
+            href="/forgot-password"
             className="text-sm text-gray-500 hover:text-blue-600 hover:underline"
           >
             Forgot Password?
-          </button>
+          </Link>
         </div>
 
         <button 
