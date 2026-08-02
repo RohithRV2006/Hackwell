@@ -5,6 +5,9 @@ import { clearSessionCookie } from '@/app/actions/session';
 import { savePPTLink } from '@/app/actions/drive';
 import { changeTeamPassword } from '@/app/actions/forgot-password';
 import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, MapPin, Download, FileText, Users, Info, Trophy, FileUp, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, Download, FileText, Users, Info, Trophy, FileUp, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
@@ -25,6 +28,7 @@ export default function TeamDashboardClient({ team }: { team: any }) {
   
   // PPT Submission State
   const [pptLink, setPptLink] = useState(team.pptLink || '');
+  const [currentFileId, setCurrentFileId] = useState(team.pptDriveFileId || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pptMessage, setPptMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -128,7 +132,8 @@ export default function TeamDashboardClient({ team }: { team: any }) {
       const venueStr = team.venue ? team.venue.replace(/\s+/g, '') : 'NoVenue';
       const safeTeamName = (team.teamName || 'Unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
       const ext = file.name.split('.').pop();
-      const fileName = `${team.id}_${venueStr}_${safeTeamName}_${team.psId}.${ext}`;
+      const teamIdentifier = team.displayId || team.id;
+      const fileName = `${teamIdentifier}_${safeTeamName}_${team.psId}.${ext}`;
 
       // Convert file to base64 for direct upload to Google Script
       const reader = new FileReader();
@@ -150,7 +155,8 @@ export default function TeamDashboardClient({ team }: { team: any }) {
             body: JSON.stringify({
               fileName: fileName,
               mimeType: file.type,
-              base64Data: base64Data
+              base64Data: base64Data,
+              oldFileId: currentFileId
             }),
           });
 
@@ -168,6 +174,7 @@ export default function TeamDashboardClient({ team }: { team: any }) {
             if (saveRes.success) {
               setPptMessage('PPT submitted successfully!');
               setPptLink(res.url);
+              setCurrentFileId(res.fileId);
             } else {
               setPptMessage(saveRes.error || 'Failed to save PPT link.');
             }
@@ -498,9 +505,57 @@ export default function TeamDashboardClient({ team }: { team: any }) {
                       className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-xl transition"
                     >
                       <ExternalLink size={18} />
-                      View Presentation
+                      Open in Drive
                     </a>
                   </div>
+                  
+                  {/* --- VIEWER OPTION 1: Standard Google Drive Preview --- */}
+                  {/*
+                  <div className="w-full rounded-xl overflow-hidden border border-gray-200 mt-4">
+                    <iframe 
+                      src={pptLink.includes('/view') ? pptLink.replace(/\/view.*$/, '/preview') : pptLink} 
+                      className="w-full h-[500px] md:h-[600px]" 
+                      title="PPT Viewer"
+                      allowFullScreen
+                    ></iframe>
+                  </div>
+                  */}
+
+                  {/* --- VIEWER OPTION 2: Microsoft Office Viewer (Cleaner Slideshow, but sometimes blocked by Google) --- */}
+                  {/* 
+                  <div className="w-full rounded-xl overflow-hidden border border-gray-200 mt-4">
+                    <iframe 
+                      src={pptLink.match(/\/d\/([a-zA-Z0-9_-]+)/) ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(`https://drive.google.com/uc?export=download&id=${pptLink.match(/\/d\/([a-zA-Z0-9_-]+)/)![1]}`)}` : ''} 
+                      className="w-full h-[500px] md:h-[600px]" 
+                      title="PPT Viewer"
+                      allowFullScreen
+                    ></iframe>
+                  </div>
+                  */}
+
+                  {/* --- VIEWER OPTION 3: Google Docs Viewer (Minimal, but flaky with Drive links) --- */}
+                  {/* 
+                  <div className="w-full rounded-xl overflow-hidden border border-gray-200 mt-4">
+                    <iframe 
+                      src={pptLink.match(/\/d\/([a-zA-Z0-9_-]+)/) ? `https://docs.google.com/gview?url=${encodeURIComponent(`https://drive.google.com/uc?export=download&id=${pptLink.match(/\/d\/([a-zA-Z0-9_-]+)/)![1]}`)}&embedded=true` : ''} 
+                      className="w-full h-[500px] md:h-[600px]" 
+                      title="PPT Viewer"
+                      allowFullScreen
+                    ></iframe>
+                  </div>
+                  */}
+
+                  {/* --- VIEWER OPTION 4: Google Slides Embed (ONLY works if you use Drive API to convert the .pptx to Google Slides on upload) --- */}
+                  {/* 
+                  <div className="w-full rounded-xl overflow-hidden border border-gray-200 mt-4">
+                    <iframe 
+                      src={pptLink.match(/\/d\/([a-zA-Z0-9_-]+)/) ? `https://docs.google.com/presentation/d/${pptLink.match(/\/d\/([a-zA-Z0-9_-]+)/)![1]}/embed?start=false&loop=false&delayms=3000` : ''} 
+                      className="w-full h-[500px] md:h-[600px]" 
+                      title="PPT Viewer"
+                      allowFullScreen
+                    ></iframe>
+                  </div>
+                  */}
                   {!isDeadlinePassed && (
                     <p className="text-xs text-gray-500 text-left mt-2">
                       Uploading a new file will automatically overwrite this submission.
