@@ -44,7 +44,13 @@ export interface AdminTeamData {
   membersData: Member[];
   score?: number;
   judge?: string;
+  labNo?: string;
   feedback?: string;
+  pptLink?: string;
+  finaleQualified?: boolean;
+  isWinner?: boolean;
+  winnerRank?: number | null;
+  winnerTitle?: string | null;
   createdAt?: string;
 }
 
@@ -108,7 +114,13 @@ export async function getAllTeamsAdmin() {
         membersData: decryptedMembers,
         score: typeof data.score === 'number' ? data.score : 0,
         judge: data.judge || 'Unassigned',
+        labNo: data.labNo || 'Unassigned',
         feedback: data.feedback || '',
+        pptLink: data.pptLink || '',
+        finaleQualified: data.finaleQualified === true,
+        isWinner: data.isWinner === true,
+        winnerRank: data.winnerRank || null,
+        winnerTitle: data.winnerTitle || null,
         createdAt: data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : '',
       });
     }
@@ -120,16 +132,72 @@ export async function getAllTeamsAdmin() {
   }
 }
 
-export async function updateTeamAdmin(teamId: string, updatedFields: {
-  teamName?: string;
-  problemStatement?: string;
-  leadEmail?: string;
-  leadData?: Lead;
-  membersData?: Member[];
-  score?: number;
-  judge?: string;
-  feedback?: string;
-}) {
+export async function syncLabTeamCountsAdmin(dbInstance?: any) {
+  try {
+    const db = dbInstance || getAdminDb();
+    const [labsSnap, teamsSnap] = await Promise.all([
+      db.collection('labs').get(),
+      db.collection('teams').get(),
+    ]);
+
+    if (labsSnap.empty) return;
+
+    const countsMap = new Map<string, number>();
+    labsSnap.docs.forEach((doc: any) => {
+      countsMap.set(doc.id, 0);
+    });
+
+    teamsSnap.docs.forEach((doc: any) => {
+      const data = doc.data();
+      const labId = data.assignedLabId;
+      const labName = data.assignedLabName || data.labNo;
+
+      let matchedLabId = '';
+      if (labId && countsMap.has(labId)) {
+        matchedLabId = labId;
+      } else if (labName && labName !== 'Unassigned') {
+        const found = labsSnap.docs.find(
+          (d: any) =>
+            d.data().labName?.toLowerCase() === labName.toLowerCase() ||
+            d.data().labCode?.toLowerCase() === labName.toLowerCase()
+        );
+        if (found) matchedLabId = found.id;
+      }
+
+      if (matchedLabId && countsMap.has(matchedLabId)) {
+        countsMap.set(matchedLabId, (countsMap.get(matchedLabId) || 0) + 1);
+      }
+    });
+
+    const batch = db.batch();
+    labsSnap.docs.forEach((doc: any) => {
+      const realTimeCount = countsMap.get(doc.id) || 0;
+      batch.update(doc.ref, {
+        currentTeamCount: realTimeCount,
+        updatedAt: new Date(),
+      });
+    });
+
+    await batch.commit();
+  } catch (error) {
+    console.error('Error syncing lab team counts:', error);
+  }
+}
+
+export async function updateTeamAdmin(
+  teamId: string,
+  updatedFields: {
+    teamName?: string;
+    problemStatement?: string;
+    leadEmail?: string;
+    score?: number;
+    judge?: string;
+    labNo?: string;
+    feedback?: string;
+    leadData?: any;
+    membersData?: any[];
+  }
+) {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) {
     return { success: false, error: 'Unauthorized' };
@@ -144,13 +212,18 @@ export async function updateTeamAdmin(teamId: string, updatedFields: {
       return { success: false, error: 'Team not found' };
     }
 
+    const currentData = docSnap.data() || {};
     const payload: Record<string, any> = {};
 
-    if (updatedFields.teamName !== undefined) payload.teamName = updatedFields.teamName.trim();
+    if (updatedFields.teamName !== undefined) {
+      payload.teamName = updatedFields.teamName.trim();
+      payload.teamNameLower = updatedFields.teamName.trim().toLowerCase();
+    }
     if (updatedFields.problemStatement !== undefined) payload.problemStatement = updatedFields.problemStatement;
     if (updatedFields.leadEmail !== undefined) payload.leadEmail = updatedFields.leadEmail.trim().toLowerCase();
     if (updatedFields.score !== undefined) payload.score = Number(updatedFields.score);
     if (updatedFields.judge !== undefined) payload.judge = updatedFields.judge.trim();
+    if (updatedFields.labNo !== undefined) payload.labNo = updatedFields.labNo.trim();
     if (updatedFields.feedback !== undefined) payload.feedback = updatedFields.feedback.trim();
 
     if (updatedFields.leadData) {
@@ -161,7 +234,52 @@ export async function updateTeamAdmin(teamId: string, updatedFields: {
       payload.membersData = updatedFields.membersData;
     }
 
+    // Synchronize Jury and Lab references with labs collection
+    if (updatedFields.judge !== undefined || updatedFields.labNo !== undefined) {
+      const newJudge = updatedFields.judge !== undefined ? updatedFields.judge.trim() : currentData.judge || '';
+      const newLabNo = updatedFields.labNo !== undefined ? updatedFields.labNo.trim() : currentData.labNo || '';
+
+      const labsSnap = await db.collection('labs').get();
+      let matchedLab: any = null;
+
+      if (newJudge && newJudge !== 'Unassigned') {
+        matchedLab = labsSnap.docs.find(
+          (d) => d.data().assignedJuryName?.toLowerCase() === newJudge.toLowerCase()
+        );
+      }
+
+      if (!matchedLab && newLabNo && newLabNo !== 'Unassigned') {
+        matchedLab = labsSnap.docs.find(
+          (d) =>
+            d.data().labName?.toLowerCase() === newLabNo.toLowerCase() ||
+            d.data().labCode?.toLowerCase() === newLabNo.toLowerCase()
+        );
+      }
+
+      if (matchedLab) {
+        payload.assignedLabId = matchedLab.id;
+        payload.assignedLabName = matchedLab.data().labName || matchedLab.id;
+        payload.labNo = matchedLab.data().labName || matchedLab.id;
+        if (matchedLab.data().assignedJuryName && matchedLab.data().assignedJuryName !== 'Unassigned') {
+          payload.judge = matchedLab.data().assignedJuryName;
+        }
+      }
+    }
+
+    // Keep allBatchNumbers in sync if leadData or membersData updated
+    const finalLead = updatedFields.leadData || currentData.leadData;
+    const finalMembers = updatedFields.membersData || currentData.membersData || [];
+    if (finalLead || finalMembers.length > 0) {
+      const batchSet = new Set<string>();
+      if (finalLead?.batchNumber) batchSet.add(finalLead.batchNumber.trim());
+      finalMembers.forEach((m: Member) => {
+        if (m?.batchNumber) batchSet.add(m.batchNumber.trim());
+      });
+      payload.allBatchNumbers = Array.from(batchSet);
+    }
+
     await docRef.update(payload);
+    await syncLabTeamCountsAdmin(db);
     return { success: true };
   } catch (error: any) {
     console.error('Error updating team:', error);
@@ -178,6 +296,7 @@ export async function deleteTeamAdmin(teamId: string) {
   try {
     const db = getAdminDb();
     await db.collection('teams').doc(teamId).delete();
+    await syncLabTeamCountsAdmin(db);
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting team:', error);
@@ -185,190 +304,18 @@ export async function deleteTeamAdmin(teamId: string) {
   }
 }
 
-export async function seedDummyTeamsAdmin() {
-  const isAdmin = await verifyAdminSession();
-  if (!isAdmin) {
-    return { success: false, error: 'Unauthorized' };
-  }
 
-  const dummyTeams = [
-    {
-      teamName: 'CodeSpartans',
-      problemStatement: 'AI in Healthcare',
-      leadEmail: 'arun.v@saranathan.ac.in',
-      leadData: { name: 'Arun V', contactNumber: '9876543210', batchNumber: '2022-26', department: 'CSE', year: 'IV', section: 'A' },
-      membersData: [
-        { name: 'Kavya R', batchNumber: '2022-26', department: 'CSE', year: 'IV', section: 'A' },
-        { name: 'Dinesh M', batchNumber: '2022-26', department: 'CSE', year: 'IV', section: 'B' },
-        { name: 'Sowmya K', batchNumber: '2022-26', department: 'IT', year: 'IV', section: 'A' },
-      ],
-      score: 92,
-      judge: 'Dr. A. Kumar',
-      feedback: 'Outstanding AI model performance and well-structured UI.',
-    },
-    {
-      teamName: 'FinTech Nexus',
-      problemStatement: 'Fintech Solutions',
-      leadEmail: 'priya.s@saranathan.ac.in',
-      leadData: { name: 'Priya S', contactNumber: '9845123760', batchNumber: '2023-27', department: 'IT', year: 'III', section: 'B' },
-      membersData: [
-        { name: 'Rahul Dev', batchNumber: '2023-27', department: 'IT', year: 'III', section: 'B' },
-        { name: 'Ananya B', batchNumber: '2023-27', department: 'CSE', year: 'III', section: 'A' },
-        { name: 'Vikram T', batchNumber: '2023-27', department: 'ECE', year: 'III', section: 'A' },
-      ],
-      score: 88,
-      judge: 'Prof. R. Lakshmi',
-      feedback: 'Great blockchain integration for transaction security.',
-    },
-    {
-      teamName: 'SmartGrid Innovators',
-      problemStatement: 'Smart City',
-      leadEmail: 'karthik.m@saranathan.ac.in',
-      leadData: { name: 'Karthik M', contactNumber: '9712345680', batchNumber: '2022-26', department: 'ECE', year: 'IV', section: 'A' },
-      membersData: [
-        { name: 'Naveen Kumar', batchNumber: '2022-26', department: 'ECE', year: 'IV', section: 'A' },
-        { name: 'Divya Bharathi', batchNumber: '2022-26', department: 'EEE', year: 'IV', section: 'B' },
-        { name: 'Sanjay P', batchNumber: '2022-26', department: 'CSE', year: 'IV', section: 'B' },
-      ],
-      score: 95,
-      judge: 'Er. Vignesh S.',
-      feedback: 'Impressive IoT sensor network hardware model.',
-    },
-    {
-      teamName: 'EdVision Tech',
-      problemStatement: 'EdTech Innovations',
-      leadEmail: 'sneha.r@saranathan.ac.in',
-      leadData: { name: 'Sneha R', contactNumber: '9632587410', batchNumber: '2024-28', department: 'AI&DS', year: 'II', section: 'A' },
-      membersData: [
-        { name: 'Harish Chandra', batchNumber: '2024-28', department: 'AI&DS', year: 'II', section: 'A' },
-        { name: 'Meera N', batchNumber: '2024-28', department: 'CSE', year: 'II', section: 'C' },
-        { name: 'Ashwin G', batchNumber: '2024-28', department: 'IT', year: 'II', section: 'A' },
-      ],
-      score: 81,
-      judge: 'Dr. A. Kumar',
-      feedback: 'Interactive gamified learning platform for school students.',
-    },
-    {
-      teamName: 'NeuralNet Tribe',
-      problemStatement: 'AI in Healthcare',
-      leadEmail: 'rohan.k@saranathan.ac.in',
-      leadData: { name: 'Rohan K', contactNumber: '9514782360', batchNumber: '2022-26', department: 'AI&DS', year: 'IV', section: 'A' },
-      membersData: [
-        { name: 'Preeti Sharma', batchNumber: '2022-26', department: 'AI&DS', year: 'IV', section: 'A' },
-        { name: 'Deepak Raj', batchNumber: '2022-26', department: 'CSE', year: 'IV', section: 'A' },
-        { name: 'Swetha V', batchNumber: '2022-26', department: 'IT', year: 'IV', section: 'B' },
-      ],
-      score: 97,
-      judge: 'Dr. N. Sundaram',
-      feedback: 'Top-tier diagnostic accuracy using CNNs for MRI scans.',
-    },
-    {
-      teamName: 'CyberShields',
-      problemStatement: 'Fintech Solutions',
-      leadEmail: 'nilesh.b@saranathan.ac.in',
-      leadData: { name: 'Nilesh B', contactNumber: '9487123650', batchNumber: '2023-27', department: 'CSE', year: 'III', section: 'C' },
-      membersData: [
-        { name: 'Varun Tech', batchNumber: '2023-27', department: 'CSE', year: 'III', section: 'C' },
-        { name: 'Pooja Shri', batchNumber: '2023-27', department: 'IT', year: 'III', section: 'B' },
-        { name: 'Ganesh M', batchNumber: '2023-27', department: 'ECE', year: 'III', section: 'B' },
-      ],
-      score: 84,
-      judge: 'Prof. R. Lakshmi',
-      feedback: 'Robust zero-trust authentication protocol implementation.',
-    },
-    {
-      teamName: 'EcoFleet Sol',
-      problemStatement: 'Smart City',
-      leadEmail: 'nivedha.g@saranathan.ac.in',
-      leadData: { name: 'Nivedha G', contactNumber: '9362147850', batchNumber: '2022-26', department: 'MECH', year: 'IV', section: 'A' },
-      membersData: [
-        { name: 'Manoj Kumar', batchNumber: '2022-26', department: 'MECH', year: 'IV', section: 'A' },
-        { name: 'Siddharth R', batchNumber: '2022-26', department: 'EEE', year: 'IV', section: 'A' },
-        { name: 'Bhavana P', batchNumber: '2022-26', department: 'CSE', year: 'IV', section: 'B' },
-      ],
-      score: 79,
-      judge: 'Er. Vignesh S.',
-      feedback: 'EV fleet management algorithm with real-time routing.',
-    },
-    {
-      teamName: 'BioPulse Tech',
-      problemStatement: 'AI in Healthcare',
-      leadEmail: 'gokul.s@saranathan.ac.in',
-      leadData: { name: 'Gokul S', contactNumber: '9254178360', batchNumber: '2023-27', department: 'ECE', year: 'III', section: 'A' },
-      membersData: [
-        { name: 'Keerthana M', batchNumber: '2023-27', department: 'ECE', year: 'III', section: 'A' },
-        { name: 'Aakash V', batchNumber: '2023-27', department: 'AI&DS', year: 'III', section: 'A' },
-        { name: 'Lekha S', batchNumber: '2023-27', department: 'CSE', year: 'III', section: 'B' },
-      ],
-      score: 90,
-      judge: 'Dr. N. Sundaram',
-      feedback: 'Wearable patient vitals monitoring device prototype.',
-    },
-    {
-      teamName: 'Logic Crafters',
-      problemStatement: 'EdTech Innovations',
-      leadEmail: 'akash.r@saranathan.ac.in',
-      leadData: { name: 'Akash R', contactNumber: '9147258360', batchNumber: '2024-28', department: 'IT', year: 'II', section: 'B' },
-      membersData: [
-        { name: 'Janani B', batchNumber: '2024-28', department: 'IT', year: 'II', section: 'B' },
-        { name: 'Tarun K', batchNumber: '2024-28', department: 'CSE', year: 'II', section: 'A' },
-        { name: 'Nisha P', batchNumber: '2024-28', department: 'AI&DS', year: 'II', section: 'A' },
-      ],
-      score: 86,
-      judge: 'Dr. A. Kumar',
-      feedback: 'AI-powered personalized quiz engine and progress tracker.',
-    },
-    {
-      teamName: 'Urban Pulse',
-      problemStatement: 'Smart City',
-      leadEmail: 'surya.n@saranathan.ac.in',
-      leadData: { name: 'Surya N', contactNumber: '9036985210', batchNumber: '2023-27', department: 'EEE', year: 'III', section: 'A' },
-      membersData: [
-        { name: 'Shalini V', batchNumber: '2023-27', department: 'EEE', year: 'III', section: 'A' },
-        { name: 'Raghav M', batchNumber: '2023-27', department: 'CSE', year: 'III', section: 'C' },
-        { name: 'Abinaya R', batchNumber: '2023-27', department: 'IT', year: 'III', section: 'A' },
-      ],
-      score: 89,
-      judge: 'Er. Vignesh S.',
-      feedback: 'Smart traffic signal optimization based on real-time cameras.',
-    },
-  ];
 
-  try {
-    const db = getAdminDb();
-
-    for (const team of dummyTeams) {
-      const sanitizedId = team.teamName.trim().toLowerCase();
-      const docRef = db.collection('teams').doc(sanitizedId);
-
-      const encryptedLeadData = team.leadData;
-      const encryptedMembersData = team.membersData;
-
-      await docRef.set({
-        teamName: team.teamName,
-        problemStatement: team.problemStatement,
-        leadEmail: team.leadEmail.toLowerCase(),
-        leadData: encryptedLeadData,
-        membersData: encryptedMembersData,
-        score: team.score,
-        judge: team.judge,
-        feedback: team.feedback,
-        createdAt: new Date(),
-      });
-    }
-
-    return { success: true, count: dummyTeams.length };
-  } catch (error: any) {
-    console.error('Error seeding dummy teams:', error);
-    return { success: false, error: error.message || 'Failed to seed dummy teams' };
-  }
-}
 
 export interface Rubric {
-  innovation: number;
-  technicalFeasibility: number;
-  impact: number;
-  presentation: number;
+  problemStatement?: number;
+  presentation?: number;
+  communication?: number;
+  solution?: number;
+  idea?: number;
+  innovation?: number;
+  technicalFeasibility?: number;
+  impact?: number;
 }
 
 export interface AdminScoreData {
@@ -424,10 +371,11 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
       const data = doc.data();
       
       const rubricObj: Rubric = data.rubric || {
-        innovation: 0,
-        technicalFeasibility: 0,
-        impact: 0,
+        problemStatement: 0,
         presentation: 0,
+        communication: 0,
+        solution: 0,
+        idea: 0,
       };
       
       const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : 0;
@@ -671,3 +619,883 @@ export async function publishPrelimsResults() {
     return { success: false, error: error.message || 'Failed to publish results' };
   }
 }
+
+export type PhaseState = 'not-set' | 'active' | 'ended';
+
+export interface EventTimelinesData {
+  timeline1: { name: string; startDate: string; endDate: string; enabled: boolean; state?: PhaseState };
+  timeline2: { name: string; startDate: string; endDate: string; enabled: boolean; state?: PhaseState; pptFilterApplied?: boolean };
+  timeline3: { name: string; startDate: string; endDate: string; enabled: boolean; topTeamsToFinal?: number; state?: PhaseState; finalistsPromoted?: boolean };
+  timeline4: { name: string; startDate: string; endDate: string; enabled: boolean; winnerCount?: number; state?: PhaseState };
+}
+
+export async function getEventTimelinesAdmin() {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const db = getAdminDb();
+    const docRef = db.collection('metadata').doc('eventTimelines');
+    const docSnap = await docRef.get();
+
+    const defaultData: EventTimelinesData = {
+      timeline1: { name: 'Registration Phase', startDate: '', endDate: '', enabled: true, state: 'not-set' },
+      timeline2: { name: 'PPT Submission Phase', startDate: '', endDate: '', enabled: true, state: 'not-set', pptFilterApplied: false },
+      timeline3: { name: 'Prelims Round', startDate: '', endDate: '', enabled: true, topTeamsToFinal: 10, state: 'not-set', finalistsPromoted: false },
+      timeline4: { name: 'Final Round', startDate: '', endDate: '', enabled: true, winnerCount: 3, state: 'not-set' },
+    };
+
+    if (!docSnap.exists) {
+      return { success: true, timelines: defaultData };
+    }
+
+    const data = docSnap.data() || {};
+    return {
+      success: true,
+      timelines: {
+        timeline1: { ...defaultData.timeline1, ...(data.timeline1 || {}) },
+        timeline2: { ...defaultData.timeline2, ...(data.timeline2 || {}) },
+        timeline3: { ...defaultData.timeline3, ...(data.timeline3 || {}) },
+        timeline4: { ...defaultData.timeline4, ...(data.timeline4 || {}) },
+      },
+    };
+  } catch (error: any) {
+    console.error('Error fetching event timelines:', error);
+    return { success: false, error: error.message || 'Failed to fetch event timelines' };
+  }
+}
+
+export async function updateEventTimelinesAdmin(timelines: EventTimelinesData) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const db = getAdminDb();
+    const docRef = db.collection('metadata').doc('eventTimelines');
+    await docRef.set(timelines, { merge: true });
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error updating event timelines:', error);
+    return { success: false, error: error.message || 'Failed to update event timelines' };
+  }
+}
+
+export async function getEventManagementDashboardDataAdmin() {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const [resTime, resTeams, resPrelims, resFinale, resLabs, resJuries] = await Promise.all([
+      getEventTimelinesAdmin(),
+      getAllTeamsAdmin(),
+      getAllEvaluationsAdmin('prelimsEvaluations'),
+      getAllEvaluationsAdmin('finaleEvaluations'),
+      getLabsAdmin(),
+      getJuriesAdmin(),
+    ]);
+
+    return {
+      success: true,
+      timelines: resTime.timelines,
+      teams: resTeams.teams || [],
+      prelimsScores: resPrelims.scores || [],
+      finaleScores: resFinale.scores || [],
+      labs: resLabs.labs || [],
+      juries: resJuries.juries || [],
+    };
+  } catch (error: any) {
+    console.error('Error fetching dashboard data:', error);
+    return { success: false, error: error.message || 'Failed to load dashboard' };
+  }
+}
+
+export async function setTimelinePhaseAdmin(
+  timeline: '1' | '2' | '3' | '4',
+  startDate: string,
+  endDate: string,
+  extraFields?: Record<string, any>
+): Promise<{ success: boolean; error?: string }> {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) return { success: false, error: 'Unauthorized' };
+
+  try {
+    const db = getAdminDb();
+    const docRef = db.collection('metadata').doc('eventTimelines');
+    await docRef.set(
+      {
+        [`timeline${timeline}`]: {
+          startDate,
+          endDate,
+          state: 'active',
+          enabled: true,
+          ...(extraFields || {}),
+        },
+      },
+      { merge: true }
+    );
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error setting timeline phase:', error);
+    return { success: false, error: error.message || 'Failed to set timeline phase' };
+  }
+}
+
+export async function updateTimelinePhaseAdmin(
+  timeline: '1' | '2' | '3' | '4',
+  updates: Record<string, any>
+): Promise<{ success: boolean; error?: string }> {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) return { success: false, error: 'Unauthorized' };
+
+  try {
+    const db = getAdminDb();
+    const docRef = db.collection('metadata').doc('eventTimelines');
+    await docRef.set(
+      { [`timeline${timeline}`]: updates },
+      { merge: true }
+    );
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error updating timeline phase:', error);
+    return { success: false, error: error.message || 'Failed to update timeline phase' };
+  }
+}
+
+export async function resetTimelinePhaseAdmin(
+  timeline: '1' | '2' | '3' | '4'
+): Promise<{ success: boolean; error?: string }> {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) return { success: false, error: 'Unauthorized' };
+
+  try {
+    const db = getAdminDb();
+    const docRef = db.collection('metadata').doc('eventTimelines');
+    const resetData: Record<string, any> = {
+      startDate: '',
+      endDate: '',
+      state: 'not-set',
+      enabled: false,
+    };
+    if (timeline === '2') resetData.pptFilterApplied = false;
+    if (timeline === '3') resetData.finalistsPromoted = false;
+
+    await docRef.set(
+      { [`timeline${timeline}`]: resetData },
+      { merge: true }
+    );
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error resetting timeline phase:', error);
+    return { success: false, error: error.message || 'Failed to reset timeline phase' };
+  }
+}
+
+export async function applyPptFilterAdmin(): Promise<{ success: boolean; passed?: number; failed?: number; error?: string }> {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) return { success: false, error: 'Unauthorized' };
+
+  try {
+    const db = getAdminDb();
+    const teamsSnap = await db.collection('teams').get();
+
+    const batch = db.batch();
+    let passed = 0;
+    let failed = 0;
+
+    teamsSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      const hasPpt = data.pptLink && String(data.pptLink).trim().length > 0;
+      batch.update(doc.ref, {
+        pptQualified: hasPpt ? true : false,
+        pptStatus: hasPpt ? 'submitted' : 'failed',
+      });
+      if (hasPpt) passed++;
+      else failed++;
+    });
+
+    await batch.commit();
+
+    // Mark filter applied in metadata
+    await db.collection('metadata').doc('eventTimelines').set(
+      { timeline2: { pptFilterApplied: true } },
+      { merge: true }
+    );
+
+    return { success: true, passed, failed };
+  } catch (error: any) {
+    console.error('Error applying PPT filter:', error);
+    return { success: false, error: error.message || 'Failed to apply PPT filter' };
+  }
+}
+
+export interface JuryStat {
+  juryId: string;
+  juryName: string;
+  institution?: string;
+  assignedLab?: string;
+  prelimsEvaluatedCount: number;
+  finaleEvaluatedCount: number;
+}
+
+export interface TimelineLiveStats {
+  totalTeams: number;
+  totalStudents: number;
+  pptSubmittedCount: number;
+  prelimsEvaluatedCount: number;
+  finaleEvaluatedCount: number;
+  finalistCount: number;
+  juryStats: JuryStat[];
+}
+
+export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats?: TimelineLiveStats; error?: string }> {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const db = getAdminDb();
+    const [teamsSnap, prelimsSnap, finaleSnap, jurySnap, labsSnap] = await Promise.all([
+      db.collection('teams').get(),
+      db.collection('prelimsEvaluations').get(),
+      db.collection('finaleEvaluations').get(),
+      db.collection('jury').get(),
+      db.collection('labs').get(),
+    ]);
+
+    let totalTeams = teamsSnap.size;
+    let totalStudents = 0;
+    let pptSubmittedCount = 0;
+    let finalistCount = 0;
+
+    teamsSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      // Count students (lead + members)
+      let count = 0;
+      if (data.leadData || data.leadEmail) count += 1;
+      if (Array.isArray(data.membersData)) count += data.membersData.length;
+      if (count === 0) count = 1; // Fallback
+      totalStudents += count;
+
+      if (data.pptLink && String(data.pptLink).trim().length > 0) {
+        pptSubmittedCount += 1;
+      }
+      if (data.finaleQualified === true) {
+        finalistCount += 1;
+      }
+    });
+
+    // Map labs to jury
+    const labJuryMap = new Map<string, string>();
+    labsSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      if (data.assignedJuryName) {
+        labJuryMap.set(data.assignedJuryName, data.labName || '');
+      }
+    });
+
+    // Count evals per jury name / ID
+    const prelimsCountByJury: Record<string, number> = {};
+    prelimsSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      const juryKey = data.judgeName || data.judgeId || data.judge || 'Unassigned';
+      prelimsCountByJury[juryKey] = (prelimsCountByJury[juryKey] || 0) + 1;
+    });
+
+    const finaleCountByJury: Record<string, number> = {};
+    finaleSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      const juryKey = data.judgeName || data.judgeId || data.judge || 'Unassigned';
+      finaleCountByJury[juryKey] = (finaleCountByJury[juryKey] || 0) + 1;
+    });
+
+    const juryStats: JuryStat[] = [];
+    jurySnap.docs.forEach((doc) => {
+      const data = doc.data();
+      const juryName = data.juryName || doc.id;
+      juryStats.push({
+        juryId: doc.id,
+        juryName: juryName,
+        institution: data.institution || '',
+        assignedLab: labJuryMap.get(juryName) || 'Unassigned',
+        prelimsEvaluatedCount: prelimsCountByJury[juryName] || prelimsCountByJury[doc.id] || 0,
+        finaleEvaluatedCount: finaleCountByJury[juryName] || finaleCountByJury[doc.id] || 0,
+      });
+    });
+
+    return {
+      success: true,
+      stats: {
+        totalTeams,
+        totalStudents,
+        pptSubmittedCount,
+        prelimsEvaluatedCount: prelimsSnap.size,
+        finaleEvaluatedCount: finaleSnap.size,
+        finalistCount,
+        juryStats,
+      },
+    };
+  } catch (error: any) {
+    console.error('Error fetching timeline live stats:', error);
+    return { success: false, error: error.message || 'Failed to fetch live stats' };
+  }
+}
+
+export async function setFinalWinnersAdmin(winners: { teamId: string; rank: number; title: string }[]) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const db = getAdminDb();
+    const teamsSnap = await db.collection('teams').get();
+
+    const winnerMap = new Map<string, { rank: number; title: string }>();
+    winners.forEach((w) => winnerMap.set(w.teamId, { rank: w.rank, title: w.title }));
+
+    const batch = db.batch();
+    teamsSnap.docs.forEach((doc) => {
+      const wInfo = winnerMap.get(doc.id);
+      if (wInfo) {
+        batch.update(doc.ref, {
+          isWinner: true,
+          winnerRank: wInfo.rank,
+          winnerTitle: wInfo.title,
+        });
+      } else {
+        batch.update(doc.ref, {
+          isWinner: false,
+          winnerRank: null,
+          winnerTitle: null,
+        });
+      }
+    });
+
+    await batch.commit();
+
+    // Also update metadata
+    await db.collection('metadata').doc('eventWinners').set(
+      {
+        winners,
+        updatedAt: new Date(),
+      },
+      { merge: true }
+    );
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error setting final winners:', error);
+    return { success: false, error: error.message || 'Failed to set winners' };
+  }
+}
+
+export async function toggleTeamFinaleQualifiedAdmin(teamId: string, qualified: boolean) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const db = getAdminDb();
+    await db.collection('teams').doc(teamId).update({
+      finaleQualified: qualified,
+      prelimsStatus: qualified ? 'selected' : 'rejected',
+    });
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error toggling team qualification:', error);
+    return { success: false, error: error.message || 'Failed to toggle qualification' };
+  }
+}
+
+export async function autoAllocateTeamsAdmin(labs: string[], juries: string[]) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    if (labs.length === 0 || juries.length === 0) {
+      return { success: false, error: 'Please provide at least one Lab and one Jury.' };
+    }
+
+    const db = getAdminDb();
+    const snapshot = await db.collection('teams').get();
+
+    if (snapshot.empty) {
+      return { success: false, error: 'No teams registered yet.' };
+    }
+
+    const batch = db.batch();
+    const docs = snapshot.docs;
+
+    docs.forEach((doc, idx) => {
+      const assignedLab = labs[idx % labs.length];
+      const assignedJury = juries[idx % juries.length];
+
+      batch.update(doc.ref, {
+        labNo: assignedLab,
+        judge: assignedJury,
+      });
+    });
+
+    await batch.commit();
+    return { success: true, count: docs.length };
+  } catch (error: any) {
+    console.error('Error auto allocating teams:', error);
+    return { success: false, error: error.message || 'Failed to allocate teams' };
+  }
+}
+
+export async function promoteTopTeamsToFinaleAdmin(topCount: number) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    const db = getAdminDb();
+    const [evalsSnap, teamsSnap] = await Promise.all([
+      db.collection('prelimsEvaluations').get(),
+      db.collection('teams').get(),
+    ]);
+
+    const teamScores: Record<string, number> = {};
+    evalsSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      if (data.teamId) {
+        // Keep highest or latest total score for team
+        teamScores[data.teamId] = Math.max(teamScores[data.teamId] || 0, data.totalScore || 0);
+      }
+    });
+
+    const teamsWithScore: { id: string; score: number }[] = [];
+    teamsSnap.docs.forEach((doc) => {
+      const score = teamScores[doc.id] || 0;
+      teamsWithScore.push({ id: doc.id, score });
+    });
+
+    // Sort descending by score
+    teamsWithScore.sort((a, b) => b.score - a.score);
+
+    const qualifiedIds = new Set(teamsWithScore.slice(0, topCount).map((t) => t.id));
+
+    const batch = db.batch();
+    teamsSnap.docs.forEach((doc) => {
+      const isQualified = qualifiedIds.has(doc.id);
+      batch.update(doc.ref, {
+        finaleQualified: isQualified,
+        prelimsStatus: isQualified ? 'selected' : 'rejected',
+      });
+    });
+
+    await batch.commit();
+    return { success: true, promotedCount: qualifiedIds.size };
+  } catch (error: any) {
+    console.error('Error promoting teams to finale:', error);
+    return { success: false, error: error.message || 'Failed to promote teams' };
+  }
+}
+
+export interface LabData {
+  labId: string;
+  labName: string;
+  labCode?: string;
+  capacity: number;
+  assignedJuryId?: string;
+  assignedJuryName: string;
+  currentTeamCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function getLabsAdmin(): Promise<{ success: boolean; labs?: LabData[]; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    const db = getAdminDb();
+    const snapshot = await db.collection('labs').get();
+
+    const labs: LabData[] = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        labId: doc.id,
+        labName: data.labName || doc.id,
+        labCode: data.labCode || '',
+        capacity: typeof data.capacity === 'number' ? data.capacity : 25,
+        assignedJuryId: data.assignedJuryId || '',
+        assignedJuryName: data.assignedJuryName || 'Unassigned',
+        currentTeamCount: typeof data.currentTeamCount === 'number' ? data.currentTeamCount : 0,
+        createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toISOString() : data.createdAt) : '',
+        updatedAt: data.updatedAt ? (data.updatedAt.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt) : '',
+      };
+    });
+
+    labs.sort((a, b) => a.labName.localeCompare(b.labName));
+    return { success: true, labs };
+  } catch (error: any) {
+    console.error('Error fetching labs:', error);
+    return { success: false, error: error.message || 'Failed to fetch labs' };
+  }
+}
+
+export async function createLabAdmin(
+  labName: string,
+  labCode: string,
+  capacity?: number,
+  assignedJuryName?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    if (!labName?.trim()) {
+      return { success: false, error: 'Lab Name is required.' };
+    }
+
+    const db = getAdminDb();
+    const now = new Date();
+
+    const labRef = db.collection('labs').doc();
+    await labRef.set({
+      labId: labRef.id,
+      labName: labName.trim(),
+      labCode: labCode ? labCode.trim() : '',
+      capacity: capacity || 0,
+      assignedJuryId: '',
+      assignedJuryName: assignedJuryName?.trim() || 'Unassigned',
+      currentTeamCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await syncLabTeamCountsAdmin(db);
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error creating lab:', error);
+    return { success: false, error: error.message || 'Failed to create lab' };
+  }
+}
+
+export async function updateLabAdmin(
+  labId: string,
+  labName: string,
+  labCode: string,
+  capacity?: number,
+  assignedJuryName?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    if (!labName?.trim()) {
+      return { success: false, error: 'Lab Name is required.' };
+    }
+
+    const db = getAdminDb();
+    const docRef = db.collection('labs').doc(labId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return { success: false, error: 'Lab not found' };
+    }
+
+    const oldLabName = docSnap.data()?.labName;
+    const cleanJury = assignedJuryName?.trim() || 'Unassigned';
+
+    const payload: Record<string, any> = {
+      labName: labName.trim(),
+      labCode: labCode ? labCode.trim() : '',
+      updatedAt: new Date(),
+    };
+
+    if (capacity !== undefined) {
+      payload.capacity = capacity;
+    }
+
+    if (assignedJuryName !== undefined) {
+      payload.assignedJuryName = cleanJury;
+    }
+
+    await docRef.update(payload);
+
+    // Sync teams assigned to this lab with updated Lab Name and Jury Name
+    const teamsSnap = await db.collection('teams').get();
+    const batch = db.batch();
+    let count = 0;
+
+    teamsSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      if (
+        data.assignedLabId === labId ||
+        (oldLabName && data.assignedLabName === oldLabName) ||
+        (oldLabName && data.labNo === oldLabName)
+      ) {
+        batch.update(doc.ref, {
+          assignedLabId: labId,
+          assignedLabName: labName.trim(),
+          labNo: labName.trim(),
+          judge: cleanJury !== 'Unassigned' ? cleanJury : data.judge || 'Unassigned',
+        });
+        count++;
+      }
+    });
+
+    if (count > 0) {
+      await batch.commit();
+    }
+
+    await syncLabTeamCountsAdmin(db);
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error updating lab:', error);
+    return { success: false, error: error.message || 'Failed to update lab' };
+  }
+}
+
+export async function deleteLabAdmin(labId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    const db = getAdminDb();
+    const docRef = db.collection('labs').doc(labId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return { success: false, error: 'Lab not found' };
+    }
+
+    const oldLabName = docSnap.data()?.labName;
+
+    // Unassign teams linked to this lab
+    const teamsSnap = await db.collection('teams').get();
+    const batch = db.batch();
+    let count = 0;
+
+    teamsSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      if (
+        data.assignedLabId === labId ||
+        (oldLabName && data.assignedLabName === oldLabName) ||
+        (oldLabName && data.labNo === oldLabName)
+      ) {
+        batch.update(doc.ref, {
+          assignedLabId: FieldValue.delete(),
+          assignedLabName: FieldValue.delete(),
+          labNo: 'Unassigned',
+          judge: 'Unassigned',
+        });
+        count++;
+      }
+    });
+
+    if (count > 0) {
+      await batch.commit();
+    }
+
+    await docRef.delete();
+    await syncLabTeamCountsAdmin(db);
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting lab:', error);
+    return { success: false, error: error.message || 'Failed to delete lab' };
+  }
+}
+
+export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; assignedCount?: number; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    const db = getAdminDb();
+    const [labsSnap, teamsSnap] = await Promise.all([
+      db.collection('labs').get(),
+      db.collection('teams').get(),
+    ]);
+
+    if (labsSnap.empty) {
+      return { success: false, error: 'No Labs configured. Please create at least one Lab below first.' };
+    }
+
+    const labs: (LabData & { ref: any })[] = labsSnap.docs.map((doc) => ({
+      labId: doc.id,
+      labName: doc.data().labName || doc.id,
+      capacity: typeof doc.data().capacity === 'number' ? doc.data().capacity : 0,
+      assignedJuryName: doc.data().assignedJuryName || 'Unassigned',
+      currentTeamCount: typeof doc.data().currentTeamCount === 'number' ? doc.data().currentTeamCount : 0,
+      ref: doc.ref,
+    }));
+
+    labs.sort((a, b) => a.labName.localeCompare(b.labName));
+    const allTeams = teamsSnap.docs.map((doc) => ({ id: doc.id, ref: doc.ref, ...doc.data() }));
+
+    if (allTeams.length === 0) {
+      return { success: false, error: 'No teams registered yet.' };
+    }
+
+    const batch = db.batch();
+    const teamCounts: Record<string, number> = {};
+    labs.forEach((l) => { teamCounts[l.labId] = 0; });
+
+    allTeams.forEach((team, idx) => {
+      const assignedLab = labs[idx % labs.length];
+      teamCounts[assignedLab.labId] = (teamCounts[assignedLab.labId] || 0) + 1;
+
+      batch.update(team.ref, {
+        assignedLabId: assignedLab.labId,
+        assignedLabName: assignedLab.labName,
+        labNo: assignedLab.labName,
+        judge: assignedLab.assignedJuryName !== 'Unassigned' ? assignedLab.assignedJuryName : (team as any).judge || 'Unassigned',
+      });
+    });
+
+    labs.forEach((lab) => {
+      batch.update(lab.ref, {
+        currentTeamCount: teamCounts[lab.labId] || 0,
+        updatedAt: new Date(),
+      });
+    });
+
+    await batch.commit();
+    return { success: true, assignedCount: allTeams.length };
+  } catch (error: any) {
+    console.error('Error auto assigning teams:', error);
+    return { success: false, error: error.message || 'Failed to auto assign teams' };
+  }
+}
+
+export interface JuryOption {
+  id: string;
+  name: string;
+  email: string;
+  institution?: string;
+}
+
+export async function getJuriesAdmin(): Promise<{ success: boolean; juries?: JuryOption[]; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    const db = getAdminDb();
+    const snapshot = await db.collection('jury').get();
+
+    const juries: JuryOption[] = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        name: data.juryName || data.name || doc.id,
+        email: data.email || '',
+        institution: data.institution || '',
+      };
+    });
+
+    juries.sort((a, b) => a.name.localeCompare(b.name));
+    return { success: true, juries };
+  } catch (error: any) {
+    console.error('Error fetching juries:', error);
+    return { success: false, error: error.message || 'Failed to fetch juries' };
+  }
+}
+
+export async function seedDummyTeamsAdmin(count: number = 100): Promise<{ success: boolean; seededCount?: number; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    const db = getAdminDb();
+    const batchSize = 400;
+    let batch = db.batch();
+    let opCount = 0;
+
+    const depts = ['CSE', 'IT', 'ECE', 'EEE', 'MECH', 'AIDS', 'AIML'];
+    const problemStatements = [
+      'AI-Powered Smart Health Monitoring System',
+      'Blockchain-Based Secure Voting System',
+      'Autonomous Traffic Signal Management Using Computer Vision',
+      'IoT-Based Smart Agriculture and Soil Quality Analyzer',
+      'Cybersecurity Threat Detection Using Machine Learning',
+      'Automated Resume Parser and Job Matching Platform',
+      'Smart Waste Management System for Cities',
+      'AI Personal Finance and Expense Tracker',
+      'E-Learning Analytics and Dropout Prediction',
+      'Disaster Management & Emergency Response Network',
+    ];
+
+    const now = new Date();
+
+    for (let i = 1; i <= count; i++) {
+      const teamId = `dummy_team_${String(i).padStart(3, '0')}`;
+      const docRef = db.collection('teams').doc(teamId);
+
+      const dept = depts[i % depts.length];
+      const ps = problemStatements[i % problemStatements.length];
+
+      const teamData = {
+        teamName: `Dummy Team ${String(i).padStart(3, '0')}`,
+        displayId: `TEAM-${1000 + i}`,
+        problemStatement: ps,
+        leadEmail: `lead_team${i}@example.com`,
+        leadData: {
+          name: `Lead Student ${i}`,
+          contactNumber: `98765${String(10000 + i).slice(0, 5)}`,
+          department: dept,
+          year: '3rd Year',
+          section: 'A',
+          registerNumber: `REG2026${String(100 + i)}`,
+        },
+        membersData: [
+          {
+            name: `Member 1 of Team ${i}`,
+            department: dept,
+            year: '3rd Year',
+            section: 'A',
+            registerNumber: `REG2026M1_${i}`,
+          },
+          {
+            name: `Member 2 of Team ${i}`,
+            department: dept,
+            year: '3rd Year',
+            section: 'B',
+            registerNumber: `REG2026M2_${i}`,
+          },
+        ],
+        labNo: 'Unassigned',
+        judge: 'Unassigned',
+        prelimsAverageScore: 0,
+        prelimsStatus: 'pending',
+        finaleQualified: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      batch.set(docRef, teamData, { merge: true });
+      opCount++;
+
+      if (opCount === batchSize) {
+        await batch.commit();
+        batch = db.batch();
+        opCount = 0;
+      }
+    }
+
+    if (opCount > 0) {
+      await batch.commit();
+    }
+
+    return { success: true, seededCount: count };
+  } catch (error: any) {
+    console.error('Error seeding dummy teams:', error);
+    return { success: false, error: error.message || 'Failed to seed dummy teams' };
+  }
+}
+
+

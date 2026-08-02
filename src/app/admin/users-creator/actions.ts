@@ -268,6 +268,44 @@ export async function deleteUserAdmin(email: string): Promise<{ success: boolean
     // 1. Delete from roles collection
     await db.collection('roles').doc(email.toLowerCase()).delete();
 
+    // 2. Delete from specific collections based on role
+    if (role === 'jury') {
+      const jurySnap = await db.collection('jury').where('email', '==', email.toLowerCase()).get();
+      const juryName = roleDoc.data()?.name || jurySnap.docs[0]?.data()?.juryName || '';
+      
+      const deletions = jurySnap.docs.map(doc => doc.ref.delete());
+      await Promise.all(deletions);
+
+      // Unassign deleted Jury from labs
+      if (juryName) {
+        const labsSnap = await db.collection('labs').get();
+        const labBatch = db.batch();
+        let labCount = 0;
+        labsSnap.docs.forEach((labDoc) => {
+          if (labDoc.data().assignedJuryName?.toLowerCase() === juryName.toLowerCase()) {
+            labBatch.update(labDoc.ref, { assignedJuryName: 'Unassigned', updatedAt: new Date() });
+            labCount++;
+          }
+        });
+        if (labCount > 0) {
+          await labBatch.commit();
+        }
+      }
+    } else if (role === 'student-coord') {
+      const coordSnap = await db.collection('studentCoords').where('email', '==', email.toLowerCase()).get();
+      const deletions = coordSnap.docs.map(doc => doc.ref.delete());
+      await Promise.all(deletions);
+    } else if (role === 'faculty-coord') {
+      const coordSnap = await db.collection('facultyCoords').where('email', '==', email.toLowerCase()).get();
+      const deletions = coordSnap.docs.map(doc => doc.ref.delete());
+      await Promise.all(deletions);
+    } else if (role === 'coordinator') {
+      // Legacy coordinators
+      const coordSnap = await db.collection('coordinators').where('email', '==', email.toLowerCase()).get();
+      const deletions = coordSnap.docs.map(doc => doc.ref.delete());
+      await Promise.all(deletions);
+    }
+
     // 3. Delete from Firebase Auth
     try {
       const userRecord = await auth.getUserByEmail(email);

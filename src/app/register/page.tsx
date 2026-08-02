@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { checkTeamNameUnique, registerTeamData, checkBatchNumbers } from '@/app/actions/auth';
+import { checkTeamNameUnique, registerTeamData, checkBatchNumbers, checkRegistrationTimelineStatus } from '@/app/actions/auth';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Select from 'react-select';
@@ -90,6 +90,17 @@ export default function Register() {
   // Batch number check states
   const [batchChecking, setBatchChecking] = useState(false);
   const [batchDuplicates, setBatchDuplicates] = useState<string[]>([]);
+  const [timelineNotice, setTimelineNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function checkTimeline() {
+      const res = await checkRegistrationTimelineStatus();
+      if (!res.allowed) {
+        setTimelineNotice(res.message);
+      }
+    }
+    checkTimeline();
+  }, []);
 
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -270,6 +281,13 @@ export default function Register() {
         </Link>
         <h1 className="text-4xl font-extrabold text-center mb-8 text-blue-600">Hackwell Registration</h1>
         
+        {timelineNotice && (
+          <div className="bg-amber-50 border border-amber-300 text-amber-900 p-5 rounded-xl mb-6 text-center font-medium shadow-sm">
+            <h3 className="text-base font-bold text-amber-900 mb-1">Registration Timeline Notice</h3>
+            <p className="text-sm text-amber-800">{timelineNotice}</p>
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6">
             {error}

@@ -50,6 +50,38 @@ export async function checkBatchNumbers(batchNumbers: string[]) {
   }
 }
 
+export async function checkRegistrationTimelineStatus() {
+  try {
+    const db = getAdminDb();
+    const docSnap = await db.collection('metadata').doc('eventTimelines').get();
+
+    if (!docSnap.exists) {
+      return { allowed: true, message: '' };
+    }
+
+    const t1 = docSnap.data()?.timeline1;
+    if (!t1) return { allowed: true, message: '' };
+
+    if (t1.enabled === false) {
+      return { allowed: false, message: 'Student registration is currently disabled by administrators.' };
+    }
+
+    const now = new Date();
+    if (t1.startDate && new Date(t1.startDate) > now) {
+      return { allowed: false, message: `Registration opens on ${new Date(t1.startDate).toLocaleString()}.` };
+    }
+
+    if (t1.endDate && new Date(t1.endDate) < now) {
+      return { allowed: false, message: `Registration closed on ${new Date(t1.endDate).toLocaleString()}.` };
+    }
+
+    return { allowed: true, message: '' };
+  } catch (error: any) {
+    console.error('Error checking registration timeline status:', error);
+    return { allowed: true, message: '' };
+  }
+}
+
 export async function registerTeamData(
   teamName: string,
   theme: string,
@@ -61,6 +93,13 @@ export async function registerTeamData(
 ) {
   try {
     const db = getAdminDb();
+
+    // Check timeline window
+    const timelineCheck = await checkRegistrationTimelineStatus();
+    if (!timelineCheck.allowed) {
+      return { success: false, error: timelineCheck.message };
+    }
+
     const sanitizedName = teamName.trim().toLowerCase();
     
     // Double check uniqueness
@@ -149,8 +188,11 @@ export async function getTeamDataByEmail(email: string) {
       }
     };
   } catch (error: any) {
-    console.error('Error fetching team data', error);
-    return { success: false, error: error.message };
+    const isQuota = error?.message?.includes('RESOURCE_EXHAUSTED') || error?.code === 8;
+    const msg = isQuota
+      ? 'Firebase Firestore daily quota exceeded (RESOURCE_EXHAUSTED). Please check your Firebase project quota/billing or wait for the daily quota reset.'
+      : (error?.message || 'Failed to fetch team data.');
+    return { success: false, error: msg };
   }
 }
 
@@ -163,7 +205,10 @@ export async function submitPPT(teamId: string, pptLink: string) {
     });
     return { success: true };
   } catch (error: any) {
-    console.error('Error submitting PPT', error);
-    return { success: false, error: 'Failed to submit PPT link.' };
+    const isQuota = error?.message?.includes('RESOURCE_EXHAUSTED') || error?.code === 8;
+    const msg = isQuota
+      ? 'Firebase Firestore daily quota exceeded. Please try again after quota reset.'
+      : 'Failed to submit PPT link.';
+    return { success: false, error: msg };
   }
 }

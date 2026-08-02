@@ -43,11 +43,11 @@ export interface DetailedTeam extends SimpleTeam {
 }
 
 export interface Rubric {
-  idea: number;
-  output: number;
-  innovation: number;
+  problemStatement: number;
   presentation: number;
-  finalOutput: number;
+  communication: number;
+  solution: number;
+  idea: number;
 }
 
 export interface TeamScore {
@@ -66,10 +66,11 @@ export interface TeamScore {
 }
 
 export interface EvaluationData {
-  innovation: number;
-  technicalFeasibility: number;
-  impact: number;
+  problemStatement: number;
   presentation: number;
+  communication: number;
+  solution: number;
+  idea: number;
   remarks: string;
   highlighted: boolean;
   score: number;
@@ -243,11 +244,13 @@ export async function getTeamDetails(teamId: string) {
     let scoreData: EvaluationData | undefined = undefined;
     if (!scoresSnap.empty) {
       const scoreDoc = scoresSnap.docs[0].data();
+      const r = scoreDoc.rubric || {};
       scoreData = {
-        innovation: scoreDoc.rubric?.innovation ?? 0,
-        technicalFeasibility: scoreDoc.rubric?.technicalFeasibility ?? 0,
-        impact: scoreDoc.rubric?.impact ?? 0,
-        presentation: scoreDoc.rubric?.presentation ?? 0,
+        problemStatement: r.problemStatement ?? 0,
+        presentation: r.presentation ?? 0,
+        communication: r.communication ?? 0,
+        solution: r.solution ?? 0,
+        idea: r.idea ?? 0,
         remarks: scoreDoc.remarks ?? '',
         highlighted: scoreDoc.highlighted === true,
         score: scoreDoc.totalScore ?? 0,
@@ -288,7 +291,7 @@ export async function getTeamDetails(teamId: string) {
  */
 export async function saveEvaluation(
   teamId: string,
-  rubrics: { innovation: number; technicalFeasibility: number; impact: number; presentation: number },
+  rubrics: { problemStatement: number; presentation: number; communication: number; solution: number; idea: number },
   remarks: string,
   highlighted: boolean
 ) {
@@ -302,7 +305,7 @@ export async function saveEvaluation(
   }
 
   // Validate rubrics
-  const fields = ['innovation', 'technicalFeasibility', 'impact', 'presentation'] as const;
+  const fields = ['problemStatement', 'presentation', 'communication', 'solution', 'idea'] as const;
   for (const field of fields) {
     const val = rubrics[field];
     if (typeof val !== 'number' || !Number.isInteger(val) || val < 0 || val > 10) {
@@ -311,7 +314,7 @@ export async function saveEvaluation(
   }
 
   const cleanTeamId = teamId.trim().toLowerCase();
-  const totalScore = rubrics.innovation + rubrics.technicalFeasibility + rubrics.impact + rubrics.presentation;
+  const totalScore = rubrics.problemStatement + rubrics.presentation + rubrics.communication + rubrics.solution + rubrics.idea;
 
   try {
     const db = getAdminDb();
@@ -329,17 +332,16 @@ export async function saveEvaluation(
       .limit(1)
       .get();
 
-    const now = new Date();
-
     if (!existingSnap.empty) {
       // Update existing record
       const docRef = existingSnap.docs[0].ref;
       await docRef.update({
         rubric: {
-          innovation: rubrics.innovation,
-          technicalFeasibility: rubrics.technicalFeasibility,
-          impact: rubrics.impact,
+          problemStatement: rubrics.problemStatement,
           presentation: rubrics.presentation,
+          communication: rubrics.communication,
+          solution: rubrics.solution,
+          idea: rubrics.idea,
         },
         totalScore: totalScore,
         remarks: remarks.trim(),
@@ -353,10 +355,11 @@ export async function saveEvaluation(
         teamId: cleanTeamId,
         juryId: session.juryId,
         rubric: {
-          innovation: rubrics.innovation,
-          technicalFeasibility: rubrics.technicalFeasibility,
-          impact: rubrics.impact,
+          problemStatement: rubrics.problemStatement,
           presentation: rubrics.presentation,
+          communication: rubrics.communication,
+          solution: rubrics.solution,
+          idea: rubrics.idea,
         },
         totalScore: totalScore,
         remarks: remarks.trim(),

@@ -67,10 +67,11 @@ function JuryDashboardContent() {
   // Selected Team Details
   const [selectedTeam, setSelectedTeam] = useState<DetailedTeam | null>(null);
   const [evaluation, setEvaluation] = useState<EvaluationData>({
-    innovation: 0,
-    technicalFeasibility: 0,
-    impact: 0,
+    problemStatement: 0,
     presentation: 0,
+    communication: 0,
+    solution: 0,
+    idea: 0,
     remarks: '',
     highlighted: false,
     score: 0,
@@ -122,10 +123,11 @@ function JuryDashboardContent() {
         setEvaluation(res.scoreData);
       } else {
         setEvaluation({
-          innovation: 0,
-          technicalFeasibility: 0,
-          impact: 0,
+          problemStatement: 0,
           presentation: 0,
+          communication: 0,
+          solution: 0,
+          idea: 0,
           remarks: '',
           highlighted: res.teamDetails.highlighted,
           score: 0,
@@ -213,7 +215,7 @@ function JuryDashboardContent() {
     if (val === '') {
       setEvaluation(prev => {
         const next = { ...prev, [field]: 0 };
-        next.score = next.innovation + next.technicalFeasibility + next.impact + next.presentation;
+        next.score = next.problemStatement + next.presentation + next.communication + next.solution + next.idea;
         return next;
       });
       return;
@@ -224,7 +226,7 @@ function JuryDashboardContent() {
 
     setEvaluation(prev => {
       const next = { ...prev, [field]: num };
-      next.score = next.innovation + next.technicalFeasibility + next.impact + next.presentation;
+      next.score = next.problemStatement + next.presentation + next.communication + next.solution + next.idea;
       return next;
     });
   };
@@ -241,10 +243,11 @@ function JuryDashboardContent() {
     const res = await saveEvaluation(
       selectedTeam.id,
       {
-        innovation: evaluation.innovation,
-        technicalFeasibility: evaluation.technicalFeasibility,
-        impact: evaluation.impact,
+        problemStatement: evaluation.problemStatement,
         presentation: evaluation.presentation,
+        communication: evaluation.communication,
+        solution: evaluation.solution,
+        idea: evaluation.idea,
       },
       evaluation.remarks,
       evaluation.highlighted
@@ -259,7 +262,7 @@ function JuryDashboardContent() {
             ? {
                 ...t,
                 evaluationStatus: 'Evaluated',
-                score: evaluation.innovation + evaluation.technicalFeasibility + evaluation.impact + evaluation.presentation,
+                score: evaluation.score,
                 highlighted: evaluation.highlighted,
               }
             : t
@@ -867,10 +870,11 @@ function JuryDashboardContent() {
                         {/* Rubrics (0 - 10) */}
                         <div className="space-y-4">
                           {[
-                            { key: 'innovation', label: 'Innovation' },
-                            { key: 'technicalFeasibility', label: 'Technical Feasibility' },
-                            { key: 'impact', label: 'Impact' },
+                            { key: 'problemStatement', label: 'Problem Statement' },
                             { key: 'presentation', label: 'Presentation' },
+                            { key: 'communication', label: 'Communication' },
+                            { key: 'solution', label: 'Solution' },
+                            { key: 'idea', label: 'Idea' },
                           ].map(({ key, label }) => (
                             <div key={key} className="flex items-center justify-between gap-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
                               <div>
@@ -910,11 +914,11 @@ function JuryDashboardContent() {
                         <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-center justify-between">
                           <div>
                             <span className="block text-[10px] uppercase font-bold text-gray-600 tracking-wider">Total Score</span>
-                            <span className="text-[10px] text-gray-500">Sum of the 4 Rubrics</span>
+                            <span className="text-[10px] text-gray-500">Sum of the 5 Rubrics</span>
                           </div>
                           <div className="text-right">
                             <span className="text-2xl font-black text-blue-600 font-mono">{evaluation.score}</span>
-                            <span className="text-xs text-gray-500 font-mono"> / 40</span>
+                            <span className="text-xs text-gray-500 font-mono"> / 50</span>
                           </div>
                         </div>
 
