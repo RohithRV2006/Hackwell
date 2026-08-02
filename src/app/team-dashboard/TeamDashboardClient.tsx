@@ -7,7 +7,7 @@ import { changeTeamPassword } from '@/app/actions/forgot-password';
 import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, MapPin, Download, FileText, Users, Info, Trophy, FileUp, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, Download, FileText, Users, Info, Trophy, FileUp, ExternalLink } from 'lucide-react';
+
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
