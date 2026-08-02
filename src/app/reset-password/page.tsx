@@ -33,6 +33,7 @@ function ResetPasswordForm() {
     resolver: zodResolver(resetSchema),
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const password = watch('password') || '';
   const pwdLength = password.length >= 8;
   const pwdUpper = /[A-Z]/.test(password);

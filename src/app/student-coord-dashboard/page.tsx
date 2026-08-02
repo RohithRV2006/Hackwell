@@ -15,7 +15,7 @@ export default async function StudentCoord() {
   let decodedClaims;
   try {
     decodedClaims = await getAdminAuth().verifySessionCookie(sessionCookie, true);
-  } catch (error) {
+  } catch {
     redirect('/login');
   }
 

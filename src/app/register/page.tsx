@@ -166,6 +166,12 @@ export default function Register() {
         setBatchDuplicates([]);
         return;
       }
+      const internalDuplicates = allBatches.filter((item, index) => allBatches.indexOf(item) !== index);
+      if (internalDuplicates.length > 0) {
+        setBatchDuplicates(Array.from(new Set(internalDuplicates)));
+        return;
+      }
+      
       setBatchChecking(true);
       const res = await checkBatchNumbers(allBatches);
       if (res.success && res.duplicates) {
@@ -188,7 +194,7 @@ export default function Register() {
       try {
         const { isUnique } = await checkTeamNameUnique(teamName);
         setNameAvailable(isUnique === true);
-      } catch (err) {
+      } catch {
         setNameAvailable(null);
       }
       setNameChecking(false);
@@ -229,7 +235,7 @@ export default function Register() {
 
       const userCredential = await createUserWithEmailAndPassword(auth, data.lead.email, data.lead.password);
       
-      const { password, confirmPassword, ...leadDataWithoutPassword } = data.lead;
+      const { password: _password, confirmPassword: _confirmPassword, ...leadDataWithoutPassword } = data.lead;
       
       const psData = ALL_PROBLEM_STATEMENTS.find(ps => ps.id === data.problemStatement);
       

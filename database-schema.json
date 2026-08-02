@@ -4,76 +4,251 @@
       "description": "Stores information about registered hackathon teams and their members. Team name acts as the unique identifier.",
       "documentId": "teamName (lowercase, trimmed)",
       "fields": {
-        "teamName": { "type": "string", "encrypted": false },
-        "problemStatement": { "type": "string", "encrypted": false },
-        "leadEmail": { "type": "string", "encrypted": false },
-        "leadData": { "type": "object", "encrypted": false },
-        "membersData": { "type": "array", "encrypted": false },
-        "totalGameXP": { "type": "number", "encrypted": false, "description": "Sum of all XP from gameScores" },
-        "prelimsAverageScore": { "type": "number", "encrypted": false, "description": "Average of all prelimsEvaluations" },
-        "prelimsStatus": { "type": "string", "encrypted": false, "description": "e.g., 'selected', 'rejected', 'pending'" },
-        "finaleAverageScore": { "type": "number", "encrypted": false, "description": "Average of all finaleEvaluations" },
-        "createdAt": { "type": "timestamp", "encrypted": false }
+        "teamName": {
+          "type": "string",
+          "encrypted": false
+        },
+        "problemStatement": {
+          "type": "string",
+          "encrypted": false
+        },
+        "leadEmail": {
+          "type": "string",
+          "encrypted": false
+        },
+        "leadData": {
+          "type": "object",
+          "encrypted": false
+        },
+        "membersData": {
+          "type": "array",
+          "encrypted": false
+        },
+        "totalGameXP": {
+          "type": "number",
+          "encrypted": false,
+          "description": "Sum of all XP from gameScores"
+        },
+        "prelimsAverageScore": {
+          "type": "number",
+          "encrypted": false,
+          "description": "Average of all prelimsEvaluations"
+        },
+        "prelimsStatus": {
+          "type": "string",
+          "encrypted": false,
+          "description": "e.g., 'selected', 'rejected', 'pending'"
+        },
+        "finaleAverageScore": {
+          "type": "number",
+          "encrypted": false,
+          "description": "Average of all finaleEvaluations"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "encrypted": false
+        }
       }
     },
     "roles": {
       "description": "Stores authentication and role mapping for privileged users. Document ID is the user email (lowercase). Teams do NOT get a role document (fallback logic is used).",
       "documentId": "email (lowercase)",
       "fields": {
-        "role": { "type": "string", "encrypted": false, "description": "'admin', 'jury', 'student-coord', or 'faculty-coord'" },
-        "name": { "type": "string", "encrypted": false, "description": "User's full name (used by Jury, Coords)" },
-        "department": { "type": "string", "encrypted": false, "description": "Optional: User's department" },
-        "institution": { "type": "string", "encrypted": false, "description": "Optional: User's institution" },
-        "encryptedCreds": { "type": "string", "encrypted": true, "description": "Symmetrically encrypted original password for admin recovery" },
-        "scoresFrozen": { "type": "boolean", "encrypted": false, "description": "Used by juries to indicate their scores are finalized" },
-        "createdAt": { "type": "timestamp", "encrypted": false }
+        "role": {
+          "type": "string",
+          "encrypted": false,
+          "description": "'admin', 'jury', 'student-coord', or 'faculty-coord'"
+        },
+        "name": {
+          "type": "string",
+          "encrypted": false,
+          "description": "User's full name (used by Jury, Coords)"
+        },
+        "department": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Optional: User's department"
+        },
+        "institution": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Optional: User's institution"
+        },
+        "encryptedCreds": {
+          "type": "string",
+          "encrypted": true,
+          "description": "Symmetrically encrypted original password for admin recovery"
+        },
+        "scoresFrozen": {
+          "type": "boolean",
+          "encrypted": false,
+          "description": "Used by juries to indicate their scores are finalized"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "encrypted": false
+        }
       }
     },
     "prelimsEvaluations": {
       "description": "Prelims scoring submitted by Juries. Multiple juries can evaluate the same team.",
       "documentId": "Auto-generated ID",
       "fields": {
-        "teamId": { "type": "string", "encrypted": false },
-        "juryId": { "type": "string", "encrypted": false, "description": "Stores the jury's email address" },
+        "teamId": {
+          "type": "string",
+          "encrypted": false
+        },
+        "juryId": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Stores the jury's email address"
+        },
         "rubric": {
           "type": "object",
           "description": "{ innovation, technicalFeasibility, impact, presentation }"
         },
-        "totalScore": { "type": "number", "encrypted": false },
-        "remarks": { "type": "string", "encrypted": false },
-        "highlighted": { "type": "boolean", "encrypted": false },
-        "isFrozen": { "type": "boolean", "encrypted": false },
-        "createdAt": { "type": "timestamp", "encrypted": false },
-        "updatedAt": { "type": "timestamp", "encrypted": false }
+        "totalScore": {
+          "type": "number",
+          "encrypted": false
+        },
+        "remarks": {
+          "type": "string",
+          "encrypted": false
+        },
+        "highlighted": {
+          "type": "boolean",
+          "encrypted": false
+        },
+        "isFrozen": {
+          "type": "boolean",
+          "encrypted": false
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "encrypted": false
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "encrypted": false
+        }
       }
     },
     "finaleEvaluations": {
       "description": "Finale scoring submitted by Juries. Very similar to prelimsEvaluations.",
       "documentId": "Auto-generated ID",
       "fields": {
-        "teamId": { "type": "string", "encrypted": false },
-        "juryId": { "type": "string", "encrypted": false, "description": "Stores the jury's email address" },
+        "teamId": {
+          "type": "string",
+          "encrypted": false
+        },
+        "juryId": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Stores the jury's email address"
+        },
         "rubric": {
           "type": "object",
           "description": "{ innovation, technicalFeasibility, impact, presentation }"
         },
-        "totalScore": { "type": "number", "encrypted": false },
-        "remarks": { "type": "string", "encrypted": false },
-        "highlighted": { "type": "boolean", "encrypted": false },
-        "isFrozen": { "type": "boolean", "encrypted": false },
-        "createdAt": { "type": "timestamp", "encrypted": false },
-        "updatedAt": { "type": "timestamp", "encrypted": false }
+        "totalScore": {
+          "type": "number",
+          "encrypted": false
+        },
+        "remarks": {
+          "type": "string",
+          "encrypted": false
+        },
+        "highlighted": {
+          "type": "boolean",
+          "encrypted": false
+        },
+        "isFrozen": {
+          "type": "boolean",
+          "encrypted": false
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "encrypted": false
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "encrypted": false
+        }
       }
     },
     "gameScores": {
       "description": "Game XP assigned by student coordinators during the event.",
       "documentId": "Auto-generated ID",
       "fields": {
-        "teamId": { "type": "string", "encrypted": false },
-        "studentCoordId": { "type": "string", "encrypted": false, "description": "Stores the student coordinator's email address" },
-        "gameName": { "type": "string", "encrypted": false },
-        "xpPoints": { "type": "number", "encrypted": false },
-        "createdAt": { "type": "timestamp", "encrypted": false }
+        "teamId": {
+          "type": "string",
+          "encrypted": false
+        },
+        "studentCoordId": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Stores the student coordinator's email address"
+        },
+        "gameName": {
+          "type": "string",
+          "encrypted": false
+        },
+        "xpPoints": {
+          "type": "number",
+          "encrypted": false
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "encrypted": false
+        }
+      }
+    },
+    "jury": {
+      "description": "Jury users mapping",
+      "documentId": "Auto-generated ID",
+      "fields": {
+        "email": {
+          "type": "string",
+          "encrypted": false
+        },
+        "juryName": {
+          "type": "string",
+          "encrypted": false
+        }
+      }
+    },
+    "labs": {
+      "description": "Lab assignments",
+      "documentId": "Auto-generated ID",
+      "fields": {
+        "assignedJuryName": {
+          "type": "string",
+          "encrypted": false
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "encrypted": false
+        }
+      }
+    },
+    "studentCoords": {
+      "description": "Student coordinators",
+      "documentId": "Auto-generated ID",
+      "fields": {
+        "email": {
+          "type": "string",
+          "encrypted": false
+        }
+      }
+    },
+    "facultyCoords": {
+      "description": "Faculty coordinators",
+      "documentId": "Auto-generated ID",
+      "fields": {
+        "email": {
+          "type": "string",
+          "encrypted": false
+        }
       }
     }
   }

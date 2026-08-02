@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -11,7 +10,6 @@ import { clearSessionCookie, getUserRole } from '@/app/actions/session';
 export default function NavBar() {
   const [user, setUser] = useState<User | null>(null);
   const [dashboardUrl, setDashboardUrl] = useState('/team-dashboard');
-  const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
