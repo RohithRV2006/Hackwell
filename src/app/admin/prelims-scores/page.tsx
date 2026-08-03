@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   verifyAdminSession,
   getAllEvaluationsAdmin,
@@ -30,6 +31,7 @@ export default function AdminPrelimsScoresPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
 
   // Selected Team for details popup
@@ -103,6 +105,7 @@ export default function AdminPrelimsScoresPage() {
       loadData();
     } else {
       setLoading(false);
+      router.replace('/');
     }
   };
 
@@ -181,11 +184,7 @@ export default function AdminPrelimsScoresPage() {
   }
 
   if (isAuthenticated === false) {
-    return (
-      <div className="p-12 text-center text-gray-500 font-bold">
-        Access Denied. You must be an administrator.
-      </div>
-    );
+    return null;
   }
 
   return (

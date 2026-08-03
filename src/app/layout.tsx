@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Hackwell",
-  description: "",
+  title: "Hackwell 2.O",
+  description: "Hackwell 2.O - The official hackathon management platform. Register your team, check scores, and view the leaderboard.",
 };
 
 export default function RootLayout({

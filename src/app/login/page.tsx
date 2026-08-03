@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { createSessionCookie } from '@/app/actions/session';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import Link from 'next/link';
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 
@@ -31,6 +31,13 @@ function LoginForm() {
   const { register, handleSubmit, watch, formState: { errors } } = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
   });
+
+  // If a user lands on the login page but Firebase Auth thinks they are logged in locally
+  // (e.g. they were logged out from the server but the client SDK didn't get cleared),
+  // we force clear the client auth state to prevent UI desyncs.
+  useEffect(() => {
+    signOut(auth).catch(() => {});
+  }, []);
 
   const onSubmit = async (data: LoginData) => {
     setError('');
@@ -60,29 +67,6 @@ function LoginForm() {
       }
     } catch (err: any) {
       setError(err.message || 'Invalid credentials');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    setError('');
-    setMsg('');
-    const emailVal = watch('email');
-    if (!emailVal || !emailVal.includes('@')) {
-      setError('Please enter a valid email address first to receive the reset link.');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const actionCodeSettings = {
-        url: window.location.origin + '/reset-password',
-      };
-      await sendPasswordResetEmail(auth, watch('email'), actionCodeSettings);
-      setMsg('Password reset email sent! Check your inbox (and spam folder).');
-    } catch (err: any) {
-      setError(err.message || 'Failed to send password reset email.');
     } finally {
       setLoading(false);
     }
@@ -143,13 +127,12 @@ function LoginForm() {
           <Link href="/register" className="text-sm text-blue-600 hover:underline">
             Don't have an account? Register
           </Link>
-          <button 
-            type="button" 
-            onClick={handleForgotPassword}
+          <Link 
+            href="/forgot-password"
             className="text-sm text-gray-500 hover:text-blue-600 hover:underline"
           >
             Forgot Password?
-          </button>
+          </Link>
         </div>
 
         <button 

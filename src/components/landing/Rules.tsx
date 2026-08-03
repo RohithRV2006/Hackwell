@@ -1,18 +1,29 @@
 import { CheckCircle2, AlertTriangle } from 'lucide-react';
 
 const RULES = [
-  'Each team must consist of 3 to 4 members from the same or different departments.',
-  'Participants must carry their valid college ID cards during the event.',
-  'All code must be written during the hackathon. Pre-existing projects will lead to disqualification.',
-  'Teams must select a problem statement during registration and cannot change it later.',
-  'Use of open-source libraries is allowed, but the core logic must be your own.',
+  <>Each team must consist of <strong>exactly 4 members</strong>. Only students from <strong>CSE, AI&DS, AIML, IT, and CSBS</strong> are eligible. Inter-department teams are allowed.</>,
+  <>Complete team registration and problem statement selection before the registration deadline. The selected problem statement cannot be changed after registration.</>,
+  <>Major project development must take place during the 24-hour hackathon. Pre-built, previously submitted, or substantially completed projects are strictly prohibited.</>,
+  <>Open-source libraries, APIs, frameworks, AI models, and public datasets may be used. However, the core idea, implementation, and integration must be your team's own work.</>,
+  <>Submit all required deliverables (such as the <strong>PPT</strong> and <strong>Consent Letter</strong>) before the announced deadline. Late submissions will result in disqualification.</>,
+  <>Teams must present a live demonstration of their solution during the evaluation.</>,
+  <>Carry your valid college ID card throughout the event.</>,
+  <>Maintain professionalism, mutual respect, and ethical conduct throughout the event.</>,
+  <>Participants must not leave the venue during the hackathon without prior permission from the organizing committee.</>,
+  <>Plagiarism, cheating, misconduct, or any violation of the event rules will result in immediate disqualification.</>,
+  <>The decision of the judging panel is final and binding.</>
 ];
 
 const GUIDELINES = [
-  'Bring your own laptops, chargers, and any required hardware components.',
-  'Food and refreshments will be provided during the 24-hour hackathon.',
-  'Maintain professional behavior and respect fellow participants and jury members.',
-  'Plagiarism of any form is strictly prohibited and monitored.',
+  <><strong>No registration fee.</strong> A participation fee of <strong>₹200 per participant</strong> is applicable only to teams shortlisted for the final round.</>,
+  <>All official announcements and updates will be shared through the <strong>Hackwell website</strong> and <strong>official WhatsApp groups</strong>.</>,
+  <>Bring your own laptop, charger, and any hardware or accessories required for your project.</>,
+  <>Internet connectivity will be provided. Teams are encouraged to keep a backup mobile hotspot.</>,
+  <>Back up your project regularly using GitHub or cloud storage.</>,
+  <>Food and refreshments will be provided to all participants.</>,
+  <>Follow the event schedule and the instructions of the organizing committee.</>,
+  <>Teams are responsible for the safety of their personal belongings and equipment.</>,
+  <>The organizing committee reserves the right to modify the event schedule or these rules if required due to unforeseen circumstances.</>
 ];
 
 export default function Rules() {

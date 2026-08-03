@@ -1,10 +1,30 @@
 'use server';
 
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { getUserRole } from '@/app/actions/session';
 import { FieldValue } from 'firebase-admin/firestore';
-import { cache } from 'react';
+import { unstable_cache, revalidateTag } from 'next/cache';
+
+const getCachedTeamsData = unstable_cache(
+  async () => {
+    const db = getAdminDb();
+    const snapshot = await db.collection('teams').get();
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        data: {
+          ...data,
+          createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null
+        } as any
+      };
+    });
+  },
+  ['admin-all-teams'],
+  { revalidate: 300 } // 5 minutes cache
+);
 
 export const verifyAdminSession = cache(async function verifyAdminSession() {
   const cookieStore = await cookies();
@@ -138,12 +158,12 @@ export async function getAllTeamsAdmin() {
   }
 
   try {
-    const snapshot = await getCachedDocs('teams');
+    const cachedDocs = await getCachedTeamsData();
 
     const teams: AdminTeamData[] = [];
 
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
+    for (const doc of cachedDocs) {
+      const data = doc.data;
       let decryptedLead: Lead = data.leadData || { name: '', batchNumber: '', department: '', year: '', section: '', contactNumber: '' };
       let decryptedMembers: Member[] = data.membersData || [];
 

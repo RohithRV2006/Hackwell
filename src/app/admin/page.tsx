@@ -3,12 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { getAdminOverviewStats } from './actions';
 import { verifyAdminSession } from '@/app/admin/actions';
+import { useRouter } from 'next/navigation';
 
 export default function AdminOverviewPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const router = useRouter();
 
   const loadData = async () => {
     setLoading(true);
@@ -28,6 +30,7 @@ export default function AdminOverviewPage() {
       loadData();
     } else {
       setLoading(false);
+      router.replace('/');
     }
   };
 
@@ -44,11 +47,7 @@ export default function AdminOverviewPage() {
   }
 
   if (isAuthenticated === false) {
-    return (
-      <div className="p-12 text-center text-gray-500 font-bold">
-        Access Denied. You must be an administrator.
-      </div>
-    );
+    return null; // Will redirect
   }
 
   return (

@@ -185,6 +185,7 @@ export async function getTeamDataByEmail(email: string) {
         leadData: data.leadData,
         membersData: data.membersData,
         pptLink: data.pptLink || null,
+        pptDriveFileId: data.pptDriveFileId || null,
         prelimsStatus: data.prelimsStatus || 'pending',
         venue: data.venue || null,
       }

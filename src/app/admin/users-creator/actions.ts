@@ -113,19 +113,9 @@ export async function createJuryUser(
     const now = new Date();
     const encryptedCreds = encryptJSON({ password });
 
-    // Write to jury collection
-    const juryRef = db.collection('jury').doc();
-    await juryRef.set({
-      juryName: name.trim(),
-      institution: institution.trim(),
-      email: email.toLowerCase().trim(),
-      createdAt: now,
-    });
-
     // Write to roles collection
     await roleDocRef.set({
       role: 'jury',
-      juryId: juryRef.id,
       name: name.trim(),
       institution: institution.trim(),
       encryptedCreds,
@@ -173,16 +163,8 @@ export async function createStudentCoordUser(
     const now = new Date();
     const encryptedCreds = encryptJSON({ password });
 
-    const coordRef = db.collection('studentCoords').doc();
-    await coordRef.set({
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
-      createdAt: now,
-    });
-
     await roleDocRef.set({
       role: 'student-coord',
-      coordId: coordRef.id,
       name: name.trim(),
       encryptedCreds,
       createdAt: now,
@@ -230,17 +212,8 @@ export async function createFacultyCoordUser(
     const now = new Date();
     const encryptedCreds = encryptJSON({ password });
 
-    const coordRef = db.collection('facultyCoords').doc();
-    await coordRef.set({
-      name: name.trim(),
-      department: department.trim(),
-      email: email.toLowerCase().trim(),
-      createdAt: now,
-    });
-
     await roleDocRef.set({
       role: 'faculty-coord',
-      coordId: coordRef.id,
       name: name.trim(),
       department: department.trim(),
       encryptedCreds,
