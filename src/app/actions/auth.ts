@@ -2,6 +2,7 @@
 
 import { getAdminDb } from '@/lib/firebase-admin';
 import { encryptJSON } from '@/lib/encryption';
+import { invalidateCollectionCache } from '@/app/admin/actions';
 
 export async function checkTeamNameUnique(teamName: string) {
   try {
@@ -148,6 +149,7 @@ export async function registerTeamData(
       createdAt: new Date(),
     });
     
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error registering team data', error);
@@ -203,6 +205,7 @@ export async function submitPPT(teamId: string, pptLink: string) {
       pptLink: pptLink.trim(),
       updatedAt: new Date()
     });
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     const isQuota = error?.message?.includes('RESOURCE_EXHAUSTED') || error?.code === 8;

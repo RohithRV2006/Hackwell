@@ -4,8 +4,9 @@ import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { getUserRole } from '@/app/actions/session';
 import { FieldValue } from 'firebase-admin/firestore';
+import { cache } from 'react';
 
-export async function verifyAdminSession() {
+export const verifyAdminSession = cache(async function verifyAdminSession() {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('session')?.value;
   if (!sessionCookie) return false;
@@ -18,6 +19,51 @@ export async function verifyAdminSession() {
     return role === 'admin';
   } catch (error) {
     return false;
+  }
+});
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+const collectionCache = new Map<string, CacheEntry<any>>();
+const COLLECTION_CACHE_TTL = 30 * 1000; // 30 seconds TTL
+
+export async function invalidateCollectionCache(collectionName?: string) {
+  if (collectionName) {
+    collectionCache.delete(collectionName);
+  } else {
+    collectionCache.clear();
+  }
+}
+
+export async function getCachedDocs(collectionName: string) {
+  const now = Date.now();
+  const cached = collectionCache.get(collectionName);
+  if (cached && now - cached.timestamp < COLLECTION_CACHE_TTL) {
+    return cached.data;
+  }
+
+  try {
+    const db = getAdminDb();
+    let snap: any;
+    if (collectionName === 'metadata_eventTimelines') {
+      snap = await db.collection('metadata').doc('eventTimelines').get();
+    } else if (collectionName === 'prelimsEvaluations' || collectionName === 'finaleEvaluations' || collectionName === 'gameScores') {
+      snap = await db.collection(collectionName).orderBy('createdAt', 'desc').get();
+    } else {
+      snap = await db.collection(collectionName).get();
+    }
+    collectionCache.set(collectionName, { data: snap, timestamp: now });
+    return snap;
+  } catch (error: any) {
+    console.error(`Error fetching ${collectionName}:`, error?.message || error);
+    if (cached) {
+      console.warn(`Returning stale cached data for ${collectionName}`);
+      return cached.data;
+    }
+    // Return safe fallback snapshot on Firestore quota error to avoid UI crash
+    return { docs: [], empty: true, size: 0, exists: false, data: () => ({}) };
   }
 }
 
@@ -61,28 +107,26 @@ export async function getAdminOverviewStats() {
   }
   
   try {
-    const db = getAdminDb();
-    
     const [teamsSnap, rolesSnap, jurySnap, prelimsSnap, finaleSnap] = await Promise.all([
-      db.collection('teams').count().get(),
-      db.collection('roles').count().get(),
-      db.collection('jury').count().get(),
-      db.collection('prelimsEvaluations').count().get(),
-      db.collection('finaleEvaluations').count().get()
+      getCachedDocs('teams'),
+      getCachedDocs('roles'),
+      getCachedDocs('jury'),
+      getCachedDocs('prelimsEvaluations'),
+      getCachedDocs('finaleEvaluations')
     ]);
     
     return {
       success: true,
       stats: {
-        totalTeams: teamsSnap.data().count,
-        totalRoles: rolesSnap.data().count,
-        totalJuries: jurySnap.data().count,
-        totalPrelims: prelimsSnap.data().count,
-        totalFinale: finaleSnap.data().count
+        totalTeams: teamsSnap?.size || 0,
+        totalRoles: rolesSnap?.size || 0,
+        totalJuries: jurySnap?.size || 0,
+        totalPrelims: prelimsSnap?.size || 0,
+        totalFinale: finaleSnap?.size || 0
       }
     };
   } catch (error: any) {
-    console.error('Error fetching admin stats:', error);
+    console.error('Error fetching admin stats:', error?.message || error);
     return { success: false, error: error.message || 'Failed to fetch stats' };
   }
 }
@@ -94,8 +138,7 @@ export async function getAllTeamsAdmin() {
   }
 
   try {
-    const db = getAdminDb();
-    const snapshot = await db.collection('teams').get();
+    const snapshot = await getCachedDocs('teams');
 
     const teams: AdminTeamData[] = [];
 
@@ -280,6 +323,8 @@ export async function updateTeamAdmin(
 
     await docRef.update(payload);
     await syncLabTeamCountsAdmin(db);
+    invalidateCollectionCache('teams');
+    invalidateCollectionCache('labs');
     return { success: true };
   } catch (error: any) {
     console.error('Error updating team:', error);
@@ -297,6 +342,8 @@ export async function deleteTeamAdmin(teamId: string) {
     const db = getAdminDb();
     await db.collection('teams').doc(teamId).delete();
     await syncLabTeamCountsAdmin(db);
+    invalidateCollectionCache('teams');
+    invalidateCollectionCache('labs');
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting team:', error);
@@ -341,13 +388,14 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
   }
 
   try {
-    const db = getAdminDb();
-    const snapshot = await db.collection(collectionName).orderBy('createdAt', 'desc').get();
+    const [snapshot, teamsSnap, jurySnap] = await Promise.all([
+      getCachedDocs(collectionName),
+      getCachedDocs('teams'),
+      getCachedDocs('jury'),
+    ]);
     
-    // Fetch teams to map names and problem statements
-    const teamsSnap = await db.collection('teams').get();
     const teamMap = new Map<string, { teamName: string; problemStatement: string }>();
-    teamsSnap.docs.forEach((doc) => {
+    teamsSnap.docs.forEach((doc: any) => {
       const data = doc.data();
       teamMap.set(doc.id, {
         teamName: data.teamName || doc.id,
@@ -355,9 +403,8 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
       });
     });
 
-    const jurySnap = await db.collection('jury').get();
     const juryMap = new Map<string, string>();
-    jurySnap.docs.forEach((doc) => {
+    jurySnap.docs.forEach((doc: any) => {
       juryMap.set(doc.id, doc.data().juryName || doc.id);
     });
 
@@ -416,17 +463,17 @@ export async function getAllGameScoresAdmin() {
   }
 
   try {
-    const db = getAdminDb();
-    const snapshot = await db.collection('gameScores').orderBy('createdAt', 'desc').get();
+    const [snapshot, teamsSnap] = await Promise.all([
+      getCachedDocs('gameScores'),
+      getCachedDocs('teams'),
+    ]);
     
-    // Fetch teams to map names
-    const teamsSnap = await db.collection('teams').get();
     const teamMap = new Map<string, { teamName: string }>();
-    teamsSnap.docs.forEach((doc) => {
+    teamsSnap.docs.forEach((doc: any) => {
       teamMap.set(doc.id, { teamName: doc.data().teamName || doc.id });
     });
 
-    const scores = snapshot.docs.map(doc => {
+    const scores = snapshot.docs.map((doc: any) => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -495,6 +542,8 @@ export async function createScoreAdmin(scoreData: {
       updatedAt: now,
     });
 
+    invalidateCollectionCache('prelimsEvaluations');
+    invalidateCollectionCache('finaleEvaluations');
     return { success: true, id: newDoc.id };
   } catch (error: any) {
     console.error('Error creating score:', error);
@@ -551,6 +600,8 @@ export async function updateScoreAdmin(
     payload.updatedAt = new Date();
 
     await docRef.update(payload);
+    invalidateCollectionCache('prelimsEvaluations');
+    invalidateCollectionCache('finaleEvaluations');
     return { success: true };
   } catch (error: any) {
     console.error('Error updating score:', error);
@@ -567,6 +618,8 @@ export async function deleteScoreAdmin(scoreId: string) {
   try {
     const db = getAdminDb();
     await db.collection('prelimsEvaluations').doc(scoreId).delete();
+    invalidateCollectionCache('prelimsEvaluations');
+    invalidateCollectionCache('finaleEvaluations');
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting score:', error);
@@ -609,6 +662,8 @@ export async function publishPrelimsResults() {
     }
 
     await batch.commit();
+    invalidateCollectionCache('teams');
+    invalidateCollectionCache('prelimsEvaluations');
     return { success: true };
   } catch (error: any) {
     console.error('Error publishing prelims results:', error);
@@ -632,9 +687,7 @@ export async function getEventTimelinesAdmin() {
   }
 
   try {
-    const db = getAdminDb();
-    const docRef = db.collection('metadata').doc('eventTimelines');
-    const docSnap = await docRef.get();
+    const docSnap = await getCachedDocs('metadata_eventTimelines');
 
     const defaultData: EventTimelinesData = {
       timeline1: { name: 'Registration Phase', startDate: '', endDate: '', enabled: true, state: 'not-set' },
@@ -673,6 +726,7 @@ export async function updateEventTimelinesAdmin(timelines: EventTimelinesData) {
     const db = getAdminDb();
     const docRef = db.collection('metadata').doc('eventTimelines');
     await docRef.set(timelines, { merge: true });
+    invalidateCollectionCache('metadata_eventTimelines');
     return { success: true };
   } catch (error: any) {
     console.error('Error updating event timelines:', error);
@@ -735,6 +789,7 @@ export async function setTimelinePhaseAdmin(
       },
       { merge: true }
     );
+    invalidateCollectionCache('metadata_eventTimelines');
     return { success: true };
   } catch (error: any) {
     console.error('Error setting timeline phase:', error);
@@ -756,6 +811,7 @@ export async function updateTimelinePhaseAdmin(
       { [`timeline${timeline}`]: updates },
       { merge: true }
     );
+    invalidateCollectionCache('metadata_eventTimelines');
     return { success: true };
   } catch (error: any) {
     console.error('Error updating timeline phase:', error);
@@ -785,6 +841,7 @@ export async function resetTimelinePhaseAdmin(
       { [`timeline${timeline}`]: resetData },
       { merge: true }
     );
+    invalidateCollectionCache('metadata_eventTimelines');
     return { success: true };
   } catch (error: any) {
     console.error('Error resetting timeline phase:', error);
@@ -823,6 +880,8 @@ export async function applyPptFilterAdmin(): Promise<{ success: boolean; passed?
       { merge: true }
     );
 
+    invalidateCollectionCache('teams');
+    invalidateCollectionCache('metadata_eventTimelines');
     return { success: true, passed, failed };
   } catch (error: any) {
     console.error('Error applying PPT filter:', error);
@@ -856,13 +915,12 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
   }
 
   try {
-    const db = getAdminDb();
     const [teamsSnap, prelimsSnap, finaleSnap, jurySnap, labsSnap] = await Promise.all([
-      db.collection('teams').get(),
-      db.collection('prelimsEvaluations').get(),
-      db.collection('finaleEvaluations').get(),
-      db.collection('jury').get(),
-      db.collection('labs').get(),
+      getCachedDocs('teams'),
+      getCachedDocs('prelimsEvaluations'),
+      getCachedDocs('finaleEvaluations'),
+      getCachedDocs('jury'),
+      getCachedDocs('labs'),
     ]);
 
     let totalTeams = teamsSnap.size;
@@ -870,7 +928,7 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
     let pptSubmittedCount = 0;
     let finalistCount = 0;
 
-    teamsSnap.docs.forEach((doc) => {
+    teamsSnap.docs.forEach((doc: any) => {
       const data = doc.data();
       // Count students (lead + members)
       let count = 0;
@@ -889,7 +947,7 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
 
     // Map labs to jury
     const labJuryMap = new Map<string, string>();
-    labsSnap.docs.forEach((doc) => {
+    labsSnap.docs.forEach((doc: any) => {
       const data = doc.data();
       if (data.assignedJuryName) {
         labJuryMap.set(data.assignedJuryName, data.labName || '');
@@ -898,21 +956,21 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
 
     // Count evals per jury name / ID
     const prelimsCountByJury: Record<string, number> = {};
-    prelimsSnap.docs.forEach((doc) => {
+    prelimsSnap.docs.forEach((doc: any) => {
       const data = doc.data();
       const juryKey = data.judgeName || data.judgeId || data.judge || 'Unassigned';
       prelimsCountByJury[juryKey] = (prelimsCountByJury[juryKey] || 0) + 1;
     });
 
     const finaleCountByJury: Record<string, number> = {};
-    finaleSnap.docs.forEach((doc) => {
+    finaleSnap.docs.forEach((doc: any) => {
       const data = doc.data();
       const juryKey = data.judgeName || data.judgeId || data.judge || 'Unassigned';
       finaleCountByJury[juryKey] = (finaleCountByJury[juryKey] || 0) + 1;
     });
 
     const juryStats: JuryStat[] = [];
-    jurySnap.docs.forEach((doc) => {
+    jurySnap.docs.forEach((doc: any) => {
       const data = doc.data();
       const juryName = data.juryName || doc.id;
       juryStats.push({
@@ -985,6 +1043,7 @@ export async function setFinalWinnersAdmin(winners: { teamId: string; rank: numb
       { merge: true }
     );
 
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error setting final winners:', error);
@@ -1004,6 +1063,7 @@ export async function toggleTeamFinaleQualifiedAdmin(teamId: string, qualified: 
       finaleQualified: qualified,
       prelimsStatus: qualified ? 'selected' : 'rejected',
     });
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error toggling team qualification:', error);
@@ -1043,6 +1103,7 @@ export async function autoAllocateTeamsAdmin(labs: string[], juries: string[]) {
     });
 
     await batch.commit();
+    invalidateCollectionCache('teams');
     return { success: true, count: docs.length };
   } catch (error: any) {
     console.error('Error auto allocating teams:', error);
@@ -1093,6 +1154,7 @@ export async function promoteTopTeamsToFinaleAdmin(topCount: number) {
     });
 
     await batch.commit();
+    invalidateCollectionCache('teams');
     return { success: true, promotedCount: qualifiedIds.size };
   } catch (error: any) {
     console.error('Error promoting teams to finale:', error);
@@ -1117,10 +1179,9 @@ export async function getLabsAdmin(): Promise<{ success: boolean; labs?: LabData
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
 
-    const db = getAdminDb();
-    const snapshot = await db.collection('labs').get();
+    const snapshot = await getCachedDocs('labs');
 
-    const labs: LabData[] = snapshot.docs.map((doc) => {
+    const labs: LabData[] = snapshot.docs.map((doc: any) => {
       const data = doc.data();
       return {
         labId: doc.id,
@@ -1174,6 +1235,8 @@ export async function createLabAdmin(
     });
 
     await syncLabTeamCountsAdmin(db);
+    invalidateCollectionCache('labs');
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error creating lab:', error);
@@ -1250,6 +1313,8 @@ export async function updateLabAdmin(
     }
 
     await syncLabTeamCountsAdmin(db);
+    invalidateCollectionCache('labs');
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error updating lab:', error);
@@ -1300,6 +1365,8 @@ export async function deleteLabAdmin(labId: string): Promise<{ success: boolean;
 
     await docRef.delete();
     await syncLabTeamCountsAdmin(db);
+    invalidateCollectionCache('labs');
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting lab:', error);
@@ -1362,6 +1429,8 @@ export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; 
     });
 
     await batch.commit();
+    invalidateCollectionCache('labs');
+    invalidateCollectionCache('teams');
     return { success: true, assignedCount: allTeams.length };
   } catch (error: any) {
     console.error('Error auto assigning teams:', error);
@@ -1381,10 +1450,9 @@ export async function getJuriesAdmin(): Promise<{ success: boolean; juries?: Jur
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
 
-    const db = getAdminDb();
-    const snapshot = await db.collection('jury').get();
+    const snapshot = await getCachedDocs('jury');
 
-    const juries: JuryOption[] = snapshot.docs.map((doc) => {
+    const juries: JuryOption[] = snapshot.docs.map((doc: any) => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -1487,6 +1555,7 @@ export async function seedDummyTeamsAdmin(count: number = 100): Promise<{ succes
       await batch.commit();
     }
 
+    invalidateCollectionCache('teams');
     return { success: true, seededCount: count };
   } catch (error: any) {
     console.error('Error seeding dummy teams:', error);

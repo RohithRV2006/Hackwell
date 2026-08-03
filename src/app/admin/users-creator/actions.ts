@@ -1,8 +1,9 @@
 'use server';
 
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
-import { verifyAdminSession } from '@/app/admin/actions';
+import { verifyAdminSession, getCachedDocs, invalidateCollectionCache } from '@/app/admin/actions';
 import { encryptJSON, decryptJSON } from '@/lib/encryption';
+import { isAdminEmail } from '@/app/actions/session';
 
 export interface AdminUser {
   email: string;
@@ -26,10 +27,10 @@ export async function getAllUsersAdmin(): Promise<{ success: boolean; users?: Ad
     const authUsers = listUsersResult.users;
 
     // Fetch roles from Firestore
-    const snapshot = await db.collection('roles').get();
+    const snapshot = await getCachedDocs('roles');
     const roleDocs: Record<string, { role: string; name?: string; department?: string; institution?: string }> = {};
 
-    snapshot.docs.forEach(doc => {
+    (snapshot.docs || []).forEach((doc: any) => {
       const data = doc.data();
 
       const docId = doc.id.toLowerCase().trim();
@@ -41,19 +42,29 @@ export async function getAllUsersAdmin(): Promise<{ success: boolean; users?: Ad
       };
     });
 
-    const users: AdminUser[] = authUsers
+    const userPromises = authUsers
       .filter(user => user.email)
-      .map(user => {
+      .map(async user => {
         const userEmail = (user.email as string).toLowerCase().trim();
+        let userRole = roleDocs[userEmail]?.role;
+        const isAdmin = await isAdminEmail(userEmail);
+        if (isAdmin) {
+          userRole = 'admin';
+        } else if (!userRole) {
+          userRole = 'team';
+        }
+
         return {
           email: user.email as string,
-          role: roleDocs[userEmail]?.role || 'team',
+          role: userRole,
           name: roleDocs[userEmail]?.name,
           department: roleDocs[userEmail]?.department,
           institution: roleDocs[userEmail]?.institution,
           userId: user.uid,
         };
       });
+
+    const users = await Promise.all(userPromises);
 
     return { success: true, users };
   } catch (error: any) {
@@ -343,6 +354,8 @@ export async function deleteUserAdmin(email: string): Promise<{ success: boolean
       }
     }
 
+    invalidateCollectionCache('roles');
+    invalidateCollectionCache('jury');
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting user:', error);
