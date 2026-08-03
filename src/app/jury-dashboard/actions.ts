@@ -5,12 +5,15 @@ import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { getUserRole } from '@/app/actions/session';
 
 export interface SimpleTeam {
-  id: string; // teamName lowercase
+  id: string; // teamName lowercase or doc.id
   teamName: string;
   displayId: string;
   evaluationStatus: 'Pending' | 'Evaluated';
   isFrozen: boolean;
   totalScore?: number;
+  judge?: string;
+  labNo?: string;
+  isAssignedToJury?: boolean;
 }
 
 export interface DetailedTeam {
@@ -85,21 +88,33 @@ export async function verifyJurySession() {
     const roleDoc = await db.collection('roles').doc(email).get();
     if (roleDoc.exists) {
       const data = roleDoc.data();
-      juryName = data?.name || juryName;
+      juryName = data?.name || data?.juryName || juryName;
+      if (data?.juryId) juryId = data.juryId;
+    } else {
+      const juryDoc = await db.collection('jury').doc(email).get();
+      if (juryDoc.exists) {
+        const data = juryDoc.data();
+        juryName = data?.juryName || data?.name || juryName;
+      }
     }
 
     // Retrieve assigned lab from labs collection
     let labName = 'N/A';
+    let assignedLabId = '';
     try {
       const labsSnap = await db.collection('labs').get();
       const matchedLab = labsSnap.docs.find(doc => {
         const data = doc.data();
-        return data.assignedJuryName?.toLowerCase() === juryName.toLowerCase() || 
-               data.assignedJuryId?.toLowerCase() === email.toLowerCase() ||
-               data.assignedJuryName?.toLowerCase() === email.toLowerCase();
+        const ajName = (data.assignedJuryName || '').trim().toLowerCase();
+        const ajId = (data.assignedJuryId || '').trim().toLowerCase();
+        const em = email.toLowerCase();
+        const jn = juryName.toLowerCase();
+        const ji = juryId.toLowerCase();
+        return ajName === jn || ajName === em || ajId === em || ajId === ji || ajName === ji;
       });
       if (matchedLab) {
         labName = matchedLab.data().labName || matchedLab.data().labCode || matchedLab.id;
+        assignedLabId = matchedLab.id;
       }
     } catch (e) {
       console.error('Error fetching lab assignment:', e);
@@ -110,7 +125,8 @@ export async function verifyJurySession() {
       email, 
       juryName, 
       labName,
-      juryId
+      juryId,
+      assignedLabId
     };
   } catch (error: any) {
     console.error('Error verifying jury session:', error);
@@ -138,6 +154,11 @@ export async function getJuryDashboardData() {
 
     const teamDocs = teamsSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
 
+    // 2. Fetch score records in BOTH prelimsEvaluations and juryEvaluations tables
+    const [prelimsSnap, juryEvalSnap] = await Promise.all([
+      db.collection('prelimsEvaluations').get(),
+      db.collection('juryEvaluations').get()
+    ]);
     // 2. Fetch score records in the new evaluations table for this jury (prelims round)
     const scoresSnap = await db.collection('evaluations')
       .where('round', '==', 'prelims')
@@ -145,20 +166,58 @@ export async function getJuryDashboardData() {
       .get();
 
     const scoreMap = new Map<string, { isFrozen: boolean; totalScore: number }>();
-    scoresSnap.docs.forEach(doc => {
+
+    const processEvalDoc = (doc: any) => {
       const data = doc.data();
-      if (data.teamId) {
-        scoreMap.set(data.teamId.trim(), {
+      const matchJury = data.juryId === session.juryId || 
+                        data.juryId === session.email || 
+                        (data.juryName && data.juryName.toLowerCase() === session.juryName.toLowerCase());
+      if (matchJury && data.teamId) {
+        const cleanTeamId = data.teamId.trim();
+        scoreMap.set(cleanTeamId, {
           isFrozen: data.isFrozen === true,
           totalScore: typeof data.totalScore === 'number' ? data.totalScore : 0
         });
       }
-    });
+    };
 
-    // 3. Map teams list
+    prelimsSnap.docs.forEach(processEvalDoc);
+    juryEvalSnap.docs.forEach(processEvalDoc);
+
+    // 3. Check Phase 3 (Prelims Round) timeline status
+    let prelimsActive = false;
+    let prelimsState: 'not-set' | 'active' | 'ended' = 'not-set';
+    try {
+      const timelinesDoc = await db.collection('metadata').doc('eventTimelines').get();
+      if (timelinesDoc.exists) {
+        const t3 = timelinesDoc.data()?.timeline3;
+        if (t3) {
+          prelimsState = t3.state || 'not-set';
+          prelimsActive = t3.state === 'active' && t3.enabled !== false;
+        }
+      }
+    } catch (err) {
+      console.error('Error checking timeline status:', err);
+    }
+
+    // 4. Map teams list with assignment tracking
     const teams: SimpleTeam[] = teamDocs.map(doc => {
       const cleanId = doc.id.trim();
       const scoreInfo = scoreMap.get(cleanId);
+
+      const judgeVal = doc.judge || 'Unassigned';
+      const labNoVal = doc.labNo || doc.assignedLabName || 'Unassigned';
+
+      const isAssignedToJury = 
+        (judgeVal !== 'Unassigned' && (
+          judgeVal.toLowerCase() === session.juryName.toLowerCase() ||
+          judgeVal.toLowerCase() === session.email.toLowerCase() ||
+          judgeVal.toLowerCase() === session.juryId.toLowerCase()
+        )) ||
+        (labNoVal !== 'Unassigned' && session.labName !== 'N/A' && (
+          labNoVal.toLowerCase() === session.labName.toLowerCase()
+        )) ||
+        (doc.assignedLabId && session.assignedLabId && doc.assignedLabId === session.assignedLabId);
 
       return {
         id: doc.id,
@@ -166,16 +225,25 @@ export async function getJuryDashboardData() {
         displayId: doc.displayId || doc.id,
         evaluationStatus: scoreInfo !== undefined ? 'Evaluated' : 'Pending',
         isFrozen: scoreInfo ? scoreInfo.isFrozen : false,
-        totalScore: scoreInfo ? scoreInfo.totalScore : undefined
+        totalScore: scoreInfo ? scoreInfo.totalScore : undefined,
+        judge: judgeVal,
+        labNo: labNoVal,
+        isAssignedToJury: !!isAssignedToJury
       };
     });
 
-    // Sort teams by team name or displayId
-    teams.sort((a, b) => a.teamName.localeCompare(b.teamName));
+    // Sort: teams assigned to this jury come first, then alphabetically by team name
+    teams.sort((a, b) => {
+      if (a.isAssignedToJury && !b.isAssignedToJury) return -1;
+      if (!a.isAssignedToJury && b.isAssignedToJury) return 1;
+      return a.teamName.localeCompare(b.teamName);
+    });
 
     return { 
       success: true, 
-      teams 
+      teams,
+      prelimsActive,
+      prelimsState
     };
 
   } catch (error: any) {
@@ -215,6 +283,22 @@ export async function getTeamDetails(teamId: string) {
       membersData
     };
 
+    // Fetch existing evaluation in both prelimsEvaluations and juryEvaluations
+    const docId = `${session.juryId}_${cleanTeamId}`;
+    let evalDoc = await db.collection('prelimsEvaluations').doc(docId).get();
+    if (!evalDoc.exists) {
+      evalDoc = await db.collection('juryEvaluations').doc(docId).get();
+    }
+    if (!evalDoc.exists) {
+      const searchSnap = await db.collection('prelimsEvaluations')
+        .where('teamId', '==', cleanTeamId)
+        .where('juryId', '==', session.juryId)
+        .limit(1)
+        .get();
+      if (!searchSnap.empty) {
+        evalDoc = searchSnap.docs[0];
+      }
+    }
     // Fetch existing evaluation in the new table evaluations
     const docId = `prelims_${session.juryId}_${cleanTeamId}`;
     const existingDoc = await db.collection('evaluations').doc(docId).get();
@@ -230,13 +314,13 @@ export async function getTeamDetails(teamId: string) {
         juryId: scoreDoc.juryId || session.juryId,
         juryName: scoreDoc.juryName || session.juryName,
         rubric: {
-          conceptStrength: r.conceptStrength ?? 0,
-          buildIntelligence: r.buildIntelligence ?? 0,
-          deliveryImpact: r.deliveryImpact ?? 0,
-          liveDefenseScore: r.liveDefenseScore ?? 0,
+          conceptStrength: r.conceptStrength ?? (r.problemStatement ? Math.round((r.problemStatement / 10) * 12) : 0),
+          buildIntelligence: r.buildIntelligence ?? (r.solution ? Math.round((r.solution / 10) * 12) : 0),
+          deliveryImpact: r.deliveryImpact ?? (r.presentation ? Math.round((r.presentation / 10) * 8) : 0),
+          liveDefenseScore: r.liveDefenseScore ?? (r.idea ? Math.round((r.idea / 10) * 8) : 0),
           communication: r.communication ?? 0,
         },
-        feedback: scoreDoc.feedback ?? '',
+        feedback: scoreDoc.feedback || scoreDoc.remarks || '',
         totalScore: scoreDoc.totalScore ?? 0,
         isFrozen: scoreDoc.isFrozen === true,
         createdAt: scoreDoc.createdAt ? (scoreDoc.createdAt.toDate ? scoreDoc.createdAt.toDate().toISOString() : scoreDoc.createdAt) : undefined,
@@ -271,6 +355,30 @@ export async function submitAndFreezeEvaluation(
   const docId = `prelims_${session.juryId}_${cleanTeamId}`;
   const db = getAdminDb();
 
+  // Check Phase 3 (Prelims Round) timeline status
+  let prelimsActive = false;
+  try {
+    const timelinesDoc = await db.collection('metadata').doc('eventTimelines').get();
+    if (timelinesDoc.exists) {
+      const t3 = timelinesDoc.data()?.timeline3;
+      prelimsActive = t3?.state === 'active' && t3?.enabled !== false;
+    }
+  } catch (err) {
+    console.error('Error checking timeline status:', err);
+  }
+
+  if (!prelimsActive) {
+    return { success: false, error: 'Cannot submit evaluation: Phase 3 (Prelims Round) has not been activated by the admin.' };
+  }
+
+  // Check if already frozen in either collection
+  const [existingPrelims, existingJury] = await Promise.all([
+    db.collection('prelimsEvaluations').doc(docId).get(),
+    db.collection('juryEvaluations').doc(docId).get()
+  ]);
+
+  if ((existingPrelims.exists && existingPrelims.data()?.isFrozen === true) ||
+      (existingJury.exists && existingJury.data()?.isFrozen === true)) {
   // Check if already frozen
   const existingDoc = await db.collection('evaluations').doc(docId).get();
   if (existingDoc.exists && existingDoc.data()?.isFrozen === true) {
@@ -306,7 +414,9 @@ export async function submitAndFreezeEvaluation(
     }
 
     const now = new Date();
+    const createdTime = existingPrelims.exists ? (existingPrelims.data()?.createdAt || now) : (existingJury.exists ? (existingJury.data()?.createdAt || now) : now);
     
+    const evaluationPayload = {
     // Save to the new evaluations table, freeze is ALWAYS true for freeze/submit action
     await db.collection('evaluations').doc(docId).set({
       round: 'prelims',
@@ -320,14 +430,42 @@ export async function submitAndFreezeEvaluation(
         buildIntelligence: rubric.buildIntelligence,
         deliveryImpact: rubric.deliveryImpact,
         liveDefenseScore: rubric.liveDefenseScore,
-        communication: rubric.communication
+        communication: rubric.communication,
+        // Mapped admin rubric fields for seamless admin UI integration
+        problemStatement: Math.round((rubric.conceptStrength / 12) * 10),
+        presentation: Math.round((rubric.deliveryImpact / 8) * 10),
+        solution: Math.round((rubric.buildIntelligence / 12) * 10),
+        idea: Math.round((rubric.liveDefenseScore / 8) * 10),
       },
       totalScore: totalScore,
       feedback: feedback.trim(),
+      remarks: feedback.trim(),
       isFrozen: true,
-      createdAt: existingDoc.exists ? (existingDoc.data()?.createdAt || now) : now,
+      createdAt: createdTime,
       updatedAt: now
-    }, { merge: true });
+    };
+
+    // Save to BOTH prelimsEvaluations AND juryEvaluations
+    await Promise.all([
+      db.collection('prelimsEvaluations').doc(docId).set(evaluationPayload, { merge: true }),
+      db.collection('juryEvaluations').doc(docId).set(evaluationPayload, { merge: true })
+    ]);
+
+    // Update team document's judge and labNo if unassigned
+    const teamData = teamDoc.data() || {};
+    const teamUpdates: Record<string, any> = {};
+    if (!teamData.judge || teamData.judge === 'Unassigned') {
+      teamUpdates.judge = session.juryName;
+    }
+    if (!teamData.labNo || teamData.labNo === 'Unassigned') {
+      if (session.labName && session.labName !== 'N/A') {
+        teamUpdates.labNo = session.labName;
+        teamUpdates.assignedLabName = session.labName;
+      }
+    }
+    if (Object.keys(teamUpdates).length > 0) {
+      await teamDoc.ref.update(teamUpdates);
+    }
 
     return { success: true };
 
@@ -336,3 +474,4 @@ export async function submitAndFreezeEvaluation(
     return { success: false, error: error.message || 'Failed to save evaluation' };
   }
 }
+
