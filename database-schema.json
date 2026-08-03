@@ -4,7 +4,15 @@
       "description": "Stores information about registered hackathon teams and their members. Team name acts as the unique identifier.",
       "documentId": "teamName (lowercase, trimmed)",
       "fields": {
+        "teamDisplayId": {
+          "type": "string",
+          "encrypted": false
+        },
         "teamName": {
+          "type": "string",
+          "encrypted": false
+        },
+        "venue": {
           "type": "string",
           "encrypted": false
         },
@@ -57,7 +65,7 @@
         "role": {
           "type": "string",
           "encrypted": false,
-          "description": "'admin', 'jury', 'student-coord', or 'faculty-coord'"
+          "description": "'admin', 'jury', or 'coordinator' (legacy 'student-coord' and 'faculty-coord' supported)"
         },
         "name": {
           "type": "string",
@@ -231,25 +239,5 @@
         }
       }
     },
-    "studentCoords": {
-      "description": "Student coordinators",
-      "documentId": "Auto-generated ID",
-      "fields": {
-        "email": {
-          "type": "string",
-          "encrypted": false
-        }
-      }
-    },
-    "facultyCoords": {
-      "description": "Faculty coordinators",
-      "documentId": "Auto-generated ID",
-      "fields": {
-        "email": {
-          "type": "string",
-          "encrypted": false
-        }
-      }
-    }
   }
 }

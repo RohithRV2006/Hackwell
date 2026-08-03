@@ -119,57 +119,9 @@ export async function createJuryUser(
 }
 
 /**
- * Create a Student Coordinator login.
+ * Create a Coordinator login.
  */
-export async function createStudentCoordUser(
-  name: string,
-  email: string,
-  password: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const valid = await verifyAdminSession();
-    if (!valid) return { success: false, error: 'Unauthorized' };
-
-    if (!name?.trim() || !email?.trim() || !password?.trim()) {
-      return { success: false, error: 'All fields (name, email, password) are required.' };
-    }
-
-    const db = getAdminDb();
-    const auth = getAdminAuth();
-
-    const roleDocRef = db.collection('roles').doc(email.toLowerCase().trim());
-    const roleDocSnap = await roleDocRef.get();
-    if (roleDocSnap.exists) {
-      return { success: false, error: `A user with email "${email}" already exists.` };
-    }
-
-    try {
-      await auth.createUser({ email: email.trim(), password });
-    } catch (authErr: any) {
-      if (authErr.code !== 'auth/email-already-exists') throw authErr;
-    }
-
-    const now = new Date();
-    const encryptedCreds = encryptJSON({ password });
-
-    await roleDocRef.set({
-      role: 'student-coord',
-      name: name.trim(),
-      encryptedCreds,
-      createdAt: now,
-    });
-
-    return { success: true };
-  } catch (error: any) {
-    console.error('Error creating student coordinator:', error);
-    return { success: false, error: error.message || 'Failed to create student coordinator' };
-  }
-}
-
-/**
- * Create a Faculty Coordinator login.
- */
-export async function createFacultyCoordUser(
+export async function createCoordinatorUser(
   name: string,
   department: string,
   email: string,
@@ -179,8 +131,8 @@ export async function createFacultyCoordUser(
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
 
-    if (!name?.trim() || !department?.trim() || !email?.trim() || !password?.trim()) {
-      return { success: false, error: 'All fields (name, department, email, password) are required.' };
+    if (!name?.trim() || !email?.trim() || !password?.trim()) {
+      return { success: false, error: 'Name, email, and password are required.' };
     }
 
     const db = getAdminDb();
@@ -202,17 +154,17 @@ export async function createFacultyCoordUser(
     const encryptedCreds = encryptJSON({ password });
 
     await roleDocRef.set({
-      role: 'faculty-coord',
+      role: 'coordinator',
       name: name.trim(),
-      department: department.trim(),
+      department: department?.trim() || '',
       encryptedCreds,
       createdAt: now,
     });
 
     return { success: true };
   } catch (error: any) {
-    console.error('Error creating faculty coordinator:', error);
-    return { success: false, error: error.message || 'Failed to create faculty coordinator' };
+    console.error('Error creating coordinator:', error);
+    return { success: false, error: error.message || 'Failed to create coordinator' };
   }
 }
 
