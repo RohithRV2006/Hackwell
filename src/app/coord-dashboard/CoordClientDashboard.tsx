@@ -2,32 +2,13 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import LogoutButton from '@/components/LogoutButton';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { Search, Filter, X } from 'lucide-react';
 
-export default function CoordClientDashboard({ coordName, coordEmail }: { coordName: string; coordEmail: string }) {
-  const [teams, setTeams] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+export default function CoordClientDashboard({ coordName, coordEmail, initialTeams }: { coordName: string; coordEmail: string; initialTeams: any[] }) {
+  const [teams, setTeams] = useState<any[]>(initialTeams);
   const [searchTerm, setSearchTerm] = useState('');
   const [venueFilter, setVenueFilter] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<any | null>(null);
-
-  useEffect(() => {
-    async function fetchTeams() {
-      try {
-        const teamsSnapshot = await getDocs(collection(db, 'teams'));
-        const teamsData = teamsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setTeams(teamsData);
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch teams');
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchTeams();
-  }, []);
 
   const venues = useMemo(() => {
     const vSet = new Set<string>();
@@ -65,13 +46,7 @@ export default function CoordClientDashboard({ coordName, coordEmail }: { coordN
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-            {error}
-          </div>
-        )}
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
           <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row gap-4 justify-between bg-gray-50">
@@ -124,11 +99,7 @@ export default function CoordClientDashboard({ coordName, coordEmail }: { coordN
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {loading ? (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-4 text-center text-gray-500">Loading teams...</td>
-                  </tr>
-                ) : filteredTeams.length === 0 ? (
+                {filteredTeams.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-6 py-4 text-center text-gray-500">No teams found.</td>
                   </tr>

@@ -1,23 +1,15 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/firebase-admin';
-import * as crypto from 'crypto';
-
-const ALGORITHM = 'aes-256-gcm';
-const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY || '', 'hex');
-
-function encryptJSON(data: any) {
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
-  const jsonStr = JSON.stringify(data);
-  let encrypted = cipher.update(jsonStr, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag().toString('hex');
-  return `${iv.toString('hex')}:${encrypted}:${authTag}`;
-}
+import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
+import { verifyAdminSession } from '@/app/admin/actions';
 
 export async function GET() {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
   const db = getAdminDb();
-  const collections = ['teams', 'jury', 'studentCoords', 'facultyCoords', 'prelimsEvaluations', 'finaleEvaluations', 'gameScores', 'roles', 'metadata'];
+  const collections = ['teams', 'evaluations', 'gameScores', 'roles', 'metadata'];
   
   let deletedCount = 0;
   for (const collectionName of collections) {
@@ -45,11 +37,17 @@ export async function GET() {
     { email: 'nidthishselvam@gmail.com', pass: 'Nidthish@123' }
   ];
   
+  const auth = getAdminAuth();
   for (const adminUser of admins) {
-    const encryptedCreds = encryptJSON({ password: adminUser.pass });
+    try {
+      const userRecord = await auth.getUserByEmail(adminUser.email);
+      await auth.setCustomUserClaims(userRecord.uid, { role: 'admin' });
+    } catch (e: any) {
+      console.warn(`Could not set claim for admin ${adminUser.email}:`, e.message);
+    }
+
     await db.collection('roles').doc(adminUser.email).set({
       role: 'admin',
-      encryptedCreds: encryptedCreds,
       createdAt: new Date()
     });
   }

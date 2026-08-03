@@ -34,6 +34,8 @@ export async function verifyAdminSession() {
     const decodedToken = await getAdminAuth().verifySessionCookie(sessionCookie, true);
     if (!decodedToken.email) return false;
     
+    if (decodedToken.role === 'admin') return true;
+    
     const role = await getUserRole(decodedToken.email);
     return role === 'admin';
   } catch (error) {
@@ -87,8 +89,8 @@ export async function getAdminOverviewStats() {
       db.collection('teams').count().get(),
       db.collection('roles').count().get(),
       db.collection('roles').where('role', '==', 'jury').count().get(),
-      db.collection('prelimsEvaluations').count().get(),
-      db.collection('finaleEvaluations').count().get()
+      db.collection('evaluations').where('round', '==', 'prelims').count().get(),
+      db.collection('evaluations').where('round', '==', 'finale').count().get()
     ]);
     
     return {
@@ -297,8 +299,28 @@ export async function updateTeamAdmin(
       payload.allBatchNumbers = Array.from(batchSet);
     }
 
-    await docRef.update(payload);
-    await syncLabTeamCountsAdmin(db);
+    const oldLabId = currentData.assignedLabId;
+    const newLabId = payload.assignedLabId;
+
+    const batch = db.batch();
+    batch.update(docRef, payload);
+
+    if (newLabId !== oldLabId) {
+      if (oldLabId) {
+        batch.update(db.collection('labs').doc(oldLabId), {
+          currentTeamCount: FieldValue.increment(-1),
+          updatedAt: new Date()
+        });
+      }
+      if (newLabId) {
+        batch.update(db.collection('labs').doc(newLabId), {
+          currentTeamCount: FieldValue.increment(1),
+          updatedAt: new Date()
+        });
+      }
+    }
+
+    await batch.commit();
     return { success: true };
   } catch (error: any) {
     console.error('Error updating team:', error);
@@ -314,8 +336,21 @@ export async function deleteTeamAdmin(teamId: string) {
 
   try {
     const db = getAdminDb();
-    await db.collection('teams').doc(teamId).delete();
-    await syncLabTeamCountsAdmin(db);
+    const docRef = db.collection('teams').doc(teamId);
+    const snap = await docRef.get();
+    
+    if (snap.exists) {
+      const labId = snap.data()?.assignedLabId;
+      const batch = db.batch();
+      batch.delete(docRef);
+      if (labId) {
+        batch.update(db.collection('labs').doc(labId), {
+          currentTeamCount: FieldValue.increment(-1),
+          updatedAt: new Date()
+        });
+      }
+      await batch.commit();
+    }
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting team:', error);
@@ -353,7 +388,7 @@ export interface AdminScoreData {
   updatedAt?: string;
 }
 
-export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations' | 'finaleEvaluations') {
+export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) {
     return { success: false, error: 'Unauthorized', scores: [] };
@@ -361,7 +396,7 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
 
   try {
     const db = getAdminDb();
-    const snapshot = await db.collection(collectionName).orderBy('createdAt', 'desc').get();
+    const snapshot = await db.collection('evaluations').where('round', '==', round).orderBy('createdAt', 'desc').get();
     
     // Fetch teams to map names and problem statements
     const teamsSnap = await db.collection('teams').get();
@@ -482,7 +517,7 @@ export async function createScoreAdmin(scoreData: {
 
   try {
     const db = getAdminDb();
-    const scoresRef = db.collection('prelimsEvaluations');
+    const scoresRef = db.collection('evaluations');
 
     // Ensure team exists
     const teamDoc = await db.collection('teams').doc(scoreData.teamId).get();
@@ -500,8 +535,10 @@ export async function createScoreAdmin(scoreData: {
     const totalScore = Number(innovation) + Number(technicalFeasibility) + Number(impact) + Number(presentation);
     const now = new Date();
 
-    const newDoc = scoresRef.doc();
+    const newDocId = `prelims_${scoreData.juryId}_${scoreData.teamId}`;
+    const newDoc = scoresRef.doc(newDocId);
     await newDoc.set({
+      round: 'prelims',
       teamId: scoreData.teamId,
       juryId: scoreData.juryId,
       rubric: {
@@ -541,7 +578,7 @@ export async function updateScoreAdmin(
 
   try {
     const db = getAdminDb();
-    const docRef = db.collection('prelimsEvaluations').doc(scoreId);
+    const docRef = db.collection('evaluations').doc(scoreId);
     const docSnap = await docRef.get();
 
     if (!docSnap.exists) {
@@ -589,7 +626,7 @@ export async function deleteScoreAdmin(scoreId: string) {
 
   try {
     const db = getAdminDb();
-    await db.collection('prelimsEvaluations').doc(scoreId).delete();
+    await db.collection('evaluations').doc(scoreId).delete();
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting score:', error);
@@ -606,8 +643,8 @@ export async function publishPrelimsResults() {
   try {
     const db = getAdminDb();
     
-    // 1. Fetch all prelimsEvaluations
-    const evalsSnap = await db.collection('prelimsEvaluations').get();
+    // 1. Fetch all prelims evaluations
+    const evalsSnap = await db.collection('evaluations').where('round', '==', 'prelims').get();
     
     // Group evaluations by teamId
     const teamScores: Record<string, number[]> = {};
@@ -713,8 +750,8 @@ export async function getEventManagementDashboardDataAdmin() {
     const [resTime, resTeams, resPrelims, resFinale, resLabs, resJuries] = await Promise.all([
       getEventTimelinesAdmin(),
       getAllTeamsAdmin(),
-      getAllEvaluationsAdmin('prelimsEvaluations'),
-      getAllEvaluationsAdmin('finaleEvaluations'),
+      getAllEvaluationsAdmin('prelims'),
+      getAllEvaluationsAdmin('finale'),
       getLabsAdmin(),
       getJuriesAdmin(),
     ]);
@@ -882,8 +919,8 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
     const db = getAdminDb();
     const [teamsSnap, prelimsSnap, finaleSnap, jurySnap, labsSnap] = await Promise.all([
       db.collection('teams').get(),
-      db.collection('prelimsEvaluations').get(),
-      db.collection('finaleEvaluations').get(),
+      db.collection('evaluations').where('round', '==', 'prelims').get(),
+      db.collection('evaluations').where('round', '==', 'finale').get(),
       db.collection('jury').get(),
       db.collection('labs').get(),
     ]);

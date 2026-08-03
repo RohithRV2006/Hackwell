@@ -2,7 +2,6 @@
 
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyAdminSession } from '@/app/admin/actions';
-import { encryptJSON, decryptJSON } from '@/lib/encryption';
 
 export interface AdminUser {
   email: string;
@@ -93,21 +92,24 @@ export async function createJuryUser(
     }
 
     // Create Firebase Auth user
+    let uid = '';
     try {
-      await auth.createUser({ email: email.trim(), password });
+      const userRecord = await auth.createUser({ email: email.trim(), password });
+      uid = userRecord.uid;
     } catch (authErr: any) {
       if (authErr.code !== 'auth/email-already-exists') throw authErr;
+      const existingUser = await auth.getUserByEmail(email.trim());
+      uid = existingUser.uid;
     }
+    await auth.setCustomUserClaims(uid, { role: 'jury' });
 
     const now = new Date();
-    const encryptedCreds = encryptJSON({ password });
 
     // Write to roles collection
     await roleDocRef.set({
       role: 'jury',
       name: name.trim(),
       institution: institution.trim(),
-      encryptedCreds,
       createdAt: now,
     });
 
@@ -144,20 +146,23 @@ export async function createCoordinatorUser(
       return { success: false, error: `A user with email "${email}" already exists.` };
     }
 
+    let uid = '';
     try {
-      await auth.createUser({ email: email.trim(), password });
+      const userRecord = await auth.createUser({ email: email.trim(), password });
+      uid = userRecord.uid;
     } catch (authErr: any) {
       if (authErr.code !== 'auth/email-already-exists') throw authErr;
+      const existingUser = await auth.getUserByEmail(email.trim());
+      uid = existingUser.uid;
     }
+    await auth.setCustomUserClaims(uid, { role: 'coordinator' });
 
     const now = new Date();
-    const encryptedCreds = encryptJSON({ password });
 
     await roleDocRef.set({
       role: 'coordinator',
       name: name.trim(),
       department: department?.trim() || '',
-      encryptedCreds,
       createdAt: now,
     });
 
@@ -189,14 +194,18 @@ export async function createUserAdmin(
       return { success: false, error: 'User already exists in roles database' };
     }
 
+    let uid = '';
     try {
-      await auth.createUser({ email, password });
+      const userRecord = await auth.createUser({ email, password });
+      uid = userRecord.uid;
     } catch (authErr: any) {
       if (authErr.code !== 'auth/email-already-exists') throw authErr;
+      const existingUser = await auth.getUserByEmail(email);
+      uid = existingUser.uid;
     }
+    await auth.setCustomUserClaims(uid, { role });
 
-    const encryptedCreds = encryptJSON({ password });
-    await docRef.set({ role, encryptedCreds, createdAt: new Date() });
+    await docRef.set({ role, createdAt: new Date() });
 
     return { success: true };
   } catch (error: any) {
@@ -222,12 +231,8 @@ export async function deleteUserAdmin(email: string): Promise<{ success: boolean
 
     // 2. Delete from specific collections based on role
     if (role === 'jury') {
-      const jurySnap = await db.collection('jury').where('email', '==', email.toLowerCase()).get();
-      const juryName = roleDoc.data()?.name || jurySnap.docs[0]?.data()?.juryName || '';
+      const juryName = roleDoc.data()?.name || '';
       
-      const deletions = jurySnap.docs.map(doc => doc.ref.delete());
-      await Promise.all(deletions);
-
       // Unassign deleted Jury from labs
       if (juryName) {
         const labsSnap = await db.collection('labs').get();
@@ -243,19 +248,6 @@ export async function deleteUserAdmin(email: string): Promise<{ success: boolean
           await labBatch.commit();
         }
       }
-    } else if (role === 'student-coord') {
-      const coordSnap = await db.collection('studentCoords').where('email', '==', email.toLowerCase()).get();
-      const deletions = coordSnap.docs.map(doc => doc.ref.delete());
-      await Promise.all(deletions);
-    } else if (role === 'faculty-coord') {
-      const coordSnap = await db.collection('facultyCoords').where('email', '==', email.toLowerCase()).get();
-      const deletions = coordSnap.docs.map(doc => doc.ref.delete());
-      await Promise.all(deletions);
-    } else if (role === 'coordinator') {
-      // Legacy coordinators
-      const coordSnap = await db.collection('coordinators').where('email', '==', email.toLowerCase()).get();
-      const deletions = coordSnap.docs.map(doc => doc.ref.delete());
-      await Promise.all(deletions);
     }
 
     // 3. Delete from Firebase Auth

@@ -53,7 +53,7 @@ export default function AdminPrelimsScoresPage() {
     setErrorMsg('');
 
     const [resScores, resTeams, resLabs, resJuries] = await Promise.all([
-      getAllEvaluationsAdmin('prelimsEvaluations'),
+      getAllEvaluationsAdmin('prelims'),
       getAllTeamsAdmin(),
       getLabsAdmin(),
       getJuriesAdmin(),

@@ -2,9 +2,9 @@
   "collections": {
     "teams": {
       "description": "Stores information about registered hackathon teams and their members. Team name acts as the unique identifier.",
-      "documentId": "teamName (lowercase, trimmed)",
+      "documentId": "Auto-generated ID",
       "fields": {
-        "teamDisplayId": {
+        "displayId": {
           "type": "string",
           "encrypted": false
         },
@@ -12,7 +12,15 @@
           "type": "string",
           "encrypted": false
         },
-        "venue": {
+        "teamNameLower": {
+          "type": "string",
+          "encrypted": false
+        },
+        "theme": {
+          "type": "string",
+          "encrypted": false
+        },
+        "psId": {
           "type": "string",
           "encrypted": false
         },
@@ -30,6 +38,62 @@
         },
         "membersData": {
           "type": "array",
+          "encrypted": false
+        },
+        "allBatchNumbers": {
+          "type": "array",
+          "encrypted": false
+        },
+        "pptLink": {
+          "type": "string",
+          "encrypted": false
+        },
+        "pptDriveFileId": {
+          "type": "string",
+          "encrypted": false
+        },
+        "venue": {
+          "type": "string",
+          "encrypted": false
+        },
+        "score": {
+          "type": "number",
+          "encrypted": false
+        },
+        "judge": {
+          "type": "string",
+          "encrypted": false
+        },
+        "labNo": {
+          "type": "string",
+          "encrypted": false
+        },
+        "feedback": {
+          "type": "string",
+          "encrypted": false
+        },
+        "assignedLabId": {
+          "type": "string",
+          "encrypted": false
+        },
+        "assignedLabName": {
+          "type": "string",
+          "encrypted": false
+        },
+        "finaleQualified": {
+          "type": "boolean",
+          "encrypted": false
+        },
+        "isWinner": {
+          "type": "boolean",
+          "encrypted": false
+        },
+        "winnerRank": {
+          "type": "number",
+          "encrypted": false
+        },
+        "winnerTitle": {
+          "type": "string",
           "encrypted": false
         },
         "totalGameXP": {
@@ -53,6 +117,10 @@
           "description": "Average of all finaleEvaluations"
         },
         "createdAt": {
+          "type": "timestamp",
+          "encrypted": false
+        },
+        "updatedAt": {
           "type": "timestamp",
           "encrypted": false
         }
@@ -82,26 +150,21 @@
           "encrypted": false,
           "description": "Optional: User's institution"
         },
-        "encryptedCreds": {
-          "type": "string",
-          "encrypted": true,
-          "description": "Symmetrically encrypted original password for admin recovery"
-        },
-        "scoresFrozen": {
-          "type": "boolean",
-          "encrypted": false,
-          "description": "Used by juries to indicate their scores are finalized"
-        },
         "createdAt": {
           "type": "timestamp",
           "encrypted": false
         }
       }
     },
-    "prelimsEvaluations": {
-      "description": "Prelims scoring submitted by Juries. Multiple juries can evaluate the same team.",
-      "documentId": "Auto-generated ID",
+    "evaluations": {
+      "description": "Unified scoring submitted by Juries across all rounds.",
+      "documentId": "Auto-generated ID or format: {round}_{juryId}_{teamId}",
       "fields": {
+        "round": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Identifier for the evaluation phase (e.g., 'prelims', 'finale')"
+        },
         "teamId": {
           "type": "string",
           "encrypted": false
@@ -113,13 +176,17 @@
         },
         "rubric": {
           "type": "object",
-          "description": "{ innovation, technicalFeasibility, impact, presentation }"
+          "description": "Varies by round. Example: { innovation, technicalFeasibility, impact, presentation }"
         },
         "totalScore": {
           "type": "number",
           "encrypted": false
         },
         "remarks": {
+          "type": "string",
+          "encrypted": false
+        },
+        "feedback": {
           "type": "string",
           "encrypted": false
         },
@@ -141,49 +208,7 @@
         }
       }
     },
-    "finaleEvaluations": {
-      "description": "Finale scoring submitted by Juries. Very similar to prelimsEvaluations.",
-      "documentId": "Auto-generated ID",
-      "fields": {
-        "teamId": {
-          "type": "string",
-          "encrypted": false
-        },
-        "juryId": {
-          "type": "string",
-          "encrypted": false,
-          "description": "Stores the jury's email address"
-        },
-        "rubric": {
-          "type": "object",
-          "description": "{ innovation, technicalFeasibility, impact, presentation }"
-        },
-        "totalScore": {
-          "type": "number",
-          "encrypted": false
-        },
-        "remarks": {
-          "type": "string",
-          "encrypted": false
-        },
-        "highlighted": {
-          "type": "boolean",
-          "encrypted": false
-        },
-        "isFrozen": {
-          "type": "boolean",
-          "encrypted": false
-        },
-        "createdAt": {
-          "type": "timestamp",
-          "encrypted": false
-        },
-        "updatedAt": {
-          "type": "timestamp",
-          "encrypted": false
-        }
-      }
-    },
+
     "gameScores": {
       "description": "Game XP assigned by student coordinators during the event.",
       "documentId": "Auto-generated ID",
@@ -201,7 +226,7 @@
           "type": "string",
           "encrypted": false
         },
-        "xpPoints": {
+        "xpAwarded": {
           "type": "number",
           "encrypted": false
         },
@@ -211,26 +236,41 @@
         }
       }
     },
-    "jury": {
-      "description": "Jury users mapping",
-      "documentId": "Auto-generated ID",
-      "fields": {
-        "email": {
-          "type": "string",
-          "encrypted": false
-        },
-        "juryName": {
-          "type": "string",
-          "encrypted": false
-        }
-      }
-    },
+
     "labs": {
       "description": "Lab assignments",
       "documentId": "Auto-generated ID",
       "fields": {
+        "labId": {
+          "type": "string",
+          "encrypted": false
+        },
+        "labName": {
+          "type": "string",
+          "encrypted": false
+        },
+        "labCode": {
+          "type": "string",
+          "encrypted": false
+        },
+        "capacity": {
+          "type": "number",
+          "encrypted": false
+        },
+        "assignedJuryId": {
+          "type": "string",
+          "encrypted": false
+        },
         "assignedJuryName": {
           "type": "string",
+          "encrypted": false
+        },
+        "currentTeamCount": {
+          "type": "number",
+          "encrypted": false
+        },
+        "createdAt": {
+          "type": "timestamp",
           "encrypted": false
         },
         "updatedAt": {
@@ -239,5 +279,46 @@
         }
       }
     },
+    "metadata": {
+      "description": "Global metadata and counters.",
+      "documentId": "teamCounter | eventTimelines | eventWinners",
+      "fields": {
+        "count": {
+          "type": "number",
+          "encrypted": false,
+          "description": "For teamCounter"
+        },
+        "timeline1": {
+          "type": "object",
+          "encrypted": false,
+          "description": "{ name, state, enabled, startDate, endDate } for eventTimelines"
+        },
+        "timeline2": {
+          "type": "object",
+          "encrypted": false,
+          "description": "{ name, state, enabled, startDate, endDate, pptFilterApplied } for eventTimelines"
+        },
+        "timeline3": {
+          "type": "object",
+          "encrypted": false,
+          "description": "{ name, state, enabled, startDate, endDate, topTeamsToFinal, finalistsPromoted } for eventTimelines"
+        },
+        "timeline4": {
+          "type": "object",
+          "encrypted": false,
+          "description": "{ name, state, enabled, startDate, endDate, winnerCount } for eventTimelines"
+        },
+        "published": {
+          "type": "boolean",
+          "encrypted": false,
+          "description": "For eventWinners"
+        },
+        "publishedAt": {
+          "type": "timestamp",
+          "encrypted": false,
+          "description": "For eventWinners"
+        }
+      }
+    }
   }
 }

@@ -42,7 +42,35 @@ export default async function CoordDashboard() {
     console.error('Error fetching coord details', err);
   }
 
+  let teams: any[] = [];
+  try {
+    const teamsSnap = await getAdminDb().collection('teams').get();
+    
+    const serializeData = (obj: any): any => {
+      if (obj === null || obj === undefined) return obj;
+      if (typeof obj.toDate === 'function') return obj.toDate().toISOString();
+      if (Array.isArray(obj)) return obj.map(serializeData);
+      if (typeof obj === 'object') {
+        const result: any = {};
+        for (const key in obj) {
+          result[key] = serializeData(obj[key]);
+        }
+        return result;
+      }
+      return obj;
+    };
+
+    teamsSnap.docs.forEach(doc => {
+      teams.push({
+        id: doc.id,
+        ...serializeData(doc.data())
+      });
+    });
+  } catch (err) {
+    console.error('Error fetching teams', err);
+  }
+
   return (
-    <CoordClientDashboard coordName={coordName} coordEmail={email} />
+    <CoordClientDashboard coordName={coordName} coordEmail={email} initialTeams={teams} />
   );
 }
