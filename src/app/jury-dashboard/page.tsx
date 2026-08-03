@@ -533,8 +533,8 @@ export default function JuryDashboard() {
                       <button
                         type="button"
                         onClick={handleSubmitRequest}
-                        disabled={isSubmitting}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-bold transition text-sm"
+                        disabled={isSubmitting || !prelimsActive}
+                        className={`px-4 py-2 text-white rounded font-bold transition text-sm ${isSubmitting || !prelimsActive ? 'bg-red-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
                       >
                         Submit & Freeze
                       </button>

@@ -154,11 +154,6 @@ export async function getJuryDashboardData() {
 
     const teamDocs = teamsSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
 
-    // 2. Fetch score records in BOTH prelimsEvaluations and juryEvaluations tables
-    const [prelimsSnap, juryEvalSnap] = await Promise.all([
-      db.collection('prelimsEvaluations').get(),
-      db.collection('juryEvaluations').get()
-    ]);
     // 2. Fetch score records in the new evaluations table for this jury (prelims round)
     const scoresSnap = await db.collection('evaluations')
       .where('round', '==', 'prelims')
@@ -181,8 +176,7 @@ export async function getJuryDashboardData() {
       }
     };
 
-    prelimsSnap.docs.forEach(processEvalDoc);
-    juryEvalSnap.docs.forEach(processEvalDoc);
+    scoresSnap.docs.forEach(processEvalDoc);
 
     // 3. Check Phase 3 (Prelims Round) timeline status
     let prelimsActive = false;
@@ -232,16 +226,14 @@ export async function getJuryDashboardData() {
       };
     });
 
-    // Sort: teams assigned to this jury come first, then alphabetically by team name
-    teams.sort((a, b) => {
-      if (a.isAssignedToJury && !b.isAssignedToJury) return -1;
-      if (!a.isAssignedToJury && b.isAssignedToJury) return 1;
-      return a.teamName.localeCompare(b.teamName);
-    });
+    const assignedTeams = teams.filter(t => t.isAssignedToJury);
+
+    // Sort alphabetically by team name
+    assignedTeams.sort((a, b) => a.teamName.localeCompare(b.teamName));
 
     return { 
       success: true, 
-      teams,
+      teams: assignedTeams,
       prelimsActive,
       prelimsState
     };
@@ -283,22 +275,6 @@ export async function getTeamDetails(teamId: string) {
       membersData
     };
 
-    // Fetch existing evaluation in both prelimsEvaluations and juryEvaluations
-    const docId = `${session.juryId}_${cleanTeamId}`;
-    let evalDoc = await db.collection('prelimsEvaluations').doc(docId).get();
-    if (!evalDoc.exists) {
-      evalDoc = await db.collection('juryEvaluations').doc(docId).get();
-    }
-    if (!evalDoc.exists) {
-      const searchSnap = await db.collection('prelimsEvaluations')
-        .where('teamId', '==', cleanTeamId)
-        .where('juryId', '==', session.juryId)
-        .limit(1)
-        .get();
-      if (!searchSnap.empty) {
-        evalDoc = searchSnap.docs[0];
-      }
-    }
     // Fetch existing evaluation in the new table evaluations
     const docId = `prelims_${session.juryId}_${cleanTeamId}`;
     const existingDoc = await db.collection('evaluations').doc(docId).get();
@@ -371,14 +347,6 @@ export async function submitAndFreezeEvaluation(
     return { success: false, error: 'Cannot submit evaluation: Phase 3 (Prelims Round) has not been activated by the admin.' };
   }
 
-  // Check if already frozen in either collection
-  const [existingPrelims, existingJury] = await Promise.all([
-    db.collection('prelimsEvaluations').doc(docId).get(),
-    db.collection('juryEvaluations').doc(docId).get()
-  ]);
-
-  if ((existingPrelims.exists && existingPrelims.data()?.isFrozen === true) ||
-      (existingJury.exists && existingJury.data()?.isFrozen === true)) {
   // Check if already frozen
   const existingDoc = await db.collection('evaluations').doc(docId).get();
   if (existingDoc.exists && existingDoc.data()?.isFrozen === true) {
@@ -414,11 +382,9 @@ export async function submitAndFreezeEvaluation(
     }
 
     const now = new Date();
-    const createdTime = existingPrelims.exists ? (existingPrelims.data()?.createdAt || now) : (existingJury.exists ? (existingJury.data()?.createdAt || now) : now);
+    const createdTime = existingDoc.exists ? (existingDoc.data()?.createdAt || now) : now;
     
     const evaluationPayload = {
-    // Save to the new evaluations table, freeze is ALWAYS true for freeze/submit action
-    await db.collection('evaluations').doc(docId).set({
       round: 'prelims',
       teamName: teamName,
       displayId: displayId,
@@ -445,11 +411,7 @@ export async function submitAndFreezeEvaluation(
       updatedAt: now
     };
 
-    // Save to BOTH prelimsEvaluations AND juryEvaluations
-    await Promise.all([
-      db.collection('prelimsEvaluations').doc(docId).set(evaluationPayload, { merge: true }),
-      db.collection('juryEvaluations').doc(docId).set(evaluationPayload, { merge: true })
-    ]);
+    await db.collection('evaluations').doc(docId).set(evaluationPayload, { merge: true });
 
     // Update team document's judge and labNo if unassigned
     const teamData = teamDoc.data() || {};

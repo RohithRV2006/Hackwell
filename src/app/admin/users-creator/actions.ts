@@ -4,7 +4,6 @@ import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyAdminSession, getCachedDocs, invalidateCollectionCache } from '@/app/admin/actions';
 import { encryptJSON, decryptJSON } from '@/lib/encryption';
 import { isAdminEmail } from '@/app/actions/session';
-import { verifyAdminSession } from '@/app/admin/actions';
 
 export interface AdminUser {
   email: string;

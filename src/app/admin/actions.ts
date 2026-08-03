@@ -129,6 +129,7 @@ export async function getAdminOverviewStats() {
   }
   
   try {
+    const db = getAdminDb();
     const [teamsSnap, rolesSnap, jurySnap, prelimsSnap, finaleSnap] = await Promise.all([
       db.collection('teams').count().get(),
       db.collection('roles').count().get(),
@@ -140,11 +141,11 @@ export async function getAdminOverviewStats() {
     return {
       success: true,
       stats: {
-        totalTeams: teamsSnap?.size || 0,
-        totalRoles: rolesSnap?.size || 0,
-        totalJuries: jurySnap?.size || 0,
-        totalPrelims: prelimsSnap?.size || 0,
-        totalFinale: finaleSnap?.size || 0
+        totalTeams: teamsSnap?.data().count || 0,
+        totalRoles: rolesSnap?.data().count || 0,
+        totalJuries: jurySnap?.data().count || 0,
+        totalPrelims: prelimsSnap?.data().count || 0,
+        totalFinale: finaleSnap?.data().count || 0
       }
     };
   } catch (error: any) {
@@ -451,15 +452,14 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
   }
 
   try {
-    const [snapshot, teamsSnap, jurySnap, rolesSnap, juryEvalSnap] = await Promise.all([
-      getCachedDocs(collectionName),
-      getCachedDocs('teams'),
-      getCachedDocs('jury'),
-      getCachedDocs('roles'),
-      getCachedDocs('juryEvaluations'),
-    ]);
     const db = getAdminDb();
-    const snapshot = await db.collection('evaluations').where('round', '==', round).orderBy('createdAt', 'desc').get();
+    
+    // We fetch teams and roles for mapping names
+    const [snapshot, teamsSnap, rolesSnap] = await Promise.all([
+      db.collection('evaluations').where('round', '==', round).get(),
+      db.collection('teams').get(),
+      db.collection('roles').where('role', '==', 'jury').get(),
+    ]);
     
     const teamMap = new Map<string, { teamName: string; problemStatement: string }>();
     teamsSnap.docs?.forEach((doc: any) => {
@@ -471,30 +471,16 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
     });
 
     const juryMap = new Map<string, string>();
-    jurySnap.docs?.forEach((doc: any) => {
-      const data = doc.data();
-      juryMap.set(doc.id, data.juryName || data.name || doc.id);
-    });
     rolesSnap.docs?.forEach((doc: any) => {
       const data = doc.data();
-      if (data.role === 'jury') {
-        const name = data.name || data.juryName || doc.id;
-        juryMap.set(doc.id, name);
-        if (data.juryId) juryMap.set(data.juryId, name);
-      }
+      const name = data.name || doc.id;
+      juryMap.set(doc.id, name);
     });
 
     const docMap = new Map<string, any>();
     snapshot.docs?.forEach((doc: any) => {
       docMap.set(doc.id, doc);
     });
-    if (collectionName === 'prelimsEvaluations') {
-      juryEvalSnap.docs?.forEach((doc: any) => {
-        if (!docMap.has(doc.id)) {
-          docMap.set(doc.id, doc);
-        }
-      });
-    }
 
     const scores: AdminScoreData[] = [];
 
@@ -530,6 +516,8 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
         updatedAt: updatedAtStr,
       });
     }
+
+    scores.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
     return { success: true, scores };
   } catch (error: any) {
@@ -1001,11 +989,11 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
 
   try {
     const db = getAdminDb();
-    const [teamsSnap, prelimsSnap, finaleSnap, jurySnap, labsSnap] = await Promise.all([
+    const [teamsSnap, prelimsSnap, finaleSnap, rolesSnap, labsSnap] = await Promise.all([
       db.collection('teams').get(),
       db.collection('evaluations').where('round', '==', 'prelims').get(),
       db.collection('evaluations').where('round', '==', 'finale').get(),
-      db.collection('jury').get(),
+      db.collection('roles').where('role', '==', 'jury').get(),
       db.collection('labs').get(),
     ]);
 
@@ -1056,16 +1044,7 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
     });
 
     const combinedJuriesMap = new Map<string, { id: string; name: string; institution: string }>();
-    
-    jurySnap.docs?.forEach((doc: any) => {
-      const data = doc.data();
-      const name = data.juryName || data.name || doc.id;
-      combinedJuriesMap.set(doc.id, {
-        id: doc.id,
-        name,
-        institution: data.institution || '',
-      });
-    });
+    // We don't query the legacy jury collection anymore.
 
     rolesSnap.docs?.forEach((doc: any) => {
       const data = doc.data();
@@ -1193,7 +1172,8 @@ export async function autoAllocateTeamsAdmin(labs: string[], juries: string[]) {
 
     const db = getAdminDb();
     const snapshot = await db.collection('teams').get();
-
+    const rolesSnap = await db.collection('roles').where('role', '==', 'jury').get();
+    
     if (snapshot.empty) {
       return { success: false, error: 'No teams registered yet.' };
     }

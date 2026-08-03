@@ -107,13 +107,13 @@ export default function CoordClientDashboard({ coordName, coordEmail, initialTea
                   filteredTeams.map((team) => (
                     <tr key={team.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {team.teamDisplayId || '-'}
+                        {team.displayId || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {team.teamName}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {team.venue || '-'}
+                        {team.assignedLabName || team.labNo || team.venue || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
@@ -155,11 +155,11 @@ export default function CoordClientDashboard({ coordName, coordEmail, initialTea
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
                       <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                         <p className="text-gray-500 font-medium mb-1">Display ID</p>
-                        <p className="font-semibold">{selectedTeam.teamDisplayId || 'N/A'}</p>
+                        <p className="font-semibold">{selectedTeam.displayId || 'N/A'}</p>
                       </div>
                       <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                         <p className="text-gray-500 font-medium mb-1">Venue</p>
-                        <p className="font-semibold">{selectedTeam.venue || 'Not Assigned'}</p>
+                        <p className="font-semibold">{selectedTeam.assignedLabName || selectedTeam.labNo || selectedTeam.venue || 'Not Assigned'}</p>
                       </div>
                       <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 md:col-span-2">
                         <p className="text-gray-500 font-medium mb-1">Lead Email</p>
