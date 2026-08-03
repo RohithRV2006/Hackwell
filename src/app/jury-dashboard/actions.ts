@@ -73,7 +73,7 @@ export async function verifyJurySession() {
     if (!decodedToken.email) return { success: false, error: 'Invalid session' };
     
     const email = decodedToken.email.trim().toLowerCase();
-    const role = await getUserRole(email);
+    const role = decodedToken.role || await getUserRole(email);
     
     if (role !== 'jury') {
       return { success: false, error: 'Unauthorized: Jury role required' };
@@ -159,6 +159,11 @@ export async function getJuryDashboardData() {
       db.collection('prelimsEvaluations').get(),
       db.collection('juryEvaluations').get()
     ]);
+    // 2. Fetch score records in the new evaluations table for this jury (prelims round)
+    const scoresSnap = await db.collection('evaluations')
+      .where('round', '==', 'prelims')
+      .where('juryId', '==', session.juryId)
+      .get();
 
     const scoreMap = new Map<string, { isFrozen: boolean; totalScore: number }>();
 
@@ -294,10 +299,13 @@ export async function getTeamDetails(teamId: string) {
         evalDoc = searchSnap.docs[0];
       }
     }
+    // Fetch existing evaluation in the new table evaluations
+    const docId = `prelims_${session.juryId}_${cleanTeamId}`;
+    const existingDoc = await db.collection('evaluations').doc(docId).get();
 
     let scoreData: EvaluationData | undefined = undefined;
-    if (evalDoc.exists) {
-      const scoreDoc = evalDoc.data()!;
+    if (existingDoc.exists) {
+      const scoreDoc = existingDoc.data()!;
       const r = scoreDoc.rubric || {};
       scoreData = {
         teamName: scoreDoc.teamName || data.teamName || teamDoc.id,
@@ -329,7 +337,7 @@ export async function getTeamDetails(teamId: string) {
 }
 
 /**
- * Save evaluation for a team inside BOTH prelimsEvaluations and juryEvaluations tables and freeze it.
+ * Save evaluation for a team inside the new evaluations table and freeze it.
  */
 export async function submitAndFreezeEvaluation(
   teamId: string,
@@ -344,7 +352,7 @@ export async function submitAndFreezeEvaluation(
   }
 
   const cleanTeamId = teamId.trim();
-  const docId = `${session.juryId}_${cleanTeamId}`;
+  const docId = `prelims_${session.juryId}_${cleanTeamId}`;
   const db = getAdminDb();
 
   // Check Phase 3 (Prelims Round) timeline status
@@ -371,6 +379,9 @@ export async function submitAndFreezeEvaluation(
 
   if ((existingPrelims.exists && existingPrelims.data()?.isFrozen === true) ||
       (existingJury.exists && existingJury.data()?.isFrozen === true)) {
+  // Check if already frozen
+  const existingDoc = await db.collection('evaluations').doc(docId).get();
+  if (existingDoc.exists && existingDoc.data()?.isFrozen === true) {
     return { success: false, error: 'Cannot save: Your scores for this team are already frozen.' };
   }
 
@@ -406,6 +417,9 @@ export async function submitAndFreezeEvaluation(
     const createdTime = existingPrelims.exists ? (existingPrelims.data()?.createdAt || now) : (existingJury.exists ? (existingJury.data()?.createdAt || now) : now);
     
     const evaluationPayload = {
+    // Save to the new evaluations table, freeze is ALWAYS true for freeze/submit action
+    await db.collection('evaluations').doc(docId).set({
+      round: 'prelims',
       teamName: teamName,
       displayId: displayId,
       teamId: cleanTeamId,

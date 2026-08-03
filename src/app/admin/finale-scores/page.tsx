@@ -34,7 +34,7 @@ export default function AdminFinaleScoresPage() {
     setErrorMsg('');
     
     const [resScores, resTeams] = await Promise.all([
-      getAllEvaluationsAdmin('finaleEvaluations'),
+      getAllEvaluationsAdmin('finale'),
       getAllTeamsAdmin(),
     ]);
 

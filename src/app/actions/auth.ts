@@ -117,22 +117,32 @@ export async function registerTeamData(
       });
     }
 
-    // Generate unique sequential ID using a transaction
+    // Generate unique sequential ID using a transaction with retry logic for high contention
     const counterRef = db.collection('metadata').doc('teamCounter');
     
-    const displayId = await db.runTransaction(async (transaction) => {
-      const counterDoc = await transaction.get(counterRef);
-      
-      let newCount = 1;
-      if (counterDoc.exists) {
-        newCount = (counterDoc.data()?.count || 0) + 1;
+    let displayId = '';
+    let retries = 5;
+    while (retries > 0) {
+      try {
+        displayId = await db.runTransaction(async (transaction) => {
+          const counterDoc = await transaction.get(counterRef);
+          
+          let newCount = 1;
+          if (counterDoc.exists) {
+            newCount = (counterDoc.data()?.count || 0) + 1;
+          }
+          
+          transaction.set(counterRef, { count: newCount }, { merge: true });
+          
+          return `H2O-${String(newCount).padStart(3, '0')}`;
+        });
+        break;
+      } catch (error: any) {
+        retries--;
+        if (retries === 0) throw new Error("High traffic detected. Please try registering again in a few seconds.");
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
       }
-      
-      transaction.set(counterRef, { count: newCount }, { merge: true });
-      
-      return `H2O-${String(newCount).padStart(3, '0')}`;
-    });
-    
+    }    
     // Save to Firestore using an auto-generated doc ID, but store displayId
     const teamDocRef = db.collection('teams').doc();
     await teamDocRef.set({

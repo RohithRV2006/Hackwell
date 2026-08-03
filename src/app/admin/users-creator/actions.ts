@@ -4,6 +4,7 @@ import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyAdminSession, getCachedDocs, invalidateCollectionCache } from '@/app/admin/actions';
 import { encryptJSON, decryptJSON } from '@/lib/encryption';
 import { isAdminEmail } from '@/app/actions/session';
+import { verifyAdminSession } from '@/app/admin/actions';
 
 export interface AdminUser {
   email: string;
@@ -104,21 +105,24 @@ export async function createJuryUser(
     }
 
     // Create Firebase Auth user
+    let uid = '';
     try {
-      await auth.createUser({ email: email.trim(), password });
+      const userRecord = await auth.createUser({ email: email.trim(), password });
+      uid = userRecord.uid;
     } catch (authErr: any) {
       if (authErr.code !== 'auth/email-already-exists') throw authErr;
+      const existingUser = await auth.getUserByEmail(email.trim());
+      uid = existingUser.uid;
     }
+    await auth.setCustomUserClaims(uid, { role: 'jury' });
 
     const now = new Date();
-    const encryptedCreds = encryptJSON({ password });
 
     // Write to roles collection
     await roleDocRef.set({
       role: 'jury',
       name: name.trim(),
       institution: institution.trim(),
-      encryptedCreds,
       createdAt: now,
     });
 
@@ -143,57 +147,9 @@ export async function createJuryUser(
 }
 
 /**
- * Create a Student Coordinator login.
+ * Create a Coordinator login.
  */
-export async function createStudentCoordUser(
-  name: string,
-  email: string,
-  password: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const valid = await verifyAdminSession();
-    if (!valid) return { success: false, error: 'Unauthorized' };
-
-    if (!name?.trim() || !email?.trim() || !password?.trim()) {
-      return { success: false, error: 'All fields (name, email, password) are required.' };
-    }
-
-    const db = getAdminDb();
-    const auth = getAdminAuth();
-
-    const roleDocRef = db.collection('roles').doc(email.toLowerCase().trim());
-    const roleDocSnap = await roleDocRef.get();
-    if (roleDocSnap.exists) {
-      return { success: false, error: `A user with email "${email}" already exists.` };
-    }
-
-    try {
-      await auth.createUser({ email: email.trim(), password });
-    } catch (authErr: any) {
-      if (authErr.code !== 'auth/email-already-exists') throw authErr;
-    }
-
-    const now = new Date();
-    const encryptedCreds = encryptJSON({ password });
-
-    await roleDocRef.set({
-      role: 'student-coord',
-      name: name.trim(),
-      encryptedCreds,
-      createdAt: now,
-    });
-
-    return { success: true };
-  } catch (error: any) {
-    console.error('Error creating student coordinator:', error);
-    return { success: false, error: error.message || 'Failed to create student coordinator' };
-  }
-}
-
-/**
- * Create a Faculty Coordinator login.
- */
-export async function createFacultyCoordUser(
+export async function createCoordinatorUser(
   name: string,
   department: string,
   email: string,
@@ -203,8 +159,8 @@ export async function createFacultyCoordUser(
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
 
-    if (!name?.trim() || !department?.trim() || !email?.trim() || !password?.trim()) {
-      return { success: false, error: 'All fields (name, department, email, password) are required.' };
+    if (!name?.trim() || !email?.trim() || !password?.trim()) {
+      return { success: false, error: 'Name, email, and password are required.' };
     }
 
     const db = getAdminDb();
@@ -216,27 +172,30 @@ export async function createFacultyCoordUser(
       return { success: false, error: `A user with email "${email}" already exists.` };
     }
 
+    let uid = '';
     try {
-      await auth.createUser({ email: email.trim(), password });
+      const userRecord = await auth.createUser({ email: email.trim(), password });
+      uid = userRecord.uid;
     } catch (authErr: any) {
       if (authErr.code !== 'auth/email-already-exists') throw authErr;
+      const existingUser = await auth.getUserByEmail(email.trim());
+      uid = existingUser.uid;
     }
+    await auth.setCustomUserClaims(uid, { role: 'coordinator' });
 
     const now = new Date();
-    const encryptedCreds = encryptJSON({ password });
 
     await roleDocRef.set({
-      role: 'faculty-coord',
+      role: 'coordinator',
       name: name.trim(),
-      department: department.trim(),
-      encryptedCreds,
+      department: department?.trim() || '',
       createdAt: now,
     });
 
     return { success: true };
   } catch (error: any) {
-    console.error('Error creating faculty coordinator:', error);
-    return { success: false, error: error.message || 'Failed to create faculty coordinator' };
+    console.error('Error creating coordinator:', error);
+    return { success: false, error: error.message || 'Failed to create coordinator' };
   }
 }
 
@@ -261,14 +220,18 @@ export async function createUserAdmin(
       return { success: false, error: 'User already exists in roles database' };
     }
 
+    let uid = '';
     try {
-      await auth.createUser({ email, password });
+      const userRecord = await auth.createUser({ email, password });
+      uid = userRecord.uid;
     } catch (authErr: any) {
       if (authErr.code !== 'auth/email-already-exists') throw authErr;
+      const existingUser = await auth.getUserByEmail(email);
+      uid = existingUser.uid;
     }
+    await auth.setCustomUserClaims(uid, { role });
 
-    const encryptedCreds = encryptJSON({ password });
-    await docRef.set({ role, encryptedCreds, createdAt: new Date() });
+    await docRef.set({ role, createdAt: new Date() });
 
     return { success: true };
   } catch (error: any) {
@@ -294,12 +257,8 @@ export async function deleteUserAdmin(email: string): Promise<{ success: boolean
 
     // 2. Delete from specific collections based on role
     if (role === 'jury') {
-      const jurySnap = await db.collection('jury').where('email', '==', email.toLowerCase()).get();
-      const juryName = roleDoc.data()?.name || jurySnap.docs[0]?.data()?.juryName || '';
+      const juryName = roleDoc.data()?.name || '';
       
-      const deletions = jurySnap.docs.map(doc => doc.ref.delete());
-      await Promise.all(deletions);
-
       // Unassign deleted Jury from labs
       if (juryName) {
         const labsSnap = await db.collection('labs').get();
@@ -315,19 +274,6 @@ export async function deleteUserAdmin(email: string): Promise<{ success: boolean
           await labBatch.commit();
         }
       }
-    } else if (role === 'student-coord') {
-      const coordSnap = await db.collection('studentCoords').where('email', '==', email.toLowerCase()).get();
-      const deletions = coordSnap.docs.map(doc => doc.ref.delete());
-      await Promise.all(deletions);
-    } else if (role === 'faculty-coord') {
-      const coordSnap = await db.collection('facultyCoords').where('email', '==', email.toLowerCase()).get();
-      const deletions = coordSnap.docs.map(doc => doc.ref.delete());
-      await Promise.all(deletions);
-    } else if (role === 'coordinator') {
-      // Legacy coordinators
-      const coordSnap = await db.collection('coordinators').where('email', '==', email.toLowerCase()).get();
-      const deletions = coordSnap.docs.map(doc => doc.ref.delete());
-      await Promise.all(deletions);
     }
 
     // 3. Delete from Firebase Auth
