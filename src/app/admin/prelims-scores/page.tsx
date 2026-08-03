@@ -74,11 +74,14 @@ export default function AdminPrelimsScoresPage() {
         const teamScores = scores.filter((s) => s.teamId === team.id);
         const totalScore = teamScores.length > 0 ? (teamScores[0].totalScore || 0) : 0;
 
+        const evaluatedJuryName = teamScores.length > 0 ? (teamScores[0].juryName || teamScores[0].juryId) : '';
+        const resolvedJudge = (team.judge && team.judge !== 'Unassigned') ? team.judge : (evaluatedJuryName || 'Unassigned');
+
         return {
           teamId: team.id,
           teamName: team.teamName,
           problemStatement: team.problemStatement,
-          judge: team.judge || 'Unassigned',
+          judge: resolvedJudge,
           labNo: team.labNo || 'Unassigned',
           evaluations: teamScores,
           isEvaluated: teamScores.length > 0,
@@ -400,31 +403,56 @@ export default function AdminPrelimsScoresPage() {
                     <span className="font-bold text-gray-900">Jury: {evalRecord.juryName}</span>
                     <span className="font-bold text-blue-600 text-lg">{evalRecord.totalScore} / 50</span>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4 text-xs">
-                    <div>
-                      <div className="text-gray-500">Problem Stmt</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.problemStatement ?? 0}/10</div>
+                  {evalRecord.rubric?.conceptStrength !== undefined ? (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4 text-xs">
+                      <div>
+                        <div className="text-gray-500">Concept Strength</div>
+                        <div className="font-semibold text-gray-900">{evalRecord.rubric.conceptStrength}/12</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Build Intelligence</div>
+                        <div className="font-semibold text-gray-900">{evalRecord.rubric.buildIntelligence}/12</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Delivery Impact</div>
+                        <div className="font-semibold text-gray-900">{evalRecord.rubric.deliveryImpact}/8</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Live Defense</div>
+                        <div className="font-semibold text-gray-900">{evalRecord.rubric.liveDefenseScore}/8</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Communication</div>
+                        <div className="font-semibold text-gray-900">{evalRecord.rubric.communication}/10</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-gray-500">Presentation</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.presentation ?? 0}/10</div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4 text-xs">
+                      <div>
+                        <div className="text-gray-500">Problem Stmt</div>
+                        <div className="font-semibold text-gray-900">{evalRecord.rubric?.problemStatement ?? 0}/10</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Presentation</div>
+                        <div className="font-semibold text-gray-900">{evalRecord.rubric?.presentation ?? 0}/10</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Communication</div>
+                        <div className="font-semibold text-gray-900">{evalRecord.rubric?.communication ?? 0}/10</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Solution</div>
+                        <div className="font-semibold text-gray-900">{evalRecord.rubric?.solution ?? 0}/10</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Idea</div>
+                        <div className="font-semibold text-gray-900">{evalRecord.rubric?.idea ?? 0}/10</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-gray-500">Communication</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.communication ?? 0}/10</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Solution</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.solution ?? 0}/10</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Idea</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.idea ?? 0}/10</div>
-                    </div>
-                  </div>
+                  )}
                   {evalRecord.remarks && (
                     <div className="bg-gray-50 p-3 rounded-sm border border-gray-200 text-sm text-gray-700">
-                      <span className="font-semibold text-gray-900 block mb-1">Remarks:</span>
+                      <span className="font-semibold text-gray-900 block mb-1">Remarks / Feedback:</span>
                       {evalRecord.remarks}
                     </div>
                   )}

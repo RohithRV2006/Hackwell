@@ -122,6 +122,19 @@ export async function createJuryUser(
       createdAt: now,
     });
 
+    // Write to jury collection so all jury query functions pick it up
+    const juryDocRef = db.collection('jury').doc(email.toLowerCase().trim());
+    await juryDocRef.set({
+      email: email.trim().toLowerCase(),
+      juryName: name.trim(),
+      name: name.trim(),
+      institution: institution.trim(),
+      createdAt: now,
+    });
+
+    invalidateCollectionCache('roles');
+    invalidateCollectionCache('jury');
+
     return { success: true };
   } catch (error: any) {
     console.error('Error creating jury user:', error);

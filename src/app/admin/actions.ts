@@ -383,6 +383,10 @@ export interface Rubric {
   innovation?: number;
   technicalFeasibility?: number;
   impact?: number;
+  conceptStrength?: number;
+  buildIntelligence?: number;
+  deliveryImpact?: number;
+  liveDefenseScore?: number;
 }
 
 export interface AdminScoreData {
@@ -408,14 +412,16 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
   }
 
   try {
-    const [snapshot, teamsSnap, jurySnap] = await Promise.all([
+    const [snapshot, teamsSnap, jurySnap, rolesSnap, juryEvalSnap] = await Promise.all([
       getCachedDocs(collectionName),
       getCachedDocs('teams'),
       getCachedDocs('jury'),
+      getCachedDocs('roles'),
+      getCachedDocs('juryEvaluations'),
     ]);
     
     const teamMap = new Map<string, { teamName: string; problemStatement: string }>();
-    teamsSnap.docs.forEach((doc: any) => {
+    teamsSnap.docs?.forEach((doc: any) => {
       const data = doc.data();
       teamMap.set(doc.id, {
         teamName: data.teamName || doc.id,
@@ -424,25 +430,40 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
     });
 
     const juryMap = new Map<string, string>();
-    jurySnap.docs.forEach((doc: any) => {
-      juryMap.set(doc.id, doc.data().juryName || doc.id);
+    jurySnap.docs?.forEach((doc: any) => {
+      const data = doc.data();
+      juryMap.set(doc.id, data.juryName || data.name || doc.id);
     });
+    rolesSnap.docs?.forEach((doc: any) => {
+      const data = doc.data();
+      if (data.role === 'jury') {
+        const name = data.name || data.juryName || doc.id;
+        juryMap.set(doc.id, name);
+        if (data.juryId) juryMap.set(data.juryId, name);
+      }
+    });
+
+    const docMap = new Map<string, any>();
+    snapshot.docs?.forEach((doc: any) => {
+      docMap.set(doc.id, doc);
+    });
+    if (collectionName === 'prelimsEvaluations') {
+      juryEvalSnap.docs?.forEach((doc: any) => {
+        if (!docMap.has(doc.id)) {
+          docMap.set(doc.id, doc);
+        }
+      });
+    }
 
     const scores: AdminScoreData[] = [];
 
-    for (const doc of snapshot.docs) {
+    for (const doc of Array.from(docMap.values())) {
       const data = doc.data();
       
-      const rubricObj: Rubric = data.rubric || {
-        problemStatement: 0,
-        presentation: 0,
-        communication: 0,
-        solution: 0,
-        idea: 0,
-      };
+      const rubricObj: Rubric = data.rubric || {};
       
       const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : 0;
-      const remarksVal = data.remarks || '';
+      const remarksVal = data.remarks || data.feedback || '';
       const highlightedVal = typeof data.highlighted === 'boolean' ? data.highlighted : false;
       const isFrozenVal = typeof data.isFrozen === 'boolean' ? data.isFrozen : false;
       
@@ -450,12 +471,12 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
       const updatedAtStr = data.updatedAt ? new Date(data.updatedAt.toDate ? data.updatedAt.toDate() : data.updatedAt).toISOString() : createdAtStr;
 
       const teamInfo = teamMap.get(data.teamId || '');
-      const juryName = juryMap.get(data.juryId) || 'Unknown Jury';
+      const juryName = data.juryName || juryMap.get(data.juryId) || 'Unknown Jury';
 
       scores.push({
         id: doc.id,
         teamId: data.teamId || '',
-        teamName: teamInfo?.teamName || data.teamId || 'Unknown Team',
+        teamName: teamInfo?.teamName || data.teamName || data.teamId || 'Unknown Team',
         problemStatement: teamInfo?.problemStatement || 'N/A',
         juryId: data.juryId || '',
         juryName,
@@ -935,11 +956,12 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
   }
 
   try {
-    const [teamsSnap, prelimsSnap, finaleSnap, jurySnap, labsSnap] = await Promise.all([
+    const [teamsSnap, prelimsSnap, finaleSnap, jurySnap, rolesSnap, labsSnap] = await Promise.all([
       getCachedDocs('teams'),
       getCachedDocs('prelimsEvaluations'),
       getCachedDocs('finaleEvaluations'),
       getCachedDocs('jury'),
+      getCachedDocs('roles'),
       getCachedDocs('labs'),
     ]);
 
@@ -978,28 +1000,51 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
     const prelimsCountByJury: Record<string, number> = {};
     prelimsSnap.docs.forEach((doc: any) => {
       const data = doc.data();
-      const juryKey = data.judgeName || data.judgeId || data.judge || 'Unassigned';
+      const juryKey = data.juryName || data.judgeName || data.judgeId || data.juryId || data.judge || 'Unassigned';
       prelimsCountByJury[juryKey] = (prelimsCountByJury[juryKey] || 0) + 1;
     });
 
     const finaleCountByJury: Record<string, number> = {};
     finaleSnap.docs.forEach((doc: any) => {
       const data = doc.data();
-      const juryKey = data.judgeName || data.judgeId || data.judge || 'Unassigned';
+      const juryKey = data.juryName || data.judgeName || data.judgeId || data.juryId || data.judge || 'Unassigned';
       finaleCountByJury[juryKey] = (finaleCountByJury[juryKey] || 0) + 1;
     });
 
-    const juryStats: JuryStat[] = [];
-    jurySnap.docs.forEach((doc: any) => {
+    const combinedJuriesMap = new Map<string, { id: string; name: string; institution: string }>();
+    
+    jurySnap.docs?.forEach((doc: any) => {
       const data = doc.data();
-      const juryName = data.juryName || doc.id;
-      juryStats.push({
-        juryId: doc.id,
-        juryName: juryName,
+      const name = data.juryName || data.name || doc.id;
+      combinedJuriesMap.set(doc.id, {
+        id: doc.id,
+        name,
         institution: data.institution || '',
+      });
+    });
+
+    rolesSnap.docs?.forEach((doc: any) => {
+      const data = doc.data();
+      if (data.role === 'jury' && !combinedJuriesMap.has(doc.id)) {
+        const name = data.name || data.juryName || doc.id;
+        combinedJuriesMap.set(doc.id, {
+          id: doc.id,
+          name,
+          institution: data.institution || '',
+        });
+      }
+    });
+
+    const juryStats: JuryStat[] = [];
+    combinedJuriesMap.forEach((jury, key) => {
+      const juryName = jury.name;
+      juryStats.push({
+        juryId: jury.id,
+        juryName: juryName,
+        institution: jury.institution,
         assignedLab: labJuryMap.get(juryName) || 'Unassigned',
-        prelimsEvaluatedCount: prelimsCountByJury[juryName] || prelimsCountByJury[doc.id] || 0,
-        finaleEvaluatedCount: finaleCountByJury[juryName] || finaleCountByJury[doc.id] || 0,
+        prelimsEvaluatedCount: prelimsCountByJury[juryName] || prelimsCountByJury[jury.id] || 0,
+        finaleEvaluatedCount: finaleCountByJury[juryName] || finaleCountByJury[jury.id] || 0,
       });
     });
 
@@ -1470,18 +1515,37 @@ export async function getJuriesAdmin(): Promise<{ success: boolean; juries?: Jur
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
 
-    const snapshot = await getCachedDocs('jury');
+    const [jurySnap, rolesSnap] = await Promise.all([
+      getCachedDocs('jury'),
+      getCachedDocs('roles'),
+    ]);
 
-    const juries: JuryOption[] = snapshot.docs.map((doc: any) => {
+    const juryMap = new Map<string, JuryOption>();
+
+    jurySnap.docs?.forEach((doc: any) => {
       const data = doc.data();
-      return {
+      const email = data.email || doc.id;
+      juryMap.set(doc.id, {
         id: doc.id,
         name: data.juryName || data.name || doc.id,
-        email: data.email || '',
+        email: email,
         institution: data.institution || '',
-      };
+      });
     });
 
+    rolesSnap.docs?.forEach((doc: any) => {
+      const data = doc.data();
+      if (data.role === 'jury' && !juryMap.has(doc.id)) {
+        juryMap.set(doc.id, {
+          id: doc.id,
+          name: data.name || data.juryName || doc.id,
+          email: doc.id,
+          institution: data.institution || '',
+        });
+      }
+    });
+
+    const juries = Array.from(juryMap.values());
     juries.sort((a, b) => a.name.localeCompare(b.name));
     return { success: true, juries };
   } catch (error: any) {

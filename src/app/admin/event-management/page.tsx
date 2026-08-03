@@ -290,20 +290,6 @@ export default function AdminEventManagementPage() {
   // Phase Handlers with Strict Sequence Checks
   // ─────────────────────────────────────────────────────────────────────────
   const handleSetPhase = async (phase: '1' | '2' | '3' | '4') => {
-    // Check prerequisites
-    if (phase === '2' && phase1State !== 'ended') {
-      setMsg({ type: 'error', text: 'Phase 1 hasn\'t completed yet! You cannot start or configure Phase 2 until Phase 1 ends.' });
-      return;
-    }
-    if (phase === '3' && (phase2State !== 'ended' || !timelines.timeline2.pptFilterApplied)) {
-      setMsg({ type: 'error', text: 'Phase 2 hasn\'t completed yet! You cannot start or configure Phase 3 until Phase 2 ends and the PPT filter is applied.' });
-      return;
-    }
-    if (phase === '4' && phase3State !== 'ended') {
-      setMsg({ type: 'error', text: 'Phase 3 hasn\'t completed yet! You cannot start or configure Phase 4 until Phase 3 ends.' });
-      return;
-    }
-
     let start = '', end = '', extra: Record<string, any> = {};
 
     if (phase === '1') { start = p1Start; end = p1End; setP1Saving(true); }
@@ -346,20 +332,6 @@ export default function AdminEventManagementPage() {
   };
 
   const handleUpdatePhase = async (phase: '1' | '2' | '3' | '4') => {
-    // Check prerequisites
-    if (phase === '2' && phase1State !== 'ended') {
-      setMsg({ type: 'error', text: 'Phase 1 hasn\'t completed yet! You cannot update Phase 2 until Phase 1 ends.' });
-      return;
-    }
-    if (phase === '3' && (phase2State !== 'ended' || !timelines.timeline2.pptFilterApplied)) {
-      setMsg({ type: 'error', text: 'Phase 2 hasn\'t completed yet! You cannot update Phase 3 until Phase 2 ends and the PPT filter is applied.' });
-      return;
-    }
-    if (phase === '4' && phase3State !== 'ended') {
-      setMsg({ type: 'error', text: 'Phase 3 hasn\'t completed yet! You cannot update Phase 4 until Phase 3 ends.' });
-      return;
-    }
-
     let updates: Record<string, any> = {};
     if (phase === '1') { updates = { startDate: p1Start, endDate: p1End }; setP1Saving(true); }
     if (phase === '2') { updates = { startDate: p2Start, endDate: p2End }; setP2Saving(true); }

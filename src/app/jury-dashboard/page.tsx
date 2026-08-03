@@ -35,9 +35,9 @@ export default function JuryDashboard() {
   const [feedback, setFeedback] = useState<string>('');
   const [isFrozen, setIsFrozen] = useState<boolean>(false);
 
-  // Validation
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showConfirm, setShowConfirm] = useState<boolean>(false);
+  const [prelimsActive, setPrelimsActive] = useState<boolean>(true);
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -45,6 +45,9 @@ export default function JuryDashboard() {
     const res = await getJuryDashboardData();
     if (res.success && res.teams) {
       setTeams(res.teams);
+      if (res.prelimsActive !== undefined) {
+        setPrelimsActive(res.prelimsActive);
+      }
     } else {
       setErrorMsg(res.error || 'Failed to retrieve teams list.');
     }
@@ -211,6 +214,18 @@ export default function JuryDashboard() {
           />
         </div>
       </div>
+
+      {!prelimsActive && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-sm text-amber-900 text-sm font-semibold flex items-center gap-3 shadow-sm">
+          <span className="text-xl">⚠️</span>
+          <div>
+            <p className="font-bold text-amber-900">Prelims Round is Not Active</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              The administrator has not started Phase 3 (Prelims Round) yet. You can view assigned teams, but evaluation score submission is locked until the admin activates the Prelims Round.
+            </p>
+          </div>
+        </div>
+      )}
 
       {errorMsg && !selectedTeamId && (
         <div className="p-3 bg-red-100 border border-red-200 text-red-700 text-sm rounded">
