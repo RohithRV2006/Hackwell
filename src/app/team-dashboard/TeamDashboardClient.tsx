@@ -350,12 +350,6 @@ export default function TeamDashboardClient({ team }: { team: any }) {
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4">
               <h2 className="text-xl font-bold text-gray-900 border-b pb-2 mb-2">Event Progress</h2>
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                <span className="text-gray-500 font-medium">Prelims Status</span>
-                <span className={`font-semibold ${team.prelimsStatus === 'selected' ? 'text-green-600' : team.prelimsStatus === 'rejected' ? 'text-red-600' : 'text-yellow-600'}`}>
-                  {team.prelimsStatus ? team.prelimsStatus.toUpperCase() : 'PENDING'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-gray-50">
                 <span className="text-gray-500 font-medium">Prelims Venue</span>
                 <span className="font-semibold text-gray-800">
                   {team.assignedLabName && team.assignedLabName !== 'Unassigned'
@@ -368,14 +362,20 @@ export default function TeamDashboardClient({ team }: { team: any }) {
                 </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                <span className="text-gray-500 font-medium">Finals Status</span>
-                <span className={`font-semibold ${team.finalStatus === 'selected' ? 'text-green-600' : team.finalStatus === 'rejected' ? 'text-red-600' : 'text-yellow-600'}`}>
-                  {team.finalStatus ? team.finalStatus.toUpperCase() : 'PENDING'}
+                <span className="text-gray-500 font-medium">Prelims Status</span>
+                <span className={`font-semibold ${team.prelimsStatus === 'selected' ? 'text-green-600' : team.prelimsStatus === 'rejected' ? 'text-red-600' : 'text-yellow-600'}`}>
+                  {team.prelimsStatus ? team.prelimsStatus.toUpperCase() : 'PENDING'}
                 </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
                 <span className="text-gray-500 font-medium">Finals Venue</span>
                 <span className="font-semibold text-gray-800">{team.finalVenue || 'TBA'}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                <span className="text-gray-500 font-medium">Finals Status</span>
+                <span className={`font-semibold ${team.finalStatus === 'selected' ? 'text-green-600' : team.finalStatus === 'rejected' ? 'text-red-600' : 'text-yellow-600'}`}>
+                  {team.finalStatus ? team.finalStatus.toUpperCase() : 'PENDING'}
+                </span>
               </div>
             </div>
 

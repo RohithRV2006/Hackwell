@@ -11,6 +11,12 @@ import {
   updateLabAdmin,
   deleteLabAdmin,
   autoAssignTeamsToLabsAdmin,
+  autoAssignFinalTeamsToLabsAdmin,
+  FinalLabData,
+  getFinalLabsAdmin,
+  createFinalLabAdmin,
+  updateFinalLabAdmin,
+  deleteFinalLabAdmin,
   setTimelinePhaseAdmin,
   updateTimelinePhaseAdmin,
   resetTimelinePhaseAdmin,
@@ -25,7 +31,13 @@ import {
   TimelineLiveStats,
   JuryStat,
 } from '@/app/admin/actions';
-import { exportToCSV, exportToPDF } from './reports';
+import {
+  exportToCSV,
+  exportToPDF,
+  exportAttendanceSheet,
+  exportRegistrationReportPDF,
+  exportRegistrationReportCSV,
+} from './reports';
 import { THEME_NAMES } from '@/lib/data/themes';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,6 +213,16 @@ export default function AdminEventManagementPage() {
   const [submittingLab, setSubmittingLab] = useState(false);
   const [allocating, setAllocating] = useState(false);
 
+  // ── Final Labs State ───────────────────────────────────────────────────────
+  const [finalLabs, setFinalLabs] = useState<FinalLabData[]>([]);
+  const [editingFinalLabId, setEditingFinalLabId] = useState<string | null>(null);
+  const [finalLabName, setFinalLabName] = useState('');
+  const [finalLabCode, setFinalLabCode] = useState('');
+  const [finalLabCapacity, setFinalLabCapacity] = useState<number>(25);
+  const [finalLabCoordinator, setFinalLabCoordinator] = useState('');
+  const [submittingFinalLab, setSubmittingFinalLab] = useState(false);
+  const [allocatingFinal, setAllocatingFinal] = useState(false);
+
   // ── Per-phase form state ───────────────────────────────────────────────────
   const [p1Start, setP1Start] = useState('');
   const [p1End, setP1End] = useState('');
@@ -271,6 +293,7 @@ export default function AdminEventManagementPage() {
         if (res.prelimsScores) setPrelimsScores(res.prelimsScores);
         if (res.finaleScores) setFinaleScores(res.finaleScores);
         if (res.labs) setLabs(res.labs);
+        if (res.finalLabs) setFinalLabs(res.finalLabs);
         if (res.juries) setJuriesList(res.juries);
         setLoading(false);
       } else {
@@ -286,6 +309,7 @@ export default function AdminEventManagementPage() {
     if (res.prelimsScores) setPrelimsScores(res.prelimsScores);
     if (res.finaleScores) setFinaleScores(res.finaleScores);
     if (res.labs) setLabs(res.labs);
+    if (res.finalLabs) setFinalLabs(res.finalLabs);
     if (res.juries) setJuriesList(res.juries);
   };
 
@@ -478,7 +502,7 @@ export default function AdminEventManagementPage() {
   };
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Lab Handlers
+  // Prelims Lab Handlers
   // ─────────────────────────────────────────────────────────────────────────
   const handleStartEditLab = (lab: LabData) => {
     setEditingLabId(lab.labId);
@@ -556,6 +580,84 @@ export default function AdminEventManagementPage() {
   };
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Final Lab Handlers
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleStartEditFinalLab = (lab: FinalLabData) => {
+    setEditingFinalLabId(lab.labId);
+    setFinalLabName(lab.labName);
+    setFinalLabCode(lab.labCode || '');
+    setFinalLabCapacity(lab.capacity || 25);
+    setFinalLabCoordinator(lab.coordinator !== 'Unassigned' ? (lab.coordinator || '') : '');
+  };
+
+  const handleCancelEditFinalLab = () => {
+    setEditingFinalLabId(null);
+    setFinalLabName('');
+    setFinalLabCode('');
+    setFinalLabCapacity(25);
+    setFinalLabCoordinator('');
+  };
+
+  const handleSubmitFinalLab = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (phase3State !== 'ended') {
+      setMsg({ type: 'error', text: 'Phase 3 hasn\'t completed yet! You cannot configure Final Labs until Phase 3 ends.' });
+      return;
+    }
+    if (!finalLabName.trim()) { setMsg({ type: 'error', text: 'Final Lab Name is required.' }); return; }
+    setSubmittingFinalLab(true);
+    setMsg(null);
+    const fn = editingFinalLabId
+      ? updateFinalLabAdmin(editingFinalLabId, finalLabName, finalLabCode, finalLabCapacity, finalLabCoordinator)
+      : createFinalLabAdmin(finalLabName, finalLabCode, finalLabCapacity, finalLabCoordinator);
+    const res = await fn;
+    if (res.success) {
+      setMsg({ type: 'success', text: `Final Lab "${finalLabName}" ${editingFinalLabId ? 'updated' : 'created'} successfully.` });
+      handleCancelEditFinalLab();
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to save final lab.' });
+    }
+    setSubmittingFinalLab(false);
+  };
+
+  const handleDeleteFinalLab = async (lab: FinalLabData) => {
+    if (phase3State !== 'ended') {
+      setMsg({ type: 'error', text: 'Phase 3 hasn\'t completed yet! You cannot delete Final Labs until Phase 3 ends.' });
+      return;
+    }
+    if (!confirm(`Delete Final Lab "${lab.labName}"?`)) return;
+    setMsg(null);
+    const res = await deleteFinalLabAdmin(lab.labId);
+    if (res.success) {
+      setMsg({ type: 'success', text: `Final Lab "${lab.labName}" deleted.` });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to delete final lab.' });
+    }
+  };
+
+  const handleAutoAssignFinalTeams = async () => {
+    if (phase3State !== 'ended') {
+      setMsg({ type: 'error', text: 'Phase 3 hasn\'t completed yet! You cannot auto-assign final venues until Phase 3 ends.' });
+      return;
+    }
+    setAllocatingFinal(true);
+    setMsg(null);
+    const res = await autoAssignFinalTeamsToLabsAdmin();
+    if (res.success) {
+      setMsg({
+        type: 'success',
+        text: `⚡ Auto-assigned final round venues for ${res.assignedCount} qualified finalist teams!`
+      });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to auto-assign final venues.' });
+    }
+    setAllocatingFinal(false);
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Computed Data
   // ─────────────────────────────────────────────────────────────────────────
   const prelimsRankedTeams = teams
@@ -567,11 +669,11 @@ export default function AdminEventManagementPage() {
     .sort((a, b) => b.score - a.score);
 
   const finaleRankedTeams = teams
-    .filter((t) => t.finaleQualified)
+    .filter((t) => t.finaleQualified === true || t.prelimsStatus === 'selected')
     .map((team) => {
       const scores = finaleScores.filter((s) => s.teamId === team.id);
       const avg = scores.length > 0 ? scores.reduce((a, s) => a + s.totalScore, 0) / scores.length : 0;
-      return { ...team, judge: team.judge || 'Unassigned', labNo: team.labNo || 'Unassigned', evalCount: scores.length, avgScore: Number(avg.toFixed(1)), scoresBreakdown: scores };
+      return { ...team, judge: team.judge || 'Unassigned', labNo: team.finalVenue || team.labNo || 'Unassigned', evalCount: scores.length, avgScore: Number(avg.toFixed(1)), scoresBreakdown: scores };
     })
     .sort((a, b) => b.avgScore - a.avgScore);
 
@@ -584,9 +686,9 @@ export default function AdminEventManagementPage() {
   // Export Handlers
   // ─────────────────────────────────────────────────────────────────────────
   const exportTimeline1Report = (fmt: 'csv' | 'pdf') => {
-    const headers = ['Display ID', 'Team Name', 'Problem Statement', 'Lead Name', 'Lead Email', 'Contact', 'Dept', 'Year/Sec', 'Members'];
-    const rows: (string | number)[][] = teams.map((t) => [t.displayId || t.id, t.teamName, t.problemStatement, t.leadData?.name || 'N/A', t.leadEmail, t.leadData?.contactNumber || 'N/A', t.leadData?.department || 'N/A', `${t.leadData?.year || ''}/${t.leadData?.section || ''}`, t.membersData?.length || 0]);
-    fmt === 'csv' ? exportToCSV('Timeline1_Registration_Report', headers, rows) : exportToPDF('Registration Phase Report', 'Registered teams & lead details', headers, rows);
+    fmt === 'csv'
+      ? exportRegistrationReportCSV(teams)
+      : exportRegistrationReportPDF(teams);
   };
 
   const exportTimeline2Report = (fmt: 'csv' | 'pdf') => {
@@ -602,9 +704,9 @@ export default function AdminEventManagementPage() {
   };
 
   const exportTimeline4Report = (fmt: 'csv' | 'pdf') => {
-    const headers = ['Rank', 'Team Name', 'Lead Email', 'Jury', 'Finale Score (/40)', 'Award'];
-    const rows: (string | number)[][] = finaleRankedTeams.map((t, i) => [i + 1, t.teamName, t.leadEmail, t.judge, t.avgScore, t.winnerTitle || (t.isWinner ? 'Winner' : 'Finalist')]);
-    fmt === 'csv' ? exportToCSV('Timeline4_Final_Report', headers, rows) : exportToPDF('Final Round Report', 'Finale evaluation scores & final rankings', headers, rows);
+    const headers = ['Rank', 'Display ID', 'Team Name', 'Lead Email', 'Final Venue', 'Finale Score (/40)', 'Award'];
+    const rows: (string | number)[][] = finaleRankedTeams.map((t, i) => [i + 1, t.displayId || t.id, t.teamName, t.leadEmail, t.finalVenue || 'TBA', t.avgScore, t.winnerTitle || (t.isWinner ? 'Winner' : 'Finalist')]);
+    fmt === 'csv' ? exportToCSV('Timeline4_Final_Report', headers, rows) : exportToPDF('Final Round Report', 'Final round qualified teams & evaluation scores', headers, rows);
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -912,6 +1014,9 @@ export default function AdminEventManagementPage() {
             <button onClick={() => setActiveModalTimeline('3')} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-sm text-xs font-bold transition">
               🔍 View Evaluations
             </button>
+            <button onClick={() => exportAttendanceSheet('Prelims Round (Prelims Teams)', teams)} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition shadow-sm">
+              📋 Attendance Sheet
+            </button>
             <button onClick={handleAutoAssignTeams} disabled={allocating} className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
               ⚡ {allocating ? 'Assigning...' : 'Auto Assign Teams'}
             </button>
@@ -1057,9 +1162,9 @@ export default function AdminEventManagementPage() {
             </button>
           </div>
 
-          {/* Lab Management */}
+          {/* Lab Management (Prelims Round) */}
           <div className="border-t border-gray-100 pt-5 space-y-4">
-            <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wide">Lab &amp; Jury Configuration</h4>
+            <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wide">Prelims Lab &amp; Jury Configuration</h4>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {/* Lab Form */}
               <div className="bg-gray-50 p-4 rounded-sm border border-gray-200 space-y-3">
@@ -1073,7 +1178,7 @@ export default function AdminEventManagementPage() {
                       className="w-full bg-white border border-gray-300 rounded-sm px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500" required />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Lab Code (Optional)</label>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Lab ID / Code (Optional)</label>
                     <input type="text" placeholder="e.g. LAB-101" value={labCode} onChange={(e) => setLabCode(e.target.value)}
                       className="w-full bg-white border border-gray-300 rounded-sm px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-indigo-500" />
                   </div>
@@ -1113,13 +1218,14 @@ export default function AdminEventManagementPage() {
               {/* Labs Table */}
               <div className="lg:col-span-2 bg-white border border-gray-200 rounded-sm overflow-hidden">
                 <div className="p-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                  <h5 className="font-bold text-gray-800 text-xs">Configured Labs &amp; Juries ({labs.length})</h5>
+                  <h5 className="font-bold text-gray-800 text-xs">Configured Prelims Labs &amp; Juries ({labs.length})</h5>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200">
                         <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Lab Name</th>
+                        <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Lab ID</th>
                         <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Jury</th>
                         <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">PS Theme</th>
                         <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Teams</th>
@@ -1128,10 +1234,11 @@ export default function AdminEventManagementPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {labs.length === 0 ? (
-                        <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400 text-xs italic">No labs configured yet.</td></tr>
+                        <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400 text-xs italic">No prelims labs configured yet.</td></tr>
                       ) : labs.map((lab) => (
                         <tr key={lab.labId} className="hover:bg-gray-50 transition text-xs">
                           <td className="px-4 py-3 font-bold text-gray-900">{lab.labName}</td>
+                          <td className="px-4 py-3 font-mono text-gray-600">{lab.labCode || '—'}</td>
                           <td className="px-4 py-3 text-gray-700">{lab.assignedJuryName}</td>
                           <td className="px-4 py-3">
                             {lab.assignedTheme ? (
@@ -1173,7 +1280,13 @@ export default function AdminEventManagementPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setActiveModalTimeline('4')} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-xs font-bold transition">
-              🏆 View Final Scores
+              🏆 View Final Round
+            </button>
+            <button onClick={() => exportAttendanceSheet('Final Round (Qualified Finalists)', finaleRankedTeams)} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition shadow-sm">
+              📋 Attendance Sheet
+            </button>
+            <button onClick={handleAutoAssignFinalTeams} disabled={allocatingFinal} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
+              ⚡ {allocatingFinal ? 'Assigning...' : 'Auto Assign Final Venues'}
             </button>
             <button onClick={() => exportTimeline4Report('csv')} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition">📥 CSV</button>
             <button onClick={() => exportTimeline4Report('pdf')} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-sm text-xs font-bold transition">📄 PDF</button>
@@ -1260,6 +1373,89 @@ export default function AdminEventManagementPage() {
             </div>
           )}
 
+          {/* Final Round Lab Management */}
+          <div className="border-t border-emerald-100 pt-5 space-y-4">
+            <h4 className="text-xs font-bold text-emerald-900 uppercase tracking-wide">Final Round Lab Configuration</h4>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              {/* Final Lab Form */}
+              <div className="bg-emerald-50/40 p-4 rounded-sm border border-emerald-200 space-y-3">
+                <h5 className="text-xs font-bold text-emerald-900 border-b border-emerald-200 pb-2">
+                  {editingFinalLabId ? 'Edit Final Lab' : 'Add New Final Lab'}
+                </h5>
+                <form onSubmit={handleSubmitFinalLab} className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Final Lab Name *</label>
+                    <input type="text" placeholder="e.g. Main Hall Lab 1" value={finalLabName} onChange={(e) => setFinalLabName(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-sm px-3 py-1.5 text-xs focus:outline-none focus:border-emerald-500" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Lab ID / Code (Optional)</label>
+                    <input type="text" placeholder="e.g. FLAB-101" value={finalLabCode} onChange={(e) => setFinalLabCode(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-sm px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Lab Limit / Capacity *</label>
+                    <input type="number" min={1} max={500} placeholder="e.g. 25" value={finalLabCapacity} onChange={(e) => setFinalLabCapacity(Number(e.target.value))}
+                      className="w-full bg-white border border-gray-300 rounded-sm px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-emerald-500" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Coordinator Name (Optional)</label>
+                    <input type="text" placeholder="e.g. Prof. Narayana" value={finalLabCoordinator} onChange={(e) => setFinalLabCoordinator(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-sm px-3 py-1.5 text-xs focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button type="submit" disabled={submittingFinalLab}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-3 rounded-sm text-xs transition disabled:opacity-50">
+                      {submittingFinalLab ? 'Saving...' : editingFinalLabId ? 'Update Final Lab' : 'Add Final Lab'}
+                    </button>
+                    {editingFinalLabId && (
+                      <button type="button" onClick={handleCancelEditFinalLab}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-1.5 px-2.5 rounded-sm text-xs transition">
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
+
+              {/* Final Labs Table */}
+              <div className="lg:col-span-2 bg-white border border-emerald-200 rounded-sm overflow-hidden">
+                <div className="p-3 bg-emerald-50/60 border-b border-emerald-200 flex justify-between items-center">
+                  <h5 className="font-bold text-emerald-900 text-xs">Configured Final Round Labs ({finalLabs.length})</h5>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Final Lab Name</th>
+                        <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Lab ID</th>
+                        <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Coordinator</th>
+                        <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Teams / Limit</th>
+                        <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {finalLabs.length === 0 ? (
+                        <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400 text-xs italic">No final round labs configured yet.</td></tr>
+                      ) : finalLabs.map((lab) => (
+                        <tr key={lab.labId} className="hover:bg-gray-50 transition text-xs">
+                          <td className="px-4 py-3 font-bold text-gray-900">{lab.labName}</td>
+                          <td className="px-4 py-3 font-mono text-gray-600">{lab.labCode || '—'}</td>
+                          <td className="px-4 py-3 text-gray-700">{lab.coordinator || 'Unassigned'}</td>
+                          <td className="px-4 py-3 font-bold text-emerald-600">{lab.currentTeamCount} / {lab.capacity || 25}</td>
+                          <td className="px-4 py-3 text-right space-x-1.5">
+                            <button onClick={() => handleStartEditFinalLab(lab)} className="text-blue-600 font-bold border border-gray-200 px-2 py-0.5 rounded hover:bg-blue-50">Edit</button>
+                            <button onClick={() => handleDeleteFinalLab(lab)} className="text-red-600 font-bold border border-gray-200 px-2 py-0.5 rounded hover:bg-red-50">Delete</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Per-Jury Finale Tracker */}
           {liveStats?.juryStats && liveStats.juryStats.length > 0 && (
             <div className="bg-emerald-50/60 border border-emerald-100 rounded-sm p-4 space-y-3">
@@ -1340,10 +1536,14 @@ export default function AdminEventManagementPage() {
                     {activeModalTimeline === '1' && 'Registration Phase — Registered Teams'}
                     {activeModalTimeline === '2' && 'PPT Submission Phase — Submissions'}
                     {activeModalTimeline === '3' && 'Prelims Round — Evaluations & Finalists'}
-                    {activeModalTimeline === '4' && 'Final Round — Scores & Winners'}
+                    {activeModalTimeline === '4' && 'Final Round — Selected Finalist Teams & Members'}
                   </h3>
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">Full details of all teams, submissions, and evaluation scores.</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {activeModalTimeline === '4'
+                    ? 'Showing only finalist teams and student members selected from the Prelims round.'
+                    : 'Full details of all teams, submissions, and evaluation scores.'}
+                </p>
               </div>
               <button onClick={() => { setActiveModalTimeline(null); setModalSearchQuery(''); }}
                 className="text-gray-400 hover:text-white font-bold text-lg px-2">✕</button>
@@ -1357,8 +1557,8 @@ export default function AdminEventManagementPage() {
               <div className="flex items-center gap-2">
                 {activeModalTimeline === '1' && <><button onClick={() => exportTimeline1Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline1Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
                 {activeModalTimeline === '2' && <><button onClick={() => exportTimeline2Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline2Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
-                {activeModalTimeline === '3' && <><button onClick={() => exportTimeline3Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline3Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
-                {activeModalTimeline === '4' && <><button onClick={() => exportTimeline4Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline4Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
+                {activeModalTimeline === '3' && <><button onClick={() => exportAttendanceSheet('Prelims Round', teams)} className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-bold hover:bg-purple-700">📋 Attendance Sheet</button><button onClick={() => exportTimeline3Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline3Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
+                {activeModalTimeline === '4' && <><button onClick={() => exportAttendanceSheet('Final Round (Finalists)', finaleRankedTeams)} className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-bold hover:bg-purple-700">📋 Attendance Sheet</button><button onClick={() => exportTimeline4Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline4Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
               </div>
             </div>
 
@@ -1475,26 +1675,40 @@ export default function AdminEventManagementPage() {
                   <thead>
                     <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 uppercase font-bold text-[11px]">
                       <th className="px-3 py-2 text-center">Rank</th>
+                      <th className="px-3 py-2">Display ID</th>
                       <th className="px-3 py-2">Team Name</th>
                       <th className="px-3 py-2">Lead Email</th>
-                      <th className="px-3 py-2">Jury</th>
+                      <th className="px-3 py-2">Final Venue</th>
                       <th className="px-3 py-2 text-center">Finale Score (/40)</th>
-                      <th className="px-3 py-2 text-right">Award</th>
+                      <th className="px-3 py-2 text-right">Award / Members</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {finaleRankedTeams.map((t, idx) => (
-                      <tr key={t.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-center font-bold text-gray-500">#{idx + 1}</td>
-                        <td className="px-3 py-2 font-bold text-gray-900">{t.teamName}</td>
-                        <td className="px-3 py-2 font-mono text-gray-600">{t.leadEmail}</td>
-                        <td className="px-3 py-2 text-gray-600">{t.judge}</td>
-                        <td className="px-3 py-2 text-center font-extrabold text-emerald-700">{t.avgScore}</td>
-                        <td className="px-3 py-2 text-right font-bold">
-                          {t.id === winner1st ? '🥇 1st Place' : t.id === winner2nd ? '🥈 2nd Place' : t.id === winner3rd ? '🥉 3rd Place' : 'Finalist'}
-                        </td>
-                      </tr>
-                    ))}
+                    {finaleRankedTeams.length === 0 ? (
+                      <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400 italic text-xs">No teams selected from Prelims Round for Final Round yet.</td></tr>
+                    ) : (
+                      finaleRankedTeams
+                        .filter((t) => {
+                          const q = modalSearchQuery.toLowerCase();
+                          return !q || t.teamName.toLowerCase().includes(q) || t.displayId?.toLowerCase().includes(q) || t.leadEmail.toLowerCase().includes(q) || t.leadData?.name.toLowerCase().includes(q);
+                        })
+                        .map((t, idx) => (
+                          <tr key={t.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-center font-bold text-gray-500">#{idx + 1}</td>
+                            <td className="px-3 py-2 font-mono font-bold text-emerald-700">{t.displayId || t.id}</td>
+                            <td className="px-3 py-2 font-bold text-gray-900">{t.teamName}</td>
+                            <td className="px-3 py-2 font-mono text-gray-600">{t.leadEmail}</td>
+                            <td className="px-3 py-2 font-semibold text-gray-800">{t.finalVenue || 'TBA'}</td>
+                            <td className="px-3 py-2 text-center font-extrabold text-emerald-700">{t.avgScore}</td>
+                            <td className="px-3 py-2 text-right font-bold space-x-2">
+                              <span className="text-gray-800">{t.id === winner1st ? '🥇 1st Place' : t.id === winner2nd ? '🥈 2nd Place' : t.id === winner3rd ? '🥉 3rd Place' : 'Finalist'}</span>
+                              <button onClick={() => setSelectedTeamForMembers(t)} className="px-2 py-1 bg-white border border-gray-300 text-blue-700 rounded font-bold text-[11px] hover:bg-blue-50">
+                                Members ({t.membersData?.length || 0})
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                    )}
                   </tbody>
                 </table>
               )}
