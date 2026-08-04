@@ -70,7 +70,10 @@ export default function AdminPrelimsScoresPage() {
       const scores = resScores.scores || [];
       const teams = resTeams.teams || [];
 
-      const merged: MergedRecord[] = teams.map((team) => {
+      // Filter ONLY teams that have submitted a PPT presentation for the Prelims round
+      const pptQualifiedTeams = teams.filter((t) => t.pptLink && String(t.pptLink).trim().length > 0);
+
+      const merged: MergedRecord[] = pptQualifiedTeams.map((team) => {
         const teamScores = scores.filter((s) => s.teamId === team.id);
         const totalScore = teamScores.length > 0 ? (teamScores[0].totalScore || 0) : 0;
 
@@ -127,7 +130,7 @@ export default function AdminPrelimsScoresPage() {
     const matchedLab = labs.find(
       (l) => l.assignedJuryName && l.assignedJuryName.toLowerCase() === selectedJuryName.toLowerCase()
     );
-    setAssignLabNo(matchedLab ? matchedLab.labName : 'Unassigned');
+    setAssignLabNo(matchedLab ? (matchedLab.assignedTheme ? `${matchedLab.labName} • Theme: ${matchedLab.assignedTheme}` : matchedLab.labName) : 'Unassigned');
   };
 
   const openAssignModal = (rec: MergedRecord) => {
@@ -194,8 +197,13 @@ export default function AdminPrelimsScoresPage() {
     <div className="space-y-6 animate-fadeIn">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-sm border border-gray-200 shadow-sm gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Prelims Scores</h2>
-          <p className="text-sm text-gray-500 mt-1">Manage team Jury assignment, Lab location, and view preliminary round evaluation scores.</p>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-2xl font-bold text-gray-900">Prelims Round</h2>
+            <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2.5 py-0.5 rounded border border-purple-200">
+              📄 PPT Submitted Teams Only ({mergedRecords.length})
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">Manage Jury assignments, Lab locations, and view evaluation scores for PPT-submitted teams in the Prelims round.</p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
           <input

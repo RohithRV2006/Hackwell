@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { clearSessionCookie } from '@/app/actions/session';
-import { savePPTLink } from '@/app/actions/drive';
+import { savePPTLink, checkPPTSubmissionTimelineStatus } from '@/app/actions/drive';
 import { changeTeamPassword } from '@/app/actions/forgot-password';
-import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, MapPin, Download, FileText, Users, Info, Trophy, FileUp, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, MapPin, Download, FileText, Users, Info, Trophy, FileUp, ExternalLink, Eye, EyeOff, Lock, AlertTriangle, XCircle } from 'lucide-react';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 
 export default function TeamDashboardClient({ team }: { team: any }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -31,9 +30,22 @@ export default function TeamDashboardClient({ team }: { team: any }) {
   const [currentFileId, setCurrentFileId] = useState(team.pptDriveFileId || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pptMessage, setPptMessage] = useState('');
+  const [pptTimelineStatus, setPptTimelineStatus] = useState<{ allowed: boolean; state: string; message: string }>({
+    allowed: false,
+    state: 'checking',
+    message: 'Checking PPT submission phase status...'
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const router = useRouter();
+
+  useEffect(() => {
+    async function checkPPTTimeline() {
+      const res = await checkPPTSubmissionTimelineStatus();
+      setPptTimelineStatus(res);
+    }
+    checkPPTTimeline();
+  }, []);
 
   useEffect(() => {
     let timeout: NodeJS.Timeout;
@@ -113,6 +125,12 @@ export default function TeamDashboardClient({ team }: { team: any }) {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const timelineCheck = await checkPPTSubmissionTimelineStatus();
+    if (!timelineCheck.allowed) {
+      setPptMessage(timelineCheck.message || 'PPT submission phase is not active.');
+      return;
+    }
 
     if (!file.name.endsWith('.ppt') && !file.name.endsWith('.pptx')) {
       setPptMessage('Please select a valid .ppt or .pptx file.');
@@ -239,6 +257,26 @@ export default function TeamDashboardClient({ team }: { team: any }) {
         </div>
       )}
 
+      {/* ELIMINATION NOTICE BANNER */}
+      {(team.eliminated || team.pptQualified === false || (!team.pptLink && pptTimelineStatus.state === 'ended')) && (
+        <div className="bg-red-50 border-2 border-red-300 p-6 rounded-2xl mb-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-red-100 text-red-600 rounded-xl flex items-center justify-center shrink-0">
+              <XCircle size={28} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-red-900">Team Disqualified / Eliminated</h2>
+                <span className="bg-red-600 text-white text-[11px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">Eliminated</span>
+              </div>
+              <p className="text-sm text-red-700 font-medium mt-1">
+                Your team did not submit the mandatory PPT presentation during Phase 2 (PPT Submission Phase). As per hackathon rules, unsubmitted teams cannot proceed to the Prelims round.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex border-b border-gray-200 overflow-x-auto hide-scrollbar bg-white rounded-t-xl px-2">
         <button
@@ -319,7 +357,15 @@ export default function TeamDashboardClient({ team }: { team: any }) {
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
                 <span className="text-gray-500 font-medium">Prelims Venue</span>
-                <span className="font-semibold text-gray-800">{team.venue || 'TBA'}</span>
+                <span className="font-semibold text-gray-800">
+                  {team.assignedLabName && team.assignedLabName !== 'Unassigned'
+                    ? team.assignedLabName
+                    : team.labNo && team.labNo !== 'Unassigned'
+                    ? team.labNo
+                    : team.venue && team.venue !== 'Unassigned'
+                    ? team.venue
+                    : 'TBA'}
+                </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
                 <span className="text-gray-500 font-medium">Finals Status</span>
@@ -427,11 +473,13 @@ export default function TeamDashboardClient({ team }: { team: any }) {
                 </div>
               </div>
 
-              {isDeadlinePassed ? (
-                <div className="bg-red-50 border border-red-200 text-red-800 p-6 rounded-xl flex flex-col items-center text-center">
-                  <Clock size={32} className="mb-3 text-red-500" />
-                  <h3 className="text-lg font-bold">Submission Closed</h3>
-                  <p className="mt-1">The deadline (August 20, 2026) has passed. You can no longer submit or update your PPT.</p>
+              {!pptTimelineStatus.allowed ? (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 p-6 rounded-xl flex flex-col items-center text-center shadow-sm">
+                  <Lock size={32} className="mb-3 text-amber-600" />
+                  <h3 className="text-lg font-bold text-amber-900">PPT Submission Phase Inactive</h3>
+                  <p className="mt-1 text-sm text-amber-800 max-w-md">
+                    {pptTimelineStatus.message || 'The administrators have not activated the PPT Submission Phase (Phase 2) yet. Presentations cannot be submitted until Phase 2 is started by the admin.'}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -456,11 +504,12 @@ export default function TeamDashboardClient({ team }: { team: any }) {
                       ref={fileInputRef}
                       className="hidden"
                       onChange={handleFileChange}
+                      disabled={!pptTimelineStatus.allowed || isSubmitting}
                     />
                     
                     <button 
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={isSubmitting}
+                      disabled={!pptTimelineStatus.allowed || isSubmitting}
                       className="w-full h-32 border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition rounded-xl flex flex-col items-center justify-center text-gray-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isSubmitting ? (

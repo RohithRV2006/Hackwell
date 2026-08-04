@@ -15,6 +15,7 @@ import {
   updateTimelinePhaseAdmin,
   resetTimelinePhaseAdmin,
   applyPptFilterAdmin,
+  resetPrelimsFiltersAndAssignmentsAdmin,
   EventTimelinesData,
   PhaseState,
   LabData,
@@ -25,6 +26,7 @@ import {
   JuryStat,
 } from '@/app/admin/actions';
 import { exportToCSV, exportToPDF } from './reports';
+import { THEME_NAMES } from '@/lib/data/themes';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -195,6 +197,7 @@ export default function AdminEventManagementPage() {
   const [labName, setLabName] = useState('');
   const [labCode, setLabCode] = useState('');
   const [assignedJuryName, setAssignedJuryName] = useState('');
+  const [assignedTheme, setAssignedTheme] = useState('');
   const [submittingLab, setSubmittingLab] = useState(false);
   const [allocating, setAllocating] = useState(false);
 
@@ -407,6 +410,18 @@ export default function AdminEventManagementPage() {
     setApplyingPptFilter(false);
   };
 
+  const handleResetPrelimsFilters = async () => {
+    if (!confirm('Undo/reset all Prelims filters and team assignments? This will clear disqualifications and reset team lab/jury allocations without deleting any team, jury, or lab configuration data.')) return;
+    setMsg(null);
+    const res = await resetPrelimsFiltersAndAssignmentsAdmin();
+    if (res.success) {
+      setMsg({ type: 'success', text: `🔄 Undone all Prelims filters and team assignments successfully! ${res.resetCount} teams reset.` });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to reset prelims filters.' });
+    }
+  };
+
   const handlePromoteTeams = async () => {
     if (phase3State !== 'ended') {
       setMsg({ type: 'error', text: 'Phase 3 hasn\'t completed yet! You cannot promote teams until Phase 3 ends.' });
@@ -470,6 +485,7 @@ export default function AdminEventManagementPage() {
     setLabName(lab.labName);
     setLabCode(lab.labCode || '');
     setAssignedJuryName(lab.assignedJuryName !== 'Unassigned' ? lab.assignedJuryName : '');
+    setAssignedTheme(lab.assignedTheme || '');
   };
 
   const handleCancelEditLab = () => {
@@ -477,6 +493,7 @@ export default function AdminEventManagementPage() {
     setLabName('');
     setLabCode('');
     setAssignedJuryName('');
+    setAssignedTheme('');
   };
 
   const handleSubmitLab = async (e: React.FormEvent) => {
@@ -489,8 +506,8 @@ export default function AdminEventManagementPage() {
     setSubmittingLab(true);
     setMsg(null);
     const fn = editingLabId
-      ? updateLabAdmin(editingLabId, labName, labCode, 0, assignedJuryName)
-      : createLabAdmin(labName, labCode, 0, assignedJuryName);
+      ? updateLabAdmin(editingLabId, labName, labCode, 0, assignedJuryName, assignedTheme)
+      : createLabAdmin(labName, labCode, 0, assignedJuryName, assignedTheme);
     const res = await fn;
     if (res.success) {
       setMsg({ type: 'success', text: `Lab "${labName}" ${editingLabId ? 'updated' : 'created'} successfully.` });
@@ -527,7 +544,10 @@ export default function AdminEventManagementPage() {
     setMsg(null);
     const res = await autoAssignTeamsToLabsAdmin();
     if (res.success) {
-      setMsg({ type: 'success', text: `Auto-assigned ${res.assignedCount} teams across labs!` });
+      setMsg({
+        type: 'success',
+        text: `Auto-assigned ${res.assignedCount} PPT-submitted teams across labs based on Problem Statement Theme matching! ${res.eliminatedCount ? `${res.eliminatedCount} non-PPT teams marked as eliminated.` : ''}`
+      });
       await refreshData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Failed to auto-assign.' });
@@ -854,19 +874,25 @@ export default function AdminEventManagementPage() {
           {/* PPT Filter */}
           <div className="bg-purple-50/80 border border-purple-200 rounded-sm p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wide">PPT Filter</h4>
+              <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wide">PPT Filter &amp; Assignments Control</h4>
               {timelines.timeline2.pptFilterApplied ? (
-                <p className="text-xs text-emerald-700 mt-0.5 font-semibold">✅ Filter applied — Teams without PPT have been marked as failed.</p>
+                <p className="text-xs text-emerald-700 mt-0.5 font-semibold">✅ Filter applied — Only teams with submitted PPTs advance to Prelims.</p>
               ) : (
-                <p className="text-xs text-gray-600 mt-0.5">Mark teams without a PPT link as failed. They will not proceed to Prelims.</p>
+                <p className="text-xs text-gray-600 mt-0.5">Filter teams for Prelims. Teams without a PPT link will be marked as failed.</p>
               )}
             </div>
-            {!timelines.timeline2.pptFilterApplied && (
-              <button onClick={handleApplyPptFilter} disabled={applyingPptFilter}
-                className="shrink-0 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition disabled:opacity-50">
-                {applyingPptFilter ? 'Applying...' : '🔍 Apply PPT Filter'}
+            <div className="flex items-center gap-2">
+              <button onClick={handleResetPrelimsFilters}
+                className="shrink-0 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition">
+                🔄 Reset Filters &amp; Assignments
               </button>
-            )}
+              {!timelines.timeline2.pptFilterApplied && (
+                <button onClick={handleApplyPptFilter} disabled={applyingPptFilter}
+                  className="shrink-0 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition disabled:opacity-50">
+                  {applyingPptFilter ? 'Applying...' : '🔍 Apply PPT Filter'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1059,6 +1085,16 @@ export default function AdminEventManagementPage() {
                       {juriesList.map((j) => <option key={j.id} value={j.name}>{j.name}{j.institution ? ` (${j.institution})` : ''}</option>)}
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Problem Statement Theme</label>
+                    <select value={assignedTheme} onChange={(e) => setAssignedTheme(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-sm px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-500">
+                      <option value="">-- All / Any Theme (General Lab) --</option>
+                      {THEME_NAMES.map((themeName) => (
+                        <option key={themeName} value={themeName}>{themeName}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex items-center gap-2 pt-1">
                     <button type="submit" disabled={submittingLab}
                       className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1.5 px-3 rounded-sm text-xs transition disabled:opacity-50">
@@ -1085,17 +1121,29 @@ export default function AdminEventManagementPage() {
                       <tr className="bg-gray-50 border-b border-gray-200">
                         <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Lab Name</th>
                         <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Jury</th>
+                        <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">PS Theme</th>
                         <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Teams</th>
                         <th className="px-4 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {labs.length === 0 ? (
-                        <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400 text-xs italic">No labs configured yet.</td></tr>
+                        <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400 text-xs italic">No labs configured yet.</td></tr>
                       ) : labs.map((lab) => (
                         <tr key={lab.labId} className="hover:bg-gray-50 transition text-xs">
                           <td className="px-4 py-3 font-bold text-gray-900">{lab.labName}</td>
                           <td className="px-4 py-3 text-gray-700">{lab.assignedJuryName}</td>
+                          <td className="px-4 py-3">
+                            {lab.assignedTheme ? (
+                              <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded text-[11px] font-bold">
+                                {lab.assignedTheme}
+                              </span>
+                            ) : (
+                              <span className="bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded text-[11px] font-semibold">
+                                All / General
+                              </span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 font-bold text-indigo-600">{lab.currentTeamCount}</td>
                           <td className="px-4 py-3 text-right space-x-1.5">
                             <button onClick={() => handleStartEditLab(lab)} className="text-blue-600 font-bold border border-gray-200 px-2 py-0.5 rounded hover:bg-blue-50">Edit</button>
