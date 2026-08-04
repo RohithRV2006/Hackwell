@@ -35,15 +35,18 @@
         },
         "leadData": {
           "type": "object",
-          "encrypted": false
+          "encrypted": false,
+          "description": "{ name, batchNumber, department, year, section, contactNumber, email }"
         },
         "membersData": {
           "type": "array",
-          "encrypted": false
+          "encrypted": false,
+          "description": "Array of { name, batchNumber, department, year, section }"
         },
         "allBatchNumbers": {
           "type": "array",
-          "encrypted": false
+          "encrypted": false,
+          "description": "Array of strings containing batch numbers of all team members"
         },
         "pptLink": {
           "type": "string",
@@ -54,6 +57,10 @@
           "encrypted": false
         },
         "venue": {
+          "type": "string",
+          "encrypted": false
+        },
+        "finalVenue": {
           "type": "string",
           "encrypted": false
         },
@@ -112,11 +119,6 @@
           "encrypted": false,
           "description": "e.g., 'selected', 'rejected', 'pending'"
         },
-        "finaleAverageScore": {
-          "type": "number",
-          "encrypted": false,
-          "description": "Average of all finaleEvaluations"
-        },
         "createdAt": {
           "type": "timestamp",
           "encrypted": false
@@ -128,13 +130,13 @@
       }
     },
     "roles": {
-      "description": "Stores authentication and role mapping for privileged users. Document ID is the user email (lowercase). Teams do NOT get a role document (fallback logic is used).",
+      "description": "Stores authentication and role mapping for privileged users. Document ID is the user email (lowercase).",
       "documentId": "email (lowercase)",
       "fields": {
         "role": {
           "type": "string",
           "encrypted": false,
-          "description": "'admin', 'jury', or 'coordinator' (legacy 'student-coord' and 'faculty-coord' supported)"
+          "description": "'admin', 'jury', or 'coordinator'"
         },
         "name": {
           "type": "string",
@@ -151,8 +153,35 @@
           "encrypted": false,
           "description": "Optional: User's institution"
         },
+        "migratedFrom": {
+          "type": "string",
+          "encrypted": false,
+          "description": "Optional: Original legacy collection name if migrated"
+        },
         "createdAt": {
           "type": "timestamp",
+          "encrypted": false
+        }
+      }
+    },
+    "jury": {
+      "description": "Stores detailed jury profile information. Duplicates some info from roles to support specific jury queries.",
+      "documentId": "email (lowercase)",
+      "fields": {
+        "email": {
+          "type": "string",
+          "encrypted": false
+        },
+        "juryName": {
+          "type": "string",
+          "encrypted": false
+        },
+        "name": {
+          "type": "string",
+          "encrypted": false
+        },
+        "institution": {
+          "type": "string",
           "encrypted": false
         }
       }
@@ -170,24 +199,32 @@
           "type": "string",
           "encrypted": false
         },
+        "teamName": {
+          "type": "string",
+          "encrypted": false
+        },
+        "problemStatement": {
+          "type": "string",
+          "encrypted": false
+        },
         "juryId": {
           "type": "string",
           "encrypted": false,
           "description": "Stores the jury's email address"
         },
+        "juryName": {
+          "type": "string",
+          "encrypted": false
+        },
         "rubric": {
           "type": "object",
-          "description": "Varies by round. Example: { innovation, technicalFeasibility, impact, presentation }"
+          "description": "Example: { innovation, technicalFeasibility, impact, presentation }"
         },
         "totalScore": {
           "type": "number",
           "encrypted": false
         },
         "remarks": {
-          "type": "string",
-          "encrypted": false
-        },
-        "feedback": {
           "type": "string",
           "encrypted": false
         },
@@ -209,7 +246,24 @@
         }
       }
     },
-
+    "prelimsEvaluations": {
+      "description": "Legacy collection for prelims scores, largely migrated to evaluations but still actively deleted from and queried by certain admin actions (e.g., promoteTopTeamsToFinaleAdmin).",
+      "documentId": "Auto-generated ID",
+      "fields": {
+        "teamId": {
+          "type": "string",
+          "encrypted": false
+        },
+        "juryId": {
+          "type": "string",
+          "encrypted": false
+        },
+        "totalScore": {
+          "type": "number",
+          "encrypted": false
+        }
+      }
+    },
     "gameScores": {
       "description": "Game XP assigned by student coordinators during the event.",
       "documentId": "Auto-generated ID",
@@ -237,7 +291,6 @@
         }
       }
     },
-
     "labs": {
       "description": "Lab assignments",
       "documentId": "Auto-generated ID",
