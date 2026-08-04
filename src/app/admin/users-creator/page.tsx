@@ -57,7 +57,7 @@ export default function UsersCreatorPage() {
     if (valid) loadUsers();
   };
 
-  useEffect(() => { checkSession(); }, []);
+  useEffect(() => { const run = async () => { await checkSession(); }; run(); }, []);
 
   const clearMessages = () => { setErrorMsg(''); setSuccessMsg(''); };
 

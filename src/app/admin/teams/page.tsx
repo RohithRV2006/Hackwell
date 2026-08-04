@@ -62,7 +62,8 @@ export default function AdminTeamsPage() {
   };
 
   useEffect(() => {
-    checkSession();
+    const run = async () => { await checkSession(); };
+    run();
   }, []);
 
   const openEditModal = (team: AdminTeamData) => {

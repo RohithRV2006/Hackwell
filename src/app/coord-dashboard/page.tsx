@@ -42,7 +42,7 @@ export default async function CoordDashboard() {
     console.error('Error fetching coord details', err);
   }
 
-  let teams: any[] = [];
+  const teams: any[] = [];
   try {
     const teamsSnap = await getAdminDb().collection('teams').get();
     
