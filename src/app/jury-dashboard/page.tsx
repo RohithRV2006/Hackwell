@@ -284,7 +284,7 @@ export default function JuryDashboard() {
       {/* SIMPLE POPUP MODAL: SCORING & DETAILS */}
       {/* ============================================== */}
       {selectedTeamId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-40 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 overflow-y-auto">
           <div className="bg-white border border-gray-300 rounded shadow-lg max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
             
             {/* Modal Header */}
@@ -553,7 +553,7 @@ export default function JuryDashboard() {
 
       {/* CONFIRMATION DIALOG POPUP */}
       {showConfirm && teamDetails && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white border border-gray-300 rounded p-6 max-w-sm w-full space-y-4 shadow-xl">
             <h4 className="text-base font-bold text-red-600">Confirm Evaluation Submission</h4>
             <p className="text-sm text-gray-650 leading-relaxed">
