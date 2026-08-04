@@ -1,16 +1,16 @@
 {
   "collections": {
     "teams": {
-      "description": "Stores information about registered hackathon teams and their members. Document ID acts as the unique identifier (usually auto-generated).",
-      "documentId": "Auto-generated ID",
+      "description": "Stores information about registered hackathon teams and their members. Document ID acts as the unique identifier (usually auto-generated, or legacy team name).",
+      "documentId": "Auto-generated ID (or legacy lowercase teamName)",
       "fields": {
         "displayId": { "type": "string", "encrypted": false },
-        "teamName": { "type": "string", "encrypted": false },
+        "teamName": { "type": "string", "encrypted": false, "required": true },
         "teamNameLower": { "type": "string", "encrypted": false },
         "theme": { "type": "string", "encrypted": false },
         "psId": { "type": "string", "encrypted": false },
         "problemStatement": { "type": "string", "encrypted": false },
-        "leadEmail": { "type": "string", "encrypted": false },
+        "leadEmail": { "type": "string", "encrypted": false, "description": "Lowercase email of the team lead" },
         "leadData": {
           "type": "object",
           "encrypted": false,
@@ -26,27 +26,28 @@
           "encrypted": false,
           "description": "Array of strings containing batch numbers of all team members"
         },
-        "pptLink": { "type": "string", "encrypted": false },
+        "pptLink": { "type": "string", "encrypted": false, "nullable": true },
         "pptDriveFileId": { "type": "string", "encrypted": false, "nullable": true },
         "pptQualified": { "type": "boolean", "encrypted": false },
         "pptStatus": { "type": "string", "encrypted": false },
         "venue": { "type": "string", "encrypted": false, "nullable": true },
         "finalVenue": { "type": "string", "encrypted": false, "nullable": true },
         "score": { "type": "number", "encrypted": false },
-        "judge": { "type": "string", "encrypted": false },
-        "labNo": { "type": "string", "encrypted": false },
+        "judge": { "type": "string", "encrypted": false, "default": "Unassigned" },
+        "labNo": { "type": "string", "encrypted": false, "default": "Unassigned" },
         "assignedLabId": { "type": "string", "encrypted": false },
         "assignedLabName": { "type": "string", "encrypted": false },
         "feedback": { "type": "string", "encrypted": false },
         "eliminated": { "type": "boolean", "encrypted": false },
         "eliminationReason": { "type": "string", "encrypted": false },
+        "prelimsAverageScore": { "type": "number", "encrypted": false },
+        "prelimsStatus": { "type": "string", "encrypted": false },
         "finaleQualified": { "type": "boolean", "encrypted": false },
+        "finalStatus": { "type": "string", "encrypted": false },
         "isWinner": { "type": "boolean", "encrypted": false },
         "winnerRank": { "type": "number", "encrypted": false, "nullable": true },
         "winnerTitle": { "type": "string", "encrypted": false, "nullable": true },
         "totalGameXP": { "type": "number", "encrypted": false },
-        "prelimsAverageScore": { "type": "number", "encrypted": false },
-        "prelimsStatus": { "type": "string", "encrypted": false },
         "createdAt": { "type": "timestamp", "encrypted": false },
         "updatedAt": { "type": "timestamp", "encrypted": false }
       }
@@ -66,17 +67,18 @@
       }
     },
     "jury": {
-      "description": "Stores detailed jury profile information. Used as fallback if jury details not found in roles.",
+      "description": "Stores detailed jury profile information. Dual-written alongside roles collection.",
       "documentId": "email (lowercase)",
       "fields": {
         "email": { "type": "string", "encrypted": false },
         "juryName": { "type": "string", "encrypted": false },
         "name": { "type": "string", "encrypted": false },
-        "institution": { "type": "string", "encrypted": false }
+        "institution": { "type": "string", "encrypted": false },
+        "createdAt": { "type": "timestamp", "encrypted": false }
       }
     },
     "evaluations": {
-      "description": "Unified scoring submitted by Juries and Admins.",
+      "description": "Unified scoring submitted by Juries and Admins. Replaces prelimsEvaluations and finaleEvaluations.",
       "documentId": "Format: {round}_{juryId}_{teamId}",
       "fields": {
         "round": { "type": "string", "encrypted": false, "description": "'prelims' or 'finale'" },
@@ -94,12 +96,13 @@
         "feedback": { "type": "string", "encrypted": false },
         "highlighted": { "type": "boolean", "encrypted": false },
         "isFrozen": { "type": "boolean", "encrypted": false },
+        "migratedFrom": { "type": "string", "encrypted": false, "description": "Set by migration script" },
         "createdAt": { "type": "timestamp", "encrypted": false },
         "updatedAt": { "type": "timestamp", "encrypted": false }
       }
     },
     "prelimsEvaluations": {
-      "description": "Legacy collection for prelims scores, migrated to evaluations but still referenced by admin cache invalidation and delete operations.",
+      "description": "Legacy collection for prelims scores, migrated to evaluations but still referenced by admin delete operations.",
       "documentId": "Auto-generated ID",
       "fields": {
         "teamId": { "type": "string", "encrypted": false },
@@ -113,7 +116,7 @@
       "fields": {}
     },
     "gameScores": {
-      "description": "Intended to store Game XP assigned by student coordinators. Currently only queried by admin actions, with no write operations present in the codebase.",
+      "description": "Stores Game XP assigned by student coordinators. Currently only queried by admin actions.",
       "documentId": "Auto-generated ID",
       "fields": {
         "teamId": { "type": "string", "encrypted": false },
@@ -124,7 +127,7 @@
       }
     },
     "labs": {
-      "description": "Lab assignments",
+      "description": "Lab assignments for Prelims",
       "documentId": "Auto-generated ID",
       "fields": {
         "labId": { "type": "string", "encrypted": false },
@@ -133,6 +136,21 @@
         "capacity": { "type": "number", "encrypted": false },
         "assignedJuryId": { "type": "string", "encrypted": false },
         "assignedJuryName": { "type": "string", "encrypted": false },
+        "assignedTheme": { "type": "string", "encrypted": false },
+        "currentTeamCount": { "type": "number", "encrypted": false },
+        "createdAt": { "type": "timestamp", "encrypted": false },
+        "updatedAt": { "type": "timestamp", "encrypted": false }
+      }
+    },
+    "finalLabs": {
+      "description": "Lab assignments for Finale",
+      "documentId": "Auto-generated ID",
+      "fields": {
+        "labId": { "type": "string", "encrypted": false },
+        "labName": { "type": "string", "encrypted": false },
+        "labCode": { "type": "string", "encrypted": false },
+        "capacity": { "type": "number", "encrypted": false },
+        "coordinator": { "type": "string", "encrypted": false },
         "currentTeamCount": { "type": "number", "encrypted": false },
         "createdAt": { "type": "timestamp", "encrypted": false },
         "updatedAt": { "type": "timestamp", "encrypted": false }
