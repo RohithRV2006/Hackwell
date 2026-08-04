@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Select from 'react-select';
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
-import { HACKATHON_THEMES, ALL_PROBLEM_STATEMENTS } from '@/lib/data/themes';
+import { problemStatements } from '@/data/problem-statements';
 
 const depts = ["AID", "CSBS", "CSE", "CSE(AIML)", "IT"] as const;
 const years = ["II", "III", "IV"] as const;
@@ -81,6 +81,7 @@ export default function Register() {
   const [nameChecking, setNameChecking] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showTnC, setShowTnC] = useState(false);
   
   // Confirmation state
@@ -139,17 +140,18 @@ export default function Register() {
 
   useEffect(() => {
     if (selectedPS && !selectedTheme) {
-      const psData = ALL_PROBLEM_STATEMENTS.find(ps => ps.id === selectedPS);
+      const psData = problemStatements.find(ps => ps.ps_id === selectedPS);
       if (psData) {
-        setValue('theme', psData.themeName, { shouldValidate: true });
+        setValue('theme', psData.theme, { shouldValidate: true });
       }
     }
   }, [selectedPS, selectedTheme, setValue]);
 
-  const themeOptions = HACKATHON_THEMES.map(t => ({ value: t.name, label: t.name }));
+  const uniqueThemes = Array.from(new Set(problemStatements.map(ps => ps.theme)));
+  const themeOptions = uniqueThemes.map(t => ({ value: t, label: t }));
   const psOptions = selectedTheme 
-    ? HACKATHON_THEMES.find(t => t.name === selectedTheme)?.problemStatements.map(ps => ({ value: ps.id, label: `${ps.id}: ${ps.name}` })) || []
-    : ALL_PROBLEM_STATEMENTS.map(ps => ({ value: ps.id, label: `${ps.id}: ${ps.name}` }));
+    ? problemStatements.filter(ps => ps.theme === selectedTheme).map(ps => ({ value: ps.ps_id, label: `${ps.ps_id}: ${ps.title}` }))
+    : problemStatements.map(ps => ({ value: ps.ps_id, label: `${ps.ps_id}: ${ps.title}` }));
 
   // Live Batch Number Checker
   const leadBatch = watch('lead.batchNumber');
@@ -237,13 +239,13 @@ export default function Register() {
       
       const { password: _password, confirmPassword: _confirmPassword, ...leadDataWithoutPassword } = data.lead;
       
-      const psData = ALL_PROBLEM_STATEMENTS.find(ps => ps.id === data.problemStatement);
+      const psData = problemStatements.find(ps => ps.ps_id === data.problemStatement);
       
       const result = await registerTeamData(
         data.teamName,
         data.theme,
         data.problemStatement, // psId
-        psData?.name || 'Unknown', // psName
+        psData?.title || 'Unknown', // psName
         data.lead.email,
         leadDataWithoutPassword,
         data.members
@@ -411,9 +413,16 @@ export default function Register() {
                 <div className="relative">
                   <input 
                     {...register('lead.confirmPassword')} 
-                    type={showPassword ? 'text' : 'password'} 
+                    type={showConfirmPassword ? 'text' : 'password'} 
                     className="w-full p-2 border rounded-md pr-10" 
                   />
+                  <button 
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700 z-10"
+                  >
+                    {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
                 </div>
                 {errors.lead?.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.lead.confirmPassword.message}</p>}
               </div>
@@ -591,7 +600,7 @@ export default function Register() {
                   <div className="col-span-2">
                     <span className="block text-xs font-semibold text-blue-700 uppercase">Problem Statement</span>
                     <span className="font-bold">
-                      {ALL_PROBLEM_STATEMENTS.find(ps => ps.id === pendingFormData.problemStatement)?.name} 
+                      {problemStatements.find(ps => ps.ps_id === pendingFormData.problemStatement)?.title} 
                       ({pendingFormData.problemStatement})
                     </span>
                   </div>
