@@ -63,8 +63,8 @@ export async function getUserRole(email: string) {
 
 export async function createSessionCookie(idToken: string) {
   try {
-    // Session length is exactly 30 minutes (30 * 60 * 1000 ms)
-    const expiresIn = 30 * 60 * 1000;
+    // Session length is exactly 40 minutes (40 * 60 * 1000 ms)
+    const expiresIn = 40 * 60 * 1000;
     
     // Verify the idToken and create a session cookie
     const decodedIdToken = await getAdminAuth().verifyIdToken(idToken);

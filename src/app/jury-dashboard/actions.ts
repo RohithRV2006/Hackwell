@@ -397,11 +397,6 @@ export async function submitAndFreezeEvaluation(
         deliveryImpact: rubric.deliveryImpact,
         liveDefenseScore: rubric.liveDefenseScore,
         communication: rubric.communication,
-        // Mapped admin rubric fields for seamless admin UI integration
-        problemStatement: Math.round((rubric.conceptStrength / 12) * 10),
-        presentation: Math.round((rubric.deliveryImpact / 8) * 10),
-        solution: Math.round((rubric.buildIntelligence / 12) * 10),
-        idea: Math.round((rubric.liveDefenseScore / 8) * 10),
       },
       totalScore: totalScore,
       feedback: feedback.trim(),

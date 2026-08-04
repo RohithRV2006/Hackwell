@@ -35,7 +35,10 @@ export default function AdminOverviewPage() {
   };
 
   useEffect(() => {
-    checkSession();
+    const run = async () => {
+      await checkSession();
+    };
+    run();
   }, []);
 
   if (loading) {

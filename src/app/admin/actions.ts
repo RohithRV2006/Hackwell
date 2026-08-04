@@ -97,7 +97,7 @@ export async function getCachedDocs(collectionName: string) {
     let snap: any;
     if (collectionName === 'metadata_eventTimelines') {
       snap = await db.collection('metadata').doc('eventTimelines').get();
-    } else if (collectionName === 'prelimsEvaluations' || collectionName === 'finaleEvaluations' || collectionName === 'gameScores') {
+    } else if (collectionName === 'gameScores') {
       snap = await db.collection(collectionName).orderBy('createdAt', 'desc').get();
     } else {
       snap = await db.collection(collectionName).get();
@@ -203,8 +203,8 @@ export async function getAllTeamsAdmin(): Promise<{ success: boolean; teams: Adm
 
     for (const doc of cachedDocs) {
       const data = doc.data;
-      let decryptedLead: Lead = data.leadData || { name: '', batchNumber: '', department: '', year: '', section: '', contactNumber: '' };
-      let decryptedMembers: Member[] = data.membersData || [];
+      const decryptedLead: Lead = data.leadData || { name: '', batchNumber: '', department: '', year: '', section: '', contactNumber: '' };
+      const decryptedMembers: Member[] = data.membersData || [];
 
       const hasPpt = Boolean(data.pptLink && String(data.pptLink).trim().length > 0);
 
@@ -466,18 +466,11 @@ export async function deleteTeamAdmin(teamId: string) {
 
 
 export interface Rubric {
-  problemStatement?: number;
-  presentation?: number;
-  communication?: number;
-  solution?: number;
-  idea?: number;
-  innovation?: number;
-  technicalFeasibility?: number;
-  impact?: number;
   conceptStrength?: number;
   buildIntelligence?: number;
   deliveryImpact?: number;
   liveDefenseScore?: number;
+  communication?: number;
 }
 
 export interface AdminScoreData {
@@ -641,8 +634,8 @@ export async function createScoreAdmin(scoreData: {
       return { success: false, error: 'A score record already exists for this team by this jury.' };
     }
 
-    const { innovation, technicalFeasibility, impact, presentation } = scoreData.rubric;
-    const totalScore = Number(innovation) + Number(technicalFeasibility) + Number(impact) + Number(presentation);
+    const { conceptStrength, buildIntelligence, deliveryImpact, liveDefenseScore, communication } = scoreData.rubric;
+    const totalScore = Number(conceptStrength) + Number(buildIntelligence) + Number(deliveryImpact) + Number(liveDefenseScore) + Number(communication);
     const now = new Date();
 
     const newDocId = `prelims_${scoreData.juryId}_${scoreData.teamId}`;
@@ -652,10 +645,11 @@ export async function createScoreAdmin(scoreData: {
       teamId: scoreData.teamId,
       juryId: scoreData.juryId,
       rubric: {
-        innovation: Number(innovation),
-        technicalFeasibility: Number(technicalFeasibility),
-        impact: Number(impact),
-        presentation: Number(presentation),
+        conceptStrength: Number(conceptStrength),
+        buildIntelligence: Number(buildIntelligence),
+        deliveryImpact: Number(deliveryImpact),
+        liveDefenseScore: Number(liveDefenseScore),
+        communication: Number(communication),
       },
       totalScore,
       remarks: scoreData.remarks?.trim() || '',
@@ -665,8 +659,6 @@ export async function createScoreAdmin(scoreData: {
       updatedAt: now,
     });
 
-    invalidateCollectionCache('prelimsEvaluations');
-    invalidateCollectionCache('finaleEvaluations');
     return { success: true, id: newDoc.id };
   } catch (error: any) {
     console.error('Error creating score:', error);
@@ -709,22 +701,21 @@ export async function updateScoreAdmin(
     }
 
     if (updatedFields.rubric !== undefined) {
-      const { innovation, technicalFeasibility, impact, presentation } = updatedFields.rubric;
+      const { conceptStrength, buildIntelligence, deliveryImpact, liveDefenseScore, communication } = updatedFields.rubric;
       const parsedRubric = {
-        innovation: Number(innovation),
-        technicalFeasibility: Number(technicalFeasibility),
-        impact: Number(impact),
-        presentation: Number(presentation),
+        conceptStrength: Number(conceptStrength),
+        buildIntelligence: Number(buildIntelligence),
+        deliveryImpact: Number(deliveryImpact),
+        liveDefenseScore: Number(liveDefenseScore),
+        communication: Number(communication),
       };
       payload.rubric = parsedRubric;
-      payload.totalScore = parsedRubric.innovation + parsedRubric.technicalFeasibility + parsedRubric.impact + parsedRubric.presentation;
+      payload.totalScore = parsedRubric.conceptStrength + parsedRubric.buildIntelligence + parsedRubric.deliveryImpact + parsedRubric.liveDefenseScore + parsedRubric.communication;
     }
 
     payload.updatedAt = new Date();
 
     await docRef.update(payload);
-    invalidateCollectionCache('prelimsEvaluations');
-    invalidateCollectionCache('finaleEvaluations');
     return { success: true };
   } catch (error: any) {
     console.error('Error updating score:', error);
@@ -740,9 +731,6 @@ export async function deleteScoreAdmin(scoreId: string) {
 
   try {
     const db = getAdminDb();
-    await db.collection('prelimsEvaluations').doc(scoreId).delete();
-    invalidateCollectionCache('prelimsEvaluations');
-    invalidateCollectionCache('finaleEvaluations');
     await db.collection('evaluations').doc(scoreId).delete();
     return { success: true };
   } catch (error: any) {
@@ -787,7 +775,6 @@ export async function publishPrelimsResults() {
 
     await batch.commit();
     invalidateCollectionCache('teams');
-    invalidateCollectionCache('prelimsEvaluations');
     return { success: true };
   } catch (error: any) {
     console.error('Error publishing prelims results:', error);
@@ -1133,7 +1120,7 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
       db.collection('labs').get(),
     ]);
 
-    let totalTeams = teamsSnap.size;
+    const totalTeams = teamsSnap.size;
     let totalStudents = 0;
     let pptSubmittedCount = 0;
     let finalistCount = 0;

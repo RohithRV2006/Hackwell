@@ -80,12 +80,12 @@ function formatDateDisplay(dateStr: string): string {
 // Countdown Hook
 // ─────────────────────────────────────────────────────────────────────────────
 function useCountdown(endDate: string): string {
-  const [countdown, setCountdown] = useState('');
+  const [countdown, setCountdown] = useState(() => endDate ? formatCountdown(new Date(endDate).getTime()) : '');
   useEffect(() => {
     if (!endDate) { setCountdown(''); return; }
-    const update = () => setCountdown(formatCountdown(new Date(endDate).getTime()));
-    update();
-    const id = setInterval(update, 1000);
+    const id = setInterval(() => {
+      setCountdown(formatCountdown(new Date(endDate).getTime()));
+    }, 1000);
     return () => clearInterval(id);
   }, [endDate]);
   return countdown;
@@ -147,7 +147,7 @@ export default function AdminEventManagementPage() {
 
   // ── Computed Live Stats (In Client Memory - Zero extra Firestore reads!) ─
   const liveStats: TimelineLiveStats = useMemo(() => {
-    let totalTeams = teams.length;
+    const totalTeams = teams.length;
     let totalStudents = 0;
     let pptSubmittedCount = 0;
     let finalistCount = 0;

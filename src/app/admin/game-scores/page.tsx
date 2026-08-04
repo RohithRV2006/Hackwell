@@ -42,7 +42,8 @@ export default function AdminGameScoresPage() {
   };
 
   useEffect(() => {
-    checkSession();
+    const run = async () => { await checkSession(); };
+    run();
   }, []);
 
   const filteredRecords = scores.filter((rec) =>

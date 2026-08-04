@@ -4,7 +4,7 @@ const RULES = [
   <>Each team must consist of <strong>exactly 4 members</strong>. Only students from <strong>CSE, AI&DS, AIML, IT, and CSBS</strong> are eligible. Inter-department teams are allowed.</>,
   <>Complete team registration and problem statement selection before the registration deadline. The selected problem statement cannot be changed after registration.</>,
   <>Major project development must take place during the 24-hour hackathon. Pre-built, previously submitted, or substantially completed projects are strictly prohibited.</>,
-  <>Open-source libraries, APIs, frameworks, AI models, and public datasets may be used. However, the core idea, implementation, and integration must be your team's own work.</>,
+  <>Open-source libraries, APIs, frameworks, AI models, and public datasets may be used. However, the core idea, implementation, and integration must be your team&apos;s own work.</>,
   <>Submit all required deliverables (such as the <strong>PPT</strong> and <strong>Consent Letter</strong>) before the announced deadline. Late submissions will result in disqualification.</>,
   <>Teams must present a live demonstration of their solution during the evaluation.</>,
   <>Carry your valid college ID card throughout the event.</>,
