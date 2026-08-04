@@ -103,7 +103,7 @@ export default function Register() {
     checkTimeline();
   }, []);
 
-  const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, control, watch, setValue, clearErrors, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       teamName: '',
@@ -142,10 +142,11 @@ export default function Register() {
     if (selectedPS && !selectedTheme) {
       const psData = problemStatements.find(ps => ps.ps_id === selectedPS);
       if (psData) {
-        setValue('theme', psData.theme, { shouldValidate: true });
+        setValue('theme', psData.theme);
+        clearErrors('theme');
       }
     }
-  }, [selectedPS, selectedTheme, setValue]);
+  }, [selectedPS, selectedTheme, setValue, clearErrors]);
 
   const uniqueThemes = Array.from(new Set(problemStatements.map(ps => ps.theme)));
   const themeOptions = uniqueThemes.map(t => ({ value: t, label: t }));
@@ -335,7 +336,8 @@ export default function Register() {
                       value={themeOptions.find(c => c.value === field.value) || null}
                       onChange={val => {
                         field.onChange(val?.value);
-                        setValue('problemStatement', '', { shouldValidate: true });
+                        setValue('problemStatement', '');
+                        clearErrors('problemStatement');
                       }}
                     />
                   )}
@@ -356,7 +358,10 @@ export default function Register() {
                       className="text-sm"
                       placeholder="Search problem statement..."
                       value={psOptions.find(c => c.value === field.value) || null}
-                      onChange={val => field.onChange(val?.value)}
+                      onChange={val => {
+                        field.onChange(val?.value);
+                        clearErrors('problemStatement');
+                      }}
                     />
                   )}
                 />

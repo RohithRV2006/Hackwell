@@ -196,6 +196,8 @@ export async function getTeamDataByEmail(email: string) {
         pptDriveFileId: data.pptDriveFileId || null,
         prelimsStatus: data.prelimsStatus || 'pending',
         venue: data.venue || null,
+        finalStatus: data.finalStatus || 'pending',
+        finalVenue: data.finalVenue || null,
       }
     };
   } catch (error: any) {

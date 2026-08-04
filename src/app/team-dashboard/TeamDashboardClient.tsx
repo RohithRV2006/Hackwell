@@ -323,11 +323,13 @@ export default function TeamDashboardClient({ team }: { team: any }) {
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
                 <span className="text-gray-500 font-medium">Finals Status</span>
-                <span className="font-semibold text-gray-400">TBA</span>
+                <span className={`font-semibold ${team.finalStatus === 'selected' ? 'text-green-600' : team.finalStatus === 'rejected' ? 'text-red-600' : 'text-yellow-600'}`}>
+                  {team.finalStatus ? team.finalStatus.toUpperCase() : 'PENDING'}
+                </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
                 <span className="text-gray-500 font-medium">Finals Venue</span>
-                <span className="font-semibold text-gray-400">TBA</span>
+                <span className="font-semibold text-gray-800">{team.finalVenue || 'TBA'}</span>
               </div>
             </div>
 
