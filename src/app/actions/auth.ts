@@ -57,14 +57,12 @@ export async function checkRegistrationTimelineStatus() {
     const docSnap = await db.collection('metadata').doc('eventTimelines').get();
 
     if (!docSnap.exists) {
-      return { allowed: true, message: '' };
+      return { allowed: false, message: 'Event registration process has not been started by administrators.' };
     }
 
     const t1 = docSnap.data()?.timeline1;
-    if (!t1) return { allowed: true, message: '' };
-
-    if (t1.enabled === false) {
-      return { allowed: false, message: 'Student registration is currently disabled by administrators.' };
+    if (!t1 || t1.enabled === false || t1.state === 'not-set') {
+      return { allowed: false, message: 'Event registration process has not been started by administrators.' };
     }
 
     const now = new Date();
@@ -79,7 +77,7 @@ export async function checkRegistrationTimelineStatus() {
     return { allowed: true, message: '' };
   } catch (error: any) {
     console.error('Error checking registration timeline status:', error);
-    return { allowed: true, message: '' };
+    return { allowed: false, message: 'Unable to verify registration status.' };
   }
 }
 

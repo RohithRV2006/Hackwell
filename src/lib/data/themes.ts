@@ -1,3 +1,5 @@
+import { problemStatements } from '@/data/problem-statements';
+
 export type ProblemStatement = {
   id: string;
   name: string;
@@ -5,56 +7,55 @@ export type ProblemStatement = {
 
 export type Theme = {
   name: string;
+  description?: string;
   problemStatements: ProblemStatement[];
 };
 
-export const HACKATHON_THEMES: Theme[] = [
-  {
-    name: "AI & Machine Learning",
-    problemStatements: [
-      { id: "PS-01", name: "AI-Powered Diagnostics in Healthcare" },
-      { id: "PS-02", name: "Predictive Maintenance for Smart Manufacturing" },
-      { id: "PS-03", name: "Automated Accessibility Tools for Education" }
-    ]
-  },
-  {
-    name: "Fintech & Blockchain",
-    problemStatements: [
-      { id: "PS-04", name: "Decentralized Identity Verification" },
-      { id: "PS-05", name: "Micro-lending Platform for Rural Economies" },
-      { id: "PS-06", name: "Fraud Detection using Anomaly Detection" }
-    ]
-  },
-  {
-    name: "Smart City & IoT",
-    problemStatements: [
-      { id: "PS-07", name: "Intelligent Traffic Management System" },
-      { id: "PS-08", name: "Real-time Public Utilities Monitoring" },
-      { id: "PS-09", name: "Smart Waste Management Optimization" }
-    ]
-  },
-  {
-    name: "Sustainability & Green Tech",
-    problemStatements: [
-      { id: "PS-10", name: "Carbon Footprint Tracker for Enterprises" },
-      { id: "PS-11", name: "Renewable Energy Grid Balancing" },
-      { id: "PS-12", name: "Supply Chain Optimization for Food Waste" }
-    ]
-  },
-  {
-    name: "Cybersecurity & Web3",
-    problemStatements: [
-      { id: "PS-13", name: "Zero-Trust Architecture Implementation" },
-      { id: "PS-14", name: "Phishing Attempt Detection via NLP" },
-      { id: "PS-15", name: "Secure Peer-to-Peer File Sharing" }
-    ]
-  }
-];
+export const THEME_NAMES = [
+  "Autonomous Agentic AI",
+  "Adaptive Intelligent Systems",
+  "Predictive Logistics using Industrial AI",
+  "AI for Smart Business Solution",
+  "Human Centered AI",
+] as const;
 
-// Helper array containing all PS across all themes for the dropdown search
-export const ALL_PROBLEM_STATEMENTS = HACKATHON_THEMES.flatMap((theme) => 
+export const THEME_DESCRIPTIONS: Record<string, string> = {
+  "Autonomous Agentic AI": "Build self-directed, multi-agent AI systems that collaborate, reason, and autonomously solve complex workflows.",
+  "Adaptive Intelligent Systems": "Develop dynamic AI models that continuously learn, adapt, and personalize experiences based on user interactions.",
+  "Predictive Logistics using Industrial AI": "Leverage industrial AI to forecast demand, optimize supply chains, and enable predictive asset routing.",
+  "AI for Smart Business Solution": "Create AI tools that transform business operations, financial decision-making, and municipal services.",
+  "Human Centered AI": "Design ethical, accessible, and inclusive AI technologies tailored to empower humans and communities.",
+};
+
+const normalizeThemeName = (rawTheme: string): string => {
+  const lower = rawTheme.toLowerCase().trim();
+  if (lower.includes('autonomous') || lower.includes('agentic')) return "Autonomous Agentic AI";
+  if (lower.includes('adaptive') || lower.includes('intell')) return "Adaptive Intelligent Systems";
+  if (lower.includes('predictive') || lower.includes('logistics')) return "Predictive Logistics using Industrial AI";
+  if (lower.includes('business') || lower.includes('smart business')) return "AI for Smart Business Solution";
+  if (lower.includes('human') || lower.includes('centered')) return "Human Centered AI";
+  return rawTheme;
+};
+
+export const HACKATHON_THEMES: Theme[] = THEME_NAMES.map((themeName) => {
+  const matchingPS = problemStatements
+    .filter((ps) => normalizeThemeName(ps.theme) === themeName)
+    .map((ps) => ({
+      id: ps.ps_id,
+      name: `${ps.title}: ${ps.statement}`,
+    }));
+
+  return {
+    name: themeName,
+    description: THEME_DESCRIPTIONS[themeName],
+    problemStatements: matchingPS,
+  };
+});
+
+// Helper array containing all PS across all 5 themes for dropdown search
+export const ALL_PROBLEM_STATEMENTS = HACKATHON_THEMES.flatMap((theme) =>
   theme.problemStatements.map((ps) => ({
     ...ps,
-    themeName: theme.name
+    themeName: theme.name,
   }))
 );

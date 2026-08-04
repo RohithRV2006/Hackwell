@@ -18,7 +18,8 @@
         },
         "theme": {
           "type": "string",
-          "encrypted": false
+          "encrypted": false,
+          "description": "One of 5 official themes: 'Autonomous Agentic AI', 'Adaptive Intelligent Systems', 'Predictive Logistics using Industrial AI', 'AI for Smart Business Solution', 'Human Centered AI'"
         },
         "psId": {
           "type": "string",

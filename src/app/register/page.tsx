@@ -525,10 +525,10 @@ export default function Register() {
             
             <button
               type="submit"
-              disabled={loading || nameAvailable === false || batchDuplicates.length > 0}
+              disabled={loading || !!timelineNotice || nameAvailable === false || batchDuplicates.length > 0}
               className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition disabled:opacity-50 text-lg"
             >
-              {loading ? 'Processing Registration...' : 'Complete Registration'}
+              {loading ? 'Processing Registration...' : timelineNotice ? 'Registration Not Available' : 'Complete Registration'}
             </button>
           </section>
         </form>
