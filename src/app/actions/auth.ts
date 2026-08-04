@@ -195,7 +195,10 @@ export async function getTeamDataByEmail(email: string) {
         pptLink: data.pptLink || null,
         pptDriveFileId: data.pptDriveFileId || null,
         prelimsStatus: data.prelimsStatus || 'pending',
-        venue: data.venue || null,
+        venue: (data.assignedLabName && data.assignedLabName !== 'Unassigned') ? data.assignedLabName : (data.labNo && data.labNo !== 'Unassigned') ? data.labNo : (data.venue || null),
+        assignedLabName: data.assignedLabName || data.labNo || null,
+        labNo: data.labNo || null,
+        judge: data.judge || null,
         finalStatus: data.finalStatus || 'pending',
         finalVenue: data.finalVenue || null,
       }
