@@ -24,6 +24,7 @@ export interface SimpleTeam {
   judge?: string;
   labNo?: string;
   isAssignedToJury?: boolean;
+  selectedForFinal?: boolean;
 }
 
 export interface DetailedTeam {
@@ -64,6 +65,8 @@ export interface EvaluationData {
   rubric: Rubric;
   totalScore: number;
   feedback: string;
+  selectedForFinal?: boolean;
+  selectionReason?: string;
   isFrozen: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -155,7 +158,7 @@ export async function getJuryDashboardData() {
 
     // 2. Fetch score records in evaluations/prelims
     const prelimsRecords = await getEvalRecords('prelims');
-    const scoreMap = new Map<string, { isFrozen: boolean; totalScore: number }>();
+    const scoreMap = new Map<string, { isFrozen: boolean; totalScore: number; selectedForFinal: boolean }>();
 
     prelimsRecords.forEach((r) => {
       const matchJury =
@@ -168,6 +171,7 @@ export async function getJuryDashboardData() {
         scoreMap.set(cleanTeamId, {
           isFrozen: r.isFrozen === true,
           totalScore: typeof r.totalScore === 'number' ? r.totalScore : 0,
+          selectedForFinal: Boolean(r.selectedForFinal),
         });
       }
     });
@@ -214,6 +218,7 @@ export async function getJuryDashboardData() {
         judge: judgeVal,
         labNo: labNoVal,
         isAssignedToJury: !!isAssignedToJury,
+        selectedForFinal: scoreInfo ? scoreInfo.selectedForFinal : false,
       };
     });
 
@@ -292,6 +297,8 @@ export async function getTeamDetails(teamId: string) {
         },
         feedback: existingRec.feedback || existingRec.remarks || '',
         totalScore: existingRec.totalScore ?? 0,
+        selectedForFinal: Boolean(existingRec.selectedForFinal),
+        selectionReason: existingRec.selectionReason || '',
         isFrozen: existingRec.isFrozen === true,
         createdAt: existingRec.createdAt || undefined,
       };
@@ -312,7 +319,9 @@ export async function submitAndFreezeEvaluation(
   teamName: string,
   displayId: string,
   rubric: Rubric,
-  feedback: string
+  feedback: string,
+  selectedForFinal: boolean = false,
+  selectionReason: string = ''
 ) {
   const session = await verifyJurySession();
   if (!session.success || !session.email || !session.juryName) {
@@ -398,6 +407,8 @@ export async function submitAndFreezeEvaluation(
       totalScore,
       feedback: feedback.trim(),
       remarks: feedback.trim(),
+      selectedForFinal: Boolean(selectedForFinal),
+      selectionReason: selectionReason.trim(),
       isFrozen: true,
     };
 

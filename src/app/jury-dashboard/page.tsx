@@ -33,6 +33,8 @@ export default function JuryDashboard() {
   const [liveDefenseScore, setLiveDefenseScore] = useState<string>('');
   const [communication, setCommunication] = useState<string>('');
   const [feedback, setFeedback] = useState<string>('');
+  const [selectedForFinal, setSelectedForFinal] = useState<boolean>(false);
+  const [selectionReason, setSelectionReason] = useState<string>('');
   const [isFrozen, setIsFrozen] = useState<boolean>(false);
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -72,6 +74,8 @@ export default function JuryDashboard() {
     setLiveDefenseScore('');
     setCommunication('');
     setFeedback('');
+    setSelectedForFinal(false);
+    setSelectionReason('');
     setIsFrozen(false);
 
     const res = await getTeamDetails(teamId);
@@ -85,6 +89,8 @@ export default function JuryDashboard() {
         setLiveDefenseScore(rubric.liveDefenseScore?.toString() || '0');
         setCommunication(rubric.communication?.toString() || '0');
         setFeedback(res.scoreData.feedback || '');
+        setSelectedForFinal(res.scoreData.selectedForFinal || false);
+        setSelectionReason(res.scoreData.selectionReason || '');
         setIsFrozen(res.scoreData.isFrozen);
       }
     } else {
@@ -118,15 +124,13 @@ export default function JuryDashboard() {
     const errors: Record<string, string> = {};
 
     const validateField = (val: string, max: number, key: string) => {
-      if (val.trim() === '') {
+      if (val === '') {
         errors[key] = 'Required';
         return;
       }
-      const num = parseInt(val, 10);
-      if (isNaN(num) || !Number.isInteger(num)) {
-        errors[key] = 'Must be an integer';
-      } else if (num < 0 || num > max) {
-        errors[key] = `Range 0-${max}`;
+      const num = Number(val);
+      if (isNaN(num) || !Number.isInteger(num) || num < 0 || num > max) {
+        errors[key] = `Must be 0-${max}`;
       }
     };
 
@@ -146,7 +150,7 @@ export default function JuryDashboard() {
     }
   };
 
-  const handleConfirmFreeze = async () => {
+  const handleFreezeSubmit = async () => {
     if (!teamDetails) return;
     
     setShowConfirm(false);
@@ -167,7 +171,9 @@ export default function JuryDashboard() {
       teamDetails.teamName,
       teamDetails.displayId,
       rubric,
-      feedback
+      feedback,
+      selectedForFinal,
+      selectionReason
     );
 
     if (res.success) {
@@ -258,7 +264,12 @@ export default function JuryDashboard() {
                   </h3>
                 </div>
 
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2.5">
+                  {team.selectedForFinal && (
+                    <span className="px-2 py-1 bg-purple-100 border border-purple-200 text-purple-800 text-xs font-bold rounded flex items-center gap-1">
+                      🌟 Nominated
+                    </span>
+                  )}
                   {isEval ? (
                     <span className="px-2 py-1 bg-green-100 border border-green-200 text-green-700 text-xs font-bold rounded">
                       Evaluated
@@ -512,12 +523,51 @@ export default function JuryDashboard() {
                     </h4>
                     <textarea
                       placeholder="Write evaluation comments..."
-                      rows={3}
+                      rows={2}
                       value={feedback}
                       disabled={isFrozen || isSubmitting}
                       onChange={(e) => setFeedback(e.target.value)}
                       className="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
+                  </div>
+
+                  {/* Final Round Nomination Card */}
+                  <div className="p-4 bg-purple-50 border border-purple-200 rounded space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold uppercase tracking-wider text-purple-900 block flex items-center gap-1.5">
+                          <span>🌟</span> Nominate for Final Round
+                        </span>
+                        <p className="text-xs text-purple-700 mt-0.5">
+                          Recommend this team for selection to the Final Round.
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          disabled={isFrozen || !prelimsActive}
+                          checked={selectedForFinal}
+                          onChange={(e) => setSelectedForFinal(e.target.checked)}
+                          className="w-5 h-5 accent-purple-600 rounded cursor-pointer"
+                        />
+                      </label>
+                    </div>
+
+                    {selectedForFinal && (
+                      <div>
+                        <label className="block text-xs font-bold text-purple-900 mb-1">
+                          Reason for Final Round Nomination
+                        </label>
+                        <textarea
+                          disabled={isFrozen || !prelimsActive}
+                          value={selectionReason}
+                          onChange={(e) => setSelectionReason(e.target.value)}
+                          placeholder="Provide recommendation notes for why this team should be selected for the Final Round..."
+                          className="w-full bg-white border border-purple-300 rounded p-2 text-xs focus:outline-none focus:border-purple-600"
+                          rows={2}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Submit / Close Actions */}
@@ -572,7 +622,7 @@ export default function JuryDashboard() {
               </button>
               <button
                 type="button"
-                onClick={handleConfirmFreeze}
+                onClick={handleFreezeSubmit}
                 className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold transition"
               >
                 Yes, Submit & Freeze

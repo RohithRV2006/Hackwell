@@ -53,18 +53,15 @@ export async function checkRegistrationTimelineStatus() {
       return { allowed: false, message: 'Event registration process has not been started by administrators.' };
     }
 
-    const t1 = timelines.timeline1;
-    if (!t1 || t1.enabled === false || t1.state === 'not-set') {
+    const t1 = timelines?.timeline1;
+    if (!t1 || t1.enabled === false || t1.state !== 'active') {
+      if (t1?.state === 'paused') {
+        return { allowed: false, message: 'Registration is currently PAUSED / STOPPED by administrators.' };
+      }
+      if (t1?.state === 'ended') {
+        return { allowed: false, message: 'Registration has been FINISHED and closed.' };
+      }
       return { allowed: false, message: 'Event registration process has not been started by administrators.' };
-    }
-
-    const now = new Date();
-    if (t1.startDate && new Date(t1.startDate) > now) {
-      return { allowed: false, message: `Registration opens on ${new Date(t1.startDate).toLocaleString()}.` };
-    }
-
-    if (t1.endDate && new Date(t1.endDate) < now) {
-      return { allowed: false, message: `Registration closed on ${new Date(t1.endDate).toLocaleString()}.` };
     }
 
     return { allowed: true, message: '' };
@@ -209,6 +206,18 @@ export async function getTeamDataByEmail(email: string) {
 
 export async function submitPPT(teamId: string, pptLink: string) {
   try {
+    const timelines = await getEventTimelines();
+    const t2 = timelines?.timeline2;
+    if (!t2 || t2.enabled === false || t2.state !== 'active') {
+      if (t2?.state === 'paused') {
+        return { success: false, error: 'PPT Submission is currently PAUSED / STOPPED by administrators.' };
+      }
+      if (t2?.state === 'ended') {
+        return { success: false, error: 'PPT Submission window has FINISHED and closed.' };
+      }
+      return { success: false, error: 'PPT Submission has not been started by administrators.' };
+    }
+
     const res = await updateTeamInDomainDoc(teamId, {
       pptLink: pptLink.trim(),
       updatedAt: new Date().toISOString(),

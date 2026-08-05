@@ -7,6 +7,16 @@ import { getUserRole } from '@/app/actions/session';
 import { FieldValue } from 'firebase-admin/firestore';
 import { unstable_cache, revalidateTag } from 'next/cache';
 import { THEME_NAMES } from '@/lib/data/themes';
+import {
+  publishJurySelectedFinalists,
+  upsertEvalRecord,
+  updateTeamInDomainDoc,
+  getAllTeamsFlatFromDomainDocs,
+  findTeamInDomainDocs,
+  deleteTeamFromDomainDoc,
+  createTeamInDomainDoc,
+  bulkUpdateTeamsInDomainDocs,
+} from '@/lib/firestore-helpers';
 
 function resolveTeamTheme(teamData: any): string {
   if (teamData.theme && String(teamData.theme).trim().length > 0) {
@@ -35,18 +45,8 @@ function resolveTeamTheme(teamData: any): string {
 
 const getCachedTeamsData = unstable_cache(
   async () => {
-    const db = getAdminDb();
-    const snapshot = await db.collection('teams').get();
-    return snapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        data: {
-          ...data,
-          createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : null
-        } as any
-      };
-    });
+    // Read from domain-split docs (5 domain documents, each with a teams[] array)
+    return await getAllTeamsFlatFromDomainDocs();
   },
   ['admin-all-teams'],
   { revalidate: 300 } // 5 minutes cache
@@ -167,8 +167,8 @@ export async function getAdminOverviewStats() {
   
   try {
     const db = getAdminDb();
-    const [teamsSnap, rolesSnap, jurySnap, prelimsSnap, finaleSnap] = await Promise.all([
-      db.collection('teams').count().get(),
+    const [allTeamsForCount, rolesSnap, jurySnap, prelimsSnap, finaleSnap] = await Promise.all([
+      getAllTeamsFlatFromDomainDocs(),
       db.collection('roles').count().get(),
       db.collection('roles').where('role', '==', 'jury').count().get(),
       db.collection('evaluations').where('round', '==', 'prelims').count().get(),
@@ -178,7 +178,7 @@ export async function getAdminOverviewStats() {
     return {
       success: true,
       stats: {
-        totalTeams: teamsSnap?.data().count || 0,
+        totalTeams: allTeamsForCount.length,
         totalRoles: rolesSnap?.data().count || 0,
         totalJuries: jurySnap?.data().count || 0,
         totalPrelims: prelimsSnap?.data().count || 0,
@@ -198,48 +198,8 @@ export async function getAllTeamsAdmin(): Promise<{ success: boolean; teams: Adm
   }
 
   try {
-    const cachedDocs = await getCachedTeamsData();
-
-    const teams: AdminTeamData[] = [];
-
-    for (const doc of cachedDocs) {
-      const data = doc.data;
-      const decryptedLead: Lead = data.leadData || { name: '', batchNumber: '', department: '', year: '', section: '', contactNumber: '' };
-      const decryptedMembers: Member[] = data.membersData || [];
-
-      const hasPpt = Boolean(data.pptLink && String(data.pptLink).trim().length > 0);
-
-      teams.push({
-        id: doc.id,
-        displayId: data.displayId || doc.id,
-        teamName: data.teamName || doc.id,
-        problemStatement: data.problemStatement || 'Not assigned',
-        theme: data.theme || resolveTeamTheme(data),
-        leadEmail: data.leadEmail || '',
-        leadData: decryptedLead,
-        membersData: decryptedMembers,
-        score: typeof data.score === 'number' ? data.score : 0,
-        judge: data.judge || 'Unassigned',
-        labNo: data.labNo || 'Unassigned',
-        assignedLabId: data.assignedLabId || '',
-        assignedLabName: data.assignedLabName || data.labNo || '',
-        feedback: data.feedback || '',
-        pptLink: data.pptLink || '',
-        pptQualified: data.pptQualified !== false && hasPpt,
-        pptStatus: data.pptStatus || (hasPpt ? 'submitted' : 'pending'),
-        eliminated: data.eliminated === true || (data.pptQualified === false),
-        eliminationReason: data.eliminationReason || (hasPpt ? '' : 'No PPT presentation submitted during Phase 2'),
-        prelimsStatus: data.prelimsStatus || (data.finaleQualified ? 'selected' : 'pending'),
-        finaleQualified: data.finaleQualified === true,
-        finalStatus: data.finalStatus || 'pending',
-        finalVenue: data.finalVenue || 'TBA',
-        isWinner: data.isWinner === true,
-        winnerRank: data.winnerRank || null,
-        winnerTitle: data.winnerTitle || null,
-        createdAt: data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : '',
-      });
-    }
-
+    // getAllTeamsFlatFromDomainDocs already returns AdminTeamData[]
+    const teams = await getCachedTeamsData();
     return { success: true, teams };
   } catch (error: any) {
     console.error('Error fetching teams for admin:', error);
@@ -250,9 +210,9 @@ export async function getAllTeamsAdmin(): Promise<{ success: boolean; teams: Adm
 export async function syncLabTeamCountsAdmin(dbInstance?: any) {
   try {
     const db = dbInstance || getAdminDb();
-    const [labsSnap, teamsSnap] = await Promise.all([
+    const [labsSnap, allTeams] = await Promise.all([
       db.collection('labs').get(),
-      db.collection('teams').get(),
+      getAllTeamsFlatFromDomainDocs(),
     ]);
 
     if (labsSnap.empty) return;
@@ -262,10 +222,9 @@ export async function syncLabTeamCountsAdmin(dbInstance?: any) {
       countsMap.set(doc.id, 0);
     });
 
-    teamsSnap.docs.forEach((doc: any) => {
-      const data = doc.data();
-      const labId = data.assignedLabId;
-      const labName = data.assignedLabName || data.labNo;
+    allTeams.forEach((team) => {
+      const labId = team.assignedLabId;
+      const labName = team.assignedLabName || team.labNo;
 
       let matchedLabId = '';
       if (labId && countsMap.has(labId)) {
@@ -320,14 +279,12 @@ export async function updateTeamAdmin(
 
   try {
     const db = getAdminDb();
-    const docRef = db.collection('teams').doc(teamId);
-    const docSnap = await docRef.get();
-
-    if (!docSnap.exists) {
+    const found = await findTeamInDomainDocs(teamId);
+    if (!found) {
       return { success: false, error: 'Team not found' };
     }
 
-    const currentData = docSnap.data() || {};
+    const currentData = found.team as any;
     const payload: Record<string, any> = {};
 
     if (updatedFields.teamName !== undefined) {
@@ -371,6 +328,8 @@ export async function updateTeamAdmin(
         );
       }
 
+      const oldLabId = currentData.assignedLabId;
+
       if (matchedLab) {
         payload.assignedLabId = matchedLab.id;
         payload.assignedLabName = matchedLab.data().labName || matchedLab.id;
@@ -381,6 +340,25 @@ export async function updateTeamAdmin(
         }
       } else if (newLabNo) {
         payload.venue = newLabNo;
+      }
+
+      // Update lab counts if lab assignment changed
+      const newLabId = payload.assignedLabId;
+      if (newLabId !== oldLabId) {
+        const labBatch = db.batch();
+        if (oldLabId) {
+          labBatch.update(db.collection('labs').doc(oldLabId), {
+            currentTeamCount: FieldValue.increment(-1),
+            updatedAt: new Date()
+          });
+        }
+        if (newLabId) {
+          labBatch.update(db.collection('labs').doc(newLabId), {
+            currentTeamCount: FieldValue.increment(1),
+            updatedAt: new Date()
+          });
+        }
+        await labBatch.commit();
       }
     }
 
@@ -396,32 +374,12 @@ export async function updateTeamAdmin(
       payload.allBatchNumbers = Array.from(batchSet);
     }
 
-    await docRef.update(payload);
+    const res = await updateTeamInDomainDoc(teamId, payload);
+    if (!res.success) return { success: false, error: res.error };
+
     await syncLabTeamCountsAdmin(db);
     invalidateCollectionCache('teams');
     invalidateCollectionCache('labs');
-    const oldLabId = currentData.assignedLabId;
-    const newLabId = payload.assignedLabId;
-
-    const batch = db.batch();
-    batch.update(docRef, payload);
-
-    if (newLabId !== oldLabId) {
-      if (oldLabId) {
-        batch.update(db.collection('labs').doc(oldLabId), {
-          currentTeamCount: FieldValue.increment(-1),
-          updatedAt: new Date()
-        });
-      }
-      if (newLabId) {
-        batch.update(db.collection('labs').doc(newLabId), {
-          currentTeamCount: FieldValue.increment(1),
-          updatedAt: new Date()
-        });
-      }
-    }
-
-    await batch.commit();
     return { success: true };
   } catch (error: any) {
     console.error('Error updating team:', error);
@@ -437,25 +395,24 @@ export async function deleteTeamAdmin(teamId: string) {
 
   try {
     const db = getAdminDb();
-    await db.collection('teams').doc(teamId).delete();
+    // Get team info before deleting (to decrement lab count)
+    const found = await findTeamInDomainDocs(teamId);
+    const labId = (found?.team as any)?.assignedLabId;
+
+    const res = await deleteTeamFromDomainDoc(teamId);
+    if (!res.success) return { success: false, error: res.error };
+
+    // Decrement lab count if team was assigned to a lab
+    if (labId) {
+      await db.collection('labs').doc(labId).update({
+        currentTeamCount: FieldValue.increment(-1),
+        updatedAt: new Date()
+      });
+    }
+
     await syncLabTeamCountsAdmin(db);
     invalidateCollectionCache('teams');
     invalidateCollectionCache('labs');
-    const docRef = db.collection('teams').doc(teamId);
-    const snap = await docRef.get();
-    
-    if (snap.exists) {
-      const labId = snap.data()?.assignedLabId;
-      const batch = db.batch();
-      batch.delete(docRef);
-      if (labId) {
-        batch.update(db.collection('labs').doc(labId), {
-          currentTeamCount: FieldValue.increment(-1),
-          updatedAt: new Date()
-        });
-      }
-      await batch.commit();
-    }
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting team:', error);
@@ -485,6 +442,8 @@ export interface AdminScoreData {
   totalScore: number;
   remarks: string;
   feedback?: string;
+  selectedForFinal?: boolean;
+  selectionReason?: string;
   highlighted: boolean;
   isFrozen: boolean;
   createdAt?: string;
@@ -501,18 +460,17 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
     const db = getAdminDb();
     
     // We fetch teams and roles for mapping names
-    const [snapshot, teamsSnap, rolesSnap] = await Promise.all([
+    const [snapshot, rolesSnap, allTeams] = await Promise.all([
       db.collection('evaluations').where('round', '==', round).get(),
-      db.collection('teams').get(),
       db.collection('roles').where('role', '==', 'jury').get(),
+      getAllTeamsFlatFromDomainDocs(),
     ]);
     
     const teamMap = new Map<string, { teamName: string; problemStatement: string }>();
-    teamsSnap.docs?.forEach((doc: any) => {
-      const data = doc.data();
-      teamMap.set(doc.id, {
-        teamName: data.teamName || doc.id,
-        problemStatement: data.problemStatement || 'N/A',
+    allTeams.forEach((team) => {
+      teamMap.set(team.id, {
+        teamName: team.teamName || team.id,
+        problemStatement: team.problemStatement || 'N/A',
       });
     });
 
@@ -579,14 +537,14 @@ export async function getAllGameScoresAdmin() {
   }
 
   try {
-    const [snapshot, teamsSnap] = await Promise.all([
+    const [snapshot, allTeams] = await Promise.all([
       getCachedDocs('gameScores'),
-      getCachedDocs('teams'),
+      getAllTeamsFlatFromDomainDocs(),
     ]);
     
     const teamMap = new Map<string, { teamName: string }>();
-    teamsSnap.docs.forEach((doc: any) => {
-      teamMap.set(doc.id, { teamName: doc.data().teamName || doc.id });
+    allTeams.forEach((team) => {
+      teamMap.set(team.id, { teamName: team.teamName || team.id });
     });
 
     const scores = snapshot.docs.map((doc: any) => {
@@ -624,9 +582,9 @@ export async function createScoreAdmin(scoreData: {
     const db = getAdminDb();
     const scoresRef = db.collection('evaluations');
 
-    // Ensure team exists
-    const teamDoc = await db.collection('teams').doc(scoreData.teamId).get();
-    if (!teamDoc.exists) {
+    // Ensure team exists in domain docs
+    const teamFound = await findTeamInDomainDocs(scoreData.teamId);
+    if (!teamFound) {
       return { success: false, error: `Team ID "${scoreData.teamId}" does not exist.` };
     }
 
@@ -761,21 +719,21 @@ export async function publishPrelimsResults() {
       teamScores[data.teamId].push(data.totalScore || 0);
     });
 
-    const batch = db.batch();
-    
-    // Calculate average and update team
-    for (const [teamId, scores] of Object.entries(teamScores)) {
-      if (scores.length > 0) {
-        const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-        const teamRef = db.collection('teams').doc(teamId);
-        batch.update(teamRef, {
-          prelimsAverageScore: averageScore,
-          prelimsStatus: 'selected', // Default behavior for now, can be changed via admin dashboard later
-        });
-      }
+    // Build bulk update array
+    const updates = Object.entries(teamScores)
+      .filter(([, scores]) => scores.length > 0)
+      .map(([teamId, scores]) => ({
+        teamId,
+        fields: {
+          prelimsAverageScore: scores.reduce((a, b) => a + b, 0) / scores.length,
+          prelimsStatus: 'selected',
+        },
+      }));
+
+    if (updates.length > 0) {
+      await bulkUpdateTeamsInDomainDocs(updates);
     }
 
-    await batch.commit();
     invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
@@ -784,7 +742,7 @@ export async function publishPrelimsResults() {
   }
 }
 
-export type PhaseState = 'not-set' | 'active' | 'ended';
+export type PhaseState = 'not-set' | 'active' | 'paused' | 'ended';
 
 export interface EventTimelinesData {
   timeline1: { name: string; startDate: string; endDate: string; enabled: boolean; state?: PhaseState };
@@ -940,57 +898,41 @@ export async function resetPrelimsFiltersAndAssignmentsAdmin(): Promise<{ succes
 
   try {
     const db = getAdminDb();
-    const [teamsSnap, labsSnap] = await Promise.all([
-      db.collection('teams').get(),
+    const [allTeams, labsSnap] = await Promise.all([
+      getAllTeamsFlatFromDomainDocs(),
       db.collection('labs').get(),
     ]);
 
-    let batch = db.batch();
-    let opCount = 0;
-
-    // Reset team filters and lab/jury assignments
-    teamsSnap.docs.forEach((doc) => {
-      const data = doc.data();
-      const hasPpt = Boolean(data.pptLink && String(data.pptLink).trim().length > 0);
-
-      batch.update(doc.ref, {
-        labNo: 'Unassigned',
-        judge: 'Unassigned',
-        venue: 'TBA',
-        assignedLabId: FieldValue.delete(),
-        assignedLabName: FieldValue.delete(),
-        pptQualified: hasPpt,
-        pptStatus: hasPpt ? 'submitted' : 'pending',
-        eliminated: false,
-        eliminationReason: null,
-        prelimsStatus: 'pending',
-        prelimsAverageScore: 0,
-        finaleQualified: false,
-      });
-
-      opCount++;
-      if (opCount === 400) {
-        batch.commit();
-        batch = db.batch();
-        opCount = 0;
-      }
+    // Build bulk update array — reset team filters and lab/jury assignments
+    const updates = allTeams.map((team) => {
+      const hasPpt = Boolean(team.pptLink && String(team.pptLink).trim().length > 0);
+      return {
+        teamId: team.id,
+        fields: {
+          labNo: 'Unassigned',
+          judge: 'Unassigned',
+          venue: 'TBA',
+          assignedLabId: null,    // null = delete field in bulkUpdateTeamsInDomainDocs
+          assignedLabName: null,  // null = delete field
+          pptQualified: hasPpt,
+          pptStatus: hasPpt ? 'submitted' : 'pending',
+          eliminated: false,
+          eliminationReason: null,
+          prelimsStatus: 'pending',
+          prelimsAverageScore: 0,
+          finaleQualified: false,
+        },
+      };
     });
 
-    // Reset current team counts in labs (keep lab configuration, jury, & theme intact)
-    labsSnap.docs.forEach((doc) => {
-      batch.update(doc.ref, {
-        currentTeamCount: 0,
-        updatedAt: new Date(),
-      });
-      opCount++;
-      if (opCount === 400) {
-        batch.commit();
-        batch = db.batch();
-        opCount = 0;
-      }
-    });
+    await bulkUpdateTeamsInDomainDocs(updates);
 
-    if (opCount > 0) {
+    // Reset current team counts in labs (keep lab config, jury, & theme intact)
+    if (!labsSnap.empty) {
+      const batch = db.batch();
+      labsSnap.docs.forEach((doc) => {
+        batch.update(doc.ref, { currentTeamCount: 0, updatedAt: new Date() });
+      });
       await batch.commit();
     }
 
@@ -1007,7 +949,7 @@ export async function resetPrelimsFiltersAndAssignmentsAdmin(): Promise<{ succes
     invalidateCollectionCache('labs');
     invalidateCollectionCache('metadata_eventTimelines');
 
-    return { success: true, resetCount: teamsSnap.size };
+    return { success: true, resetCount: allTeams.length };
   } catch (error: any) {
     console.error('Error resetting prelims filters:', error);
     return { success: false, error: error.message || 'Failed to reset prelims filters' };
@@ -1053,24 +995,24 @@ export async function applyPptFilterAdmin(): Promise<{ success: boolean; passed?
 
   try {
     const db = getAdminDb();
-    const teamsSnap = await db.collection('teams').get();
+    const allTeams = await getAllTeamsFlatFromDomainDocs();
 
-    const batch = db.batch();
     let passed = 0;
     let failed = 0;
 
-    teamsSnap.docs.forEach((doc) => {
-      const data = doc.data();
-      const hasPpt = data.pptLink && String(data.pptLink).trim().length > 0;
-      batch.update(doc.ref, {
-        pptQualified: hasPpt ? true : false,
-        pptStatus: hasPpt ? 'submitted' : 'failed',
-      });
-      if (hasPpt) passed++;
-      else failed++;
+    const updates = allTeams.map((team) => {
+      const hasPpt = Boolean(team.pptLink && String(team.pptLink).trim().length > 0);
+      if (hasPpt) passed++; else failed++;
+      return {
+        teamId: team.id,
+        fields: {
+          pptQualified: hasPpt,
+          pptStatus: hasPpt ? 'submitted' : 'failed',
+        },
+      };
     });
 
-    await batch.commit();
+    await bulkUpdateTeamsInDomainDocs(updates);
 
     // Mark filter applied in metadata
     await db.collection('metadata').doc('eventTimelines').set(
@@ -1114,32 +1056,31 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
 
   try {
     const db = getAdminDb();
-    const [teamsSnap, prelimsSnap, finaleSnap, rolesSnap, labsSnap] = await Promise.all([
-      db.collection('teams').get(),
+    const [allTeams, prelimsSnap, finaleSnap, rolesSnap, labsSnap] = await Promise.all([
+      getAllTeamsFlatFromDomainDocs(),
       db.collection('evaluations').where('round', '==', 'prelims').get(),
       db.collection('evaluations').where('round', '==', 'finale').get(),
       db.collection('roles').where('role', '==', 'jury').get(),
       db.collection('labs').get(),
     ]);
 
-    const totalTeams = teamsSnap.size;
+    const totalTeams = allTeams.length;
     let totalStudents = 0;
     let pptSubmittedCount = 0;
     let finalistCount = 0;
 
-    teamsSnap.docs.forEach((doc: any) => {
-      const data = doc.data();
+    allTeams.forEach((team) => {
       // Count students (lead + members)
       let count = 0;
-      if (data.leadData || data.leadEmail) count += 1;
-      if (Array.isArray(data.membersData)) count += data.membersData.length;
+      if (team.leadData || team.leadEmail) count += 1;
+      if (Array.isArray(team.membersData)) count += team.membersData.length;
       if (count === 0) count = 1; // Fallback
       totalStudents += count;
 
-      if (data.pptLink && String(data.pptLink).trim().length > 0) {
+      if (team.pptLink && String(team.pptLink).trim().length > 0) {
         pptSubmittedCount += 1;
       }
-      if (data.finaleQualified === true) {
+      if (team.finaleQualified === true) {
         finalistCount += 1;
       }
     });
@@ -1222,30 +1163,22 @@ export async function setFinalWinnersAdmin(winners: { teamId: string; rank: numb
 
   try {
     const db = getAdminDb();
-    const teamsSnap = await db.collection('teams').get();
+    const allTeams = await getAllTeamsFlatFromDomainDocs();
 
     const winnerMap = new Map<string, { rank: number; title: string }>();
     winners.forEach((w) => winnerMap.set(w.teamId, { rank: w.rank, title: w.title }));
 
-    const batch = db.batch();
-    teamsSnap.docs.forEach((doc) => {
-      const wInfo = winnerMap.get(doc.id);
-      if (wInfo) {
-        batch.update(doc.ref, {
-          isWinner: true,
-          winnerRank: wInfo.rank,
-          winnerTitle: wInfo.title,
-        });
-      } else {
-        batch.update(doc.ref, {
-          isWinner: false,
-          winnerRank: null,
-          winnerTitle: null,
-        });
-      }
+    const updates = allTeams.map((team) => {
+      const wInfo = winnerMap.get(team.id);
+      return {
+        teamId: team.id,
+        fields: wInfo
+          ? { isWinner: true, winnerRank: wInfo.rank, winnerTitle: wInfo.title }
+          : { isWinner: false, winnerRank: null, winnerTitle: null },
+      };
     });
 
-    await batch.commit();
+    await bulkUpdateTeamsInDomainDocs(updates);
 
     // Also update metadata
     await db.collection('metadata').doc('eventWinners').set(
@@ -1289,7 +1222,8 @@ export async function toggleTeamFinaleQualifiedAdmin(teamId: string, qualified: 
       updates.finalVenue = 'N/A';
     }
 
-    await db.collection('teams').doc(teamId).update(updates);
+    const res = await updateTeamInDomainDoc(teamId, updates);
+    if (!res.success) return { success: false, error: res.error };
     invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
@@ -1309,61 +1243,58 @@ export async function autoAllocateTeamsAdmin(labs: string[], juries: string[]) {
       return { success: false, error: 'Please provide at least one Lab and one Jury.' };
     }
 
-    const db = getAdminDb();
-    const snapshot = await db.collection('teams').get();
-    
-    if (snapshot.empty) {
+    const allTeams = await getAllTeamsFlatFromDomainDocs();
+
+    if (allTeams.length === 0) {
       return { success: false, error: 'No teams registered yet.' };
     }
 
-    const batch = db.batch();
+    const qualifiedTeams = allTeams.filter((t) => t.pptLink && String(t.pptLink).trim().length > 0);
+    const unsubmittedTeams = allTeams.filter((t) => !t.pptLink || String(t.pptLink).trim().length === 0);
 
-    // Filter ONLY teams that have uploaded PPT
-    const qualifiedDocs = snapshot.docs.filter((doc) => {
-      const data = doc.data();
-      return data.pptLink && String(data.pptLink).trim().length > 0;
-    });
-
-    const unsubmittedDocs = snapshot.docs.filter((doc) => {
-      const data = doc.data();
-      return !data.pptLink || String(data.pptLink).trim().length === 0;
-    });
-
-    if (qualifiedDocs.length === 0) {
+    if (qualifiedTeams.length === 0) {
       return { success: false, error: 'No teams have submitted a PPT presentation yet. Cannot assign labs or juries.' };
     }
 
+    const updates: { teamId: string; fields: Record<string, any> }[] = [];
+
     // Assign ONLY qualified teams to labs & juries
-    qualifiedDocs.forEach((doc, idx) => {
+    qualifiedTeams.forEach((team, idx) => {
       const assignedLab = labs[idx % labs.length];
       const assignedJury = juries[idx % juries.length];
-
-      batch.update(doc.ref, {
-        labNo: assignedLab,
-        assignedLabName: assignedLab,
-        venue: assignedLab,
-        judge: assignedJury,
-        pptQualified: true,
-        eliminated: false,
-        eliminationReason: null,
+      updates.push({
+        teamId: team.id,
+        fields: {
+          labNo: assignedLab,
+          assignedLabName: assignedLab,
+          venue: assignedLab,
+          judge: assignedJury,
+          pptQualified: true,
+          eliminated: false,
+          eliminationReason: null,
+        },
       });
     });
 
     // Mark unsubmitted teams as unassigned & eliminated
-    unsubmittedDocs.forEach((doc) => {
-      batch.update(doc.ref, {
-        labNo: 'Unassigned (Eliminated)',
-        venue: 'Unassigned (Eliminated)',
-        judge: 'Unassigned',
-        pptQualified: false,
-        eliminated: true,
-        eliminationReason: 'Eliminated: Did not submit PPT presentation during Phase 2',
+    unsubmittedTeams.forEach((team) => {
+      updates.push({
+        teamId: team.id,
+        fields: {
+          labNo: 'Unassigned (Eliminated)',
+          venue: 'Unassigned (Eliminated)',
+          judge: 'Unassigned',
+          pptQualified: false,
+          eliminated: true,
+          eliminationReason: 'Eliminated: Did not submit PPT presentation during Phase 2',
+        },
       });
     });
 
-    await batch.commit();
+    await bulkUpdateTeamsInDomainDocs(updates);
 
     // Mark filter applied in metadata
+    const db = getAdminDb();
     await db.collection('metadata').doc('eventTimelines').set(
       { timeline2: { pptFilterApplied: true } },
       { merge: true }
@@ -1371,7 +1302,7 @@ export async function autoAllocateTeamsAdmin(labs: string[], juries: string[]) {
 
     invalidateCollectionCache('teams');
     invalidateCollectionCache('metadata_eventTimelines');
-    return { success: true, count: qualifiedDocs.length, eliminatedCount: unsubmittedDocs.length };
+    return { success: true, count: qualifiedTeams.length, eliminatedCount: unsubmittedTeams.length };
   } catch (error: any) {
     console.error('Error auto allocating teams:', error);
     return { success: false, error: error.message || 'Failed to allocate teams' };
@@ -1386,9 +1317,9 @@ export async function promoteTopTeamsToFinaleAdmin(topCount: number) {
 
   try {
     const db = getAdminDb();
-    const [evalsSnap, teamsSnap, labsSnap] = await Promise.all([
+    const [evalsSnap, allTeams, labsSnap] = await Promise.all([
       db.collection('prelimsEvaluations').get(),
-      db.collection('teams').get(),
+      getAllTeamsFlatFromDomainDocs(),
       db.collection('labs').get(),
     ]);
 
@@ -1406,41 +1337,30 @@ export async function promoteTopTeamsToFinaleAdmin(topCount: number) {
       }
     });
 
-    const teamsWithScore: { id: string; score: number }[] = [];
-    teamsSnap.docs.forEach((doc) => {
-      const score = teamScores[doc.id] || 0;
-      teamsWithScore.push({ id: doc.id, score });
-    });
-
-    // Sort descending by score
+    const teamsWithScore = allTeams.map((team) => ({ id: team.id, score: teamScores[team.id] || 0 }));
     teamsWithScore.sort((a, b) => b.score - a.score);
 
     const qualifiedList = teamsWithScore.slice(0, topCount).map((t) => t.id);
     const qualifiedIds = new Set(qualifiedList);
 
-    const batch = db.batch();
-    teamsSnap.docs.forEach((doc) => {
-      const isQualified = qualifiedIds.has(doc.id);
+    const updates = allTeams.map((team) => {
+      const isQualified = qualifiedIds.has(team.id);
       if (isQualified) {
-        const qIndex = qualifiedList.indexOf(doc.id);
+        const qIndex = qualifiedList.indexOf(team.id);
         const assignedVenue = labs.length > 0 ? labs[qIndex % labs.length].labName : 'Main Auditorium';
-        batch.update(doc.ref, {
-          finaleQualified: true,
-          prelimsStatus: 'selected',
-          finalStatus: 'pending',
-          finalVenue: assignedVenue,
-        });
+        return {
+          teamId: team.id,
+          fields: { finaleQualified: true, prelimsStatus: 'selected', finalStatus: 'pending', finalVenue: assignedVenue },
+        };
       } else {
-        batch.update(doc.ref, {
-          finaleQualified: false,
-          prelimsStatus: 'rejected',
-          finalStatus: 'rejected',
-          finalVenue: 'N/A',
-        });
+        return {
+          teamId: team.id,
+          fields: { finaleQualified: false, prelimsStatus: 'rejected', finalStatus: 'rejected', finalVenue: 'N/A' },
+        };
       }
     });
 
-    await batch.commit();
+    await bulkUpdateTeamsInDomainDocs(updates);
     invalidateCollectionCache('teams');
     return { success: true, promotedCount: qualifiedIds.size };
   } catch (error: any) {
@@ -1583,29 +1503,26 @@ export async function updateLabAdmin(
     await docRef.update(payload);
 
     // Sync teams assigned to this lab with updated Lab Name and Jury Name
-    const teamsSnap = await db.collection('teams').get();
-    const batch = db.batch();
-    let count = 0;
+    const allTeams = await getAllTeamsFlatFromDomainDocs();
+    const matchedTeams = allTeams.filter(
+      (t) =>
+        t.assignedLabId === labId ||
+        (oldLabName && t.assignedLabName === oldLabName) ||
+        (oldLabName && t.labNo === oldLabName)
+    );
 
-    teamsSnap.docs.forEach((doc) => {
-      const data = doc.data();
-      if (
-        data.assignedLabId === labId ||
-        (oldLabName && data.assignedLabName === oldLabName) ||
-        (oldLabName && data.labNo === oldLabName)
-      ) {
-        batch.update(doc.ref, {
-          assignedLabId: labId,
-          assignedLabName: labName.trim(),
-          labNo: labName.trim(),
-          judge: cleanJury !== 'Unassigned' ? cleanJury : data.judge || 'Unassigned',
-        });
-        count++;
-      }
-    });
-
-    if (count > 0) {
-      await batch.commit();
+    if (matchedTeams.length > 0) {
+      await bulkUpdateTeamsInDomainDocs(
+        matchedTeams.map((t) => ({
+          teamId: t.id,
+          fields: {
+            assignedLabId: labId,
+            assignedLabName: labName.trim(),
+            labNo: labName.trim(),
+            judge: cleanJury !== 'Unassigned' ? cleanJury : t.judge || 'Unassigned',
+          },
+        }))
+      );
     }
 
     await syncLabTeamCountsAdmin(db);
@@ -1634,29 +1551,26 @@ export async function deleteLabAdmin(labId: string): Promise<{ success: boolean;
     const oldLabName = docSnap.data()?.labName;
 
     // Unassign teams linked to this lab
-    const teamsSnap = await db.collection('teams').get();
-    const batch = db.batch();
-    let count = 0;
+    const allTeamsForLab = await getAllTeamsFlatFromDomainDocs();
+    const matchedTeamsForLab = allTeamsForLab.filter(
+      (t) =>
+        t.assignedLabId === labId ||
+        (oldLabName && t.assignedLabName === oldLabName) ||
+        (oldLabName && t.labNo === oldLabName)
+    );
 
-    teamsSnap.docs.forEach((doc) => {
-      const data = doc.data();
-      if (
-        data.assignedLabId === labId ||
-        (oldLabName && data.assignedLabName === oldLabName) ||
-        (oldLabName && data.labNo === oldLabName)
-      ) {
-        batch.update(doc.ref, {
-          assignedLabId: FieldValue.delete(),
-          assignedLabName: FieldValue.delete(),
-          labNo: 'Unassigned',
-          judge: 'Unassigned',
-        });
-        count++;
-      }
-    });
-
-    if (count > 0) {
-      await batch.commit();
+    if (matchedTeamsForLab.length > 0) {
+      await bulkUpdateTeamsInDomainDocs(
+        matchedTeamsForLab.map((t) => ({
+          teamId: t.id,
+          fields: {
+            assignedLabId: null,    // null = delete field
+            assignedLabName: null,  // null = delete field
+            labNo: 'Unassigned',
+            judge: 'Unassigned',
+          },
+        }))
+      );
     }
 
     await docRef.delete();
@@ -1676,9 +1590,9 @@ export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; 
     if (!valid) return { success: false, error: 'Unauthorized' };
 
     const db = getAdminDb();
-    const [labsSnap, teamsSnap] = await Promise.all([
+    const [labsSnap, allTeams] = await Promise.all([
       db.collection('labs').get(),
-      db.collection('teams').get(),
+      getAllTeamsFlatFromDomainDocs(),
     ]);
 
     if (labsSnap.empty) {
@@ -1696,15 +1610,13 @@ export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; 
       ref: doc.ref,
     }));
 
-    if (teamsSnap.empty) {
+    if (allTeams.length === 0) {
       return { success: false, error: 'No teams registered yet.' };
     }
 
-    const allTeams = teamsSnap.docs.map((doc) => ({ id: doc.id, ref: doc.ref, ...doc.data() }));
-
     // FILTER ONLY PPT SUBMITTED TEAMS FOR PRELIMS ROUND
-    const qualifiedTeams = allTeams.filter((t: any) => t.pptLink && String(t.pptLink).trim().length > 0);
-    const unsubmittedTeams = allTeams.filter((t: any) => !t.pptLink || String(t.pptLink).trim().length === 0);
+    const qualifiedTeams = allTeams.filter((t) => t.pptLink && String(t.pptLink).trim().length > 0);
+    const unsubmittedTeams = allTeams.filter((t) => !t.pptLink || String(t.pptLink).trim().length === 0);
 
     if (qualifiedTeams.length === 0) {
       return { success: false, error: 'No teams have submitted a PPT presentation yet. Cannot assign labs or juries.' };
@@ -1729,10 +1641,10 @@ export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; 
     labs.forEach((l) => { teamCounts[l.labId] = 0; });
     const themeIndexMap: Record<string, number> = {};
 
-    const batch = db.batch();
+    const updates: { teamId: string; fields: Record<string, any> }[] = [];
 
     // 1. Assign PPT-submitted qualified teams based on Theme matching
-    qualifiedTeams.forEach((team: any) => {
+    qualifiedTeams.forEach((team) => {
       const teamTheme = resolveTeamTheme(team);
       let targetLab: LabData & { ref: any };
 
@@ -1753,42 +1665,51 @@ export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; 
 
       teamCounts[targetLab.labId] = (teamCounts[targetLab.labId] || 0) + 1;
 
-      batch.update(team.ref, {
-        assignedLabId: targetLab.labId,
-        assignedLabName: targetLab.labName,
-        labNo: targetLab.labName,
-        venue: targetLab.labName,
-        judge: targetLab.assignedJuryName !== 'Unassigned' ? targetLab.assignedJuryName : (team.judge || 'Unassigned'),
-        theme: teamTheme,
-        pptQualified: true,
-        eliminated: false,
-        eliminationReason: null,
+      updates.push({
+        teamId: team.id,
+        fields: {
+          assignedLabId: targetLab.labId,
+          assignedLabName: targetLab.labName,
+          labNo: targetLab.labName,
+          venue: targetLab.labName,
+          judge: targetLab.assignedJuryName !== 'Unassigned' ? targetLab.assignedJuryName : (team.judge || 'Unassigned'),
+          theme: teamTheme,
+          pptQualified: true,
+          eliminated: false,
+          eliminationReason: null,
+        },
       });
     });
 
     // 2. Mark unsubmitted teams as unassigned & eliminated from Prelims round
-    unsubmittedTeams.forEach((team: any) => {
-      batch.update(team.ref, {
-        assignedLabId: FieldValue.delete(),
-        assignedLabName: FieldValue.delete(),
-        labNo: 'Unassigned (Eliminated)',
-        venue: 'Unassigned (Eliminated)',
-        judge: 'Unassigned',
-        pptQualified: false,
-        eliminated: true,
-        eliminationReason: 'Eliminated: Did not submit PPT presentation during Phase 2',
+    unsubmittedTeams.forEach((team) => {
+      updates.push({
+        teamId: team.id,
+        fields: {
+          assignedLabId: null,    // null = delete field
+          assignedLabName: null,  // null = delete field
+          labNo: 'Unassigned (Eliminated)',
+          venue: 'Unassigned (Eliminated)',
+          judge: 'Unassigned',
+          pptQualified: false,
+          eliminated: true,
+          eliminationReason: 'Eliminated: Did not submit PPT presentation during Phase 2',
+        },
       });
     });
 
+    await bulkUpdateTeamsInDomainDocs(updates);
+
     // Update labs current team counts
+    const labsBatch = db.batch();
     labs.forEach((lab) => {
-      batch.update(lab.ref, {
+      labsBatch.update(lab.ref, {
         currentTeamCount: teamCounts[lab.labId] || 0,
         updatedAt: new Date(),
       });
     });
+    await labsBatch.commit();
 
-    await batch.commit();
     invalidateCollectionCache('labs');
     invalidateCollectionCache('teams');
     return { success: true, assignedCount: qualifiedTeams.length, eliminatedCount: unsubmittedTeams.length };
@@ -1911,12 +1832,13 @@ export async function updateFinalLabAdmin(
     });
 
     if (oldLabName) {
-      const teamsSnap = await db.collection('teams').where('finalVenue', '==', oldLabName).get();
-      const batch = db.batch();
-      teamsSnap.docs.forEach((doc) => {
-        batch.update(doc.ref, { finalVenue: labName.trim() });
-      });
-      if (!teamsSnap.empty) await batch.commit();
+      const allTeamsFv = await getAllTeamsFlatFromDomainDocs();
+      const matchedFv = allTeamsFv.filter((t) => t.finalVenue === oldLabName);
+      if (matchedFv.length > 0) {
+        await bulkUpdateTeamsInDomainDocs(
+          matchedFv.map((t) => ({ teamId: t.id, fields: { finalVenue: labName.trim() } }))
+        );
+      }
     }
 
     await syncFinalLabTeamCountsAdmin(db);
@@ -1942,12 +1864,13 @@ export async function deleteFinalLabAdmin(labId: string): Promise<{ success: boo
     const oldLabName = docSnap.data()?.labName;
 
     if (oldLabName) {
-      const teamsSnap = await db.collection('teams').where('finalVenue', '==', oldLabName).get();
-      const batch = db.batch();
-      teamsSnap.docs.forEach((doc) => {
-        batch.update(doc.ref, { finalVenue: 'TBA' });
-      });
-      if (!teamsSnap.empty) await batch.commit();
+      const allTeamsDfl = await getAllTeamsFlatFromDomainDocs();
+      const matchedDfl = allTeamsDfl.filter((t) => t.finalVenue === oldLabName);
+      if (matchedDfl.length > 0) {
+        await bulkUpdateTeamsInDomainDocs(
+          matchedDfl.map((t) => ({ teamId: t.id, fields: { finalVenue: 'TBA' } }))
+        );
+      }
     }
 
     await docRef.delete();
@@ -1963,9 +1886,9 @@ export async function deleteFinalLabAdmin(labId: string): Promise<{ success: boo
 export async function syncFinalLabTeamCountsAdmin(dbInstance?: any) {
   try {
     const db = dbInstance || getAdminDb();
-    const [labsSnap, teamsSnap] = await Promise.all([
+    const [labsSnap, allTeams] = await Promise.all([
       db.collection('finalLabs').get(),
-      db.collection('teams').get(),
+      getAllTeamsFlatFromDomainDocs(),
     ]);
 
     if (labsSnap.empty) return;
@@ -1975,9 +1898,8 @@ export async function syncFinalLabTeamCountsAdmin(dbInstance?: any) {
       countsMap.set(doc.id, 0);
     });
 
-    teamsSnap.docs.forEach((doc: any) => {
-      const data = doc.data();
-      const venue = data.finalVenue;
+    allTeams.forEach((team) => {
+      const venue = team.finalVenue;
       if (venue && venue !== 'TBA' && venue !== 'N/A') {
         const found = labsSnap.docs.find(
           (d: any) =>
@@ -2010,12 +1932,12 @@ export async function autoAssignFinalTeamsToLabsAdmin(): Promise<{ success: bool
     if (!valid) return { success: false, error: 'Unauthorized' };
 
     const db = getAdminDb();
-    const [labsSnap, teamsSnap] = await Promise.all([
+    const [labsSnap, allTeams] = await Promise.all([
       db.collection('finalLabs').get(),
-      db.collection('teams').get(),
+      getAllTeamsFlatFromDomainDocs(),
     ]);
 
-    if (teamsSnap.empty) {
+    if (allTeams.length === 0) {
       return { success: false, error: 'No teams registered.' };
     }
 
@@ -2032,9 +1954,9 @@ export async function autoAssignFinalTeamsToLabsAdmin(): Promise<{ success: bool
       return { success: false, error: 'No Final Round Labs configured. Please create at least one Final Lab first.' };
     }
 
-    const qualifiedTeams = teamsSnap.docs
-      .map((doc) => ({ id: doc.id, ref: doc.ref, ...doc.data() }))
-      .filter((t: any) => t.finaleQualified === true || t.prelimsStatus === 'selected');
+    const qualifiedTeams = allTeams.filter(
+      (t) => t.finaleQualified === true || t.prelimsStatus === 'selected'
+    );
 
     if (qualifiedTeams.length === 0) {
       return { success: false, error: 'No qualified teams for Final Round yet.' };
@@ -2044,9 +1966,10 @@ export async function autoAssignFinalTeamsToLabsAdmin(): Promise<{ success: bool
     finalLabs.forEach((l) => { labAssignments[l.labId] = 0; });
 
     let currentLabIdx = 0;
-    const batch = db.batch();
+    const updates: { teamId: string; fields: Record<string, any> }[] = [];
+    const qualifiedIds = new Set(qualifiedTeams.map((t) => t.id));
 
-    qualifiedTeams.forEach((team: any) => {
+    qualifiedTeams.forEach((team) => {
       let chosenLab = finalLabs[currentLabIdx % finalLabs.length];
 
       for (let i = 0; i < finalLabs.length; i++) {
@@ -2063,32 +1986,39 @@ export async function autoAssignFinalTeamsToLabsAdmin(): Promise<{ success: bool
       labAssignments[chosenLab.labId] = (labAssignments[chosenLab.labId] || 0) + 1;
       currentLabIdx++;
 
-      batch.update(team.ref, {
-        finalVenue: chosenLab.labName,
-        finalAssignedLabId: chosenLab.labId,
-        finalAssignedLabName: chosenLab.labName,
-        finalStatus: team.finalStatus || 'pending',
+      updates.push({
+        teamId: team.id,
+        fields: {
+          finalVenue: chosenLab.labName,
+          finalAssignedLabId: chosenLab.labId,
+          finalAssignedLabName: chosenLab.labName,
+          finalStatus: team.finalStatus || 'pending',
+        },
       });
     });
 
-    teamsSnap.docs.forEach((doc) => {
-      const data = doc.data();
-      if (!data.finaleQualified && data.prelimsStatus !== 'selected') {
-        batch.update(doc.ref, {
-          finalVenue: 'N/A',
-          finalStatus: 'rejected',
+    // Mark non-qualified teams
+    allTeams
+      .filter((t) => !qualifiedIds.has(t.id) && !t.finaleQualified && t.prelimsStatus !== 'selected')
+      .forEach((team) => {
+        updates.push({
+          teamId: team.id,
+          fields: { finalVenue: 'N/A', finalStatus: 'rejected' },
         });
-      }
-    });
+      });
 
+    await bulkUpdateTeamsInDomainDocs(updates);
+
+    // Update final lab counts
+    const labsBatch = db.batch();
     finalLabs.forEach((lab) => {
-      batch.update(lab.ref, {
+      labsBatch.update(lab.ref, {
         currentTeamCount: labAssignments[lab.labId] || 0,
         updatedAt: new Date(),
       });
     });
+    await labsBatch.commit();
 
-    await batch.commit();
     invalidateCollectionCache('teams');
     return { success: true, assignedCount: qualifiedTeams.length };
   } catch (error: any) {
@@ -2154,11 +2084,6 @@ export async function seedDummyTeamsAdmin(count: number = 100): Promise<{ succes
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
 
-    const db = getAdminDb();
-    const batchSize = 400;
-    let batch = db.batch();
-    let opCount = 0;
-
     const depts = ['CSE', 'IT', 'ECE', 'EEE', 'MECH', 'AIDS', 'AIML'];
     const problemStatements = [
       'AI-Powered Smart Health Monitoring System',
@@ -2172,19 +2097,27 @@ export async function seedDummyTeamsAdmin(count: number = 100): Promise<{ succes
       'E-Learning Analytics and Dropout Prediction',
       'Disaster Management & Emergency Response Network',
     ];
+    const themes = [
+      'Autonomous Agentic AI',
+      'Adaptive Intelligent Systems',
+      'Predictive Logistics using Industrial AI',
+      'AI for Smart Business Solution',
+      'Human Centered AI',
+    ];
 
-    const now = new Date();
+    const now = new Date().toISOString();
+    let seededCount = 0;
 
     for (let i = 1; i <= count; i++) {
-      const teamId = `dummy_team_${String(i).padStart(3, '0')}`;
-      const docRef = db.collection('teams').doc(teamId);
-
       const dept = depts[i % depts.length];
       const ps = problemStatements[i % problemStatements.length];
+      const theme = themes[i % themes.length];
 
       const teamData = {
+        id: `dummy_team_${String(i).padStart(3, '0')}`,
         teamName: `Dummy Team ${String(i).padStart(3, '0')}`,
         displayId: `TEAM-${1000 + i}`,
+        theme,
         problemStatement: ps,
         leadEmail: `lead_team${i}@example.com`,
         leadData: {
@@ -2196,20 +2129,8 @@ export async function seedDummyTeamsAdmin(count: number = 100): Promise<{ succes
           registerNumber: `REG2026${String(100 + i)}`,
         },
         membersData: [
-          {
-            name: `Member 1 of Team ${i}`,
-            department: dept,
-            year: '3rd Year',
-            section: 'A',
-            registerNumber: `REG2026M1_${i}`,
-          },
-          {
-            name: `Member 2 of Team ${i}`,
-            department: dept,
-            year: '3rd Year',
-            section: 'B',
-            registerNumber: `REG2026M2_${i}`,
-          },
+          { name: `Member 1 of Team ${i}`, department: dept, year: '3rd Year', section: 'A', registerNumber: `REG2026M1_${i}` },
+          { name: `Member 2 of Team ${i}`, department: dept, year: '3rd Year', section: 'B', registerNumber: `REG2026M2_${i}` },
         ],
         labNo: 'Unassigned',
         judge: 'Unassigned',
@@ -2220,26 +2141,34 @@ export async function seedDummyTeamsAdmin(count: number = 100): Promise<{ succes
         updatedAt: now,
       };
 
-      batch.set(docRef, teamData, { merge: true });
-      opCount++;
-
-      if (opCount === batchSize) {
-        await batch.commit();
-        batch = db.batch();
-        opCount = 0;
-      }
-    }
-
-    if (opCount > 0) {
-      await batch.commit();
+      const res = await createTeamInDomainDoc(teamData);
+      if (res.success) seededCount++;
     }
 
     invalidateCollectionCache('teams');
-    return { success: true, seededCount: count };
+    return { success: true, seededCount };
   } catch (error: any) {
     console.error('Error seeding dummy teams:', error);
     return { success: false, error: error.message || 'Failed to seed dummy teams' };
   }
+}
+
+export async function publishJurySelectedFinalistsAdmin(selectedTeamIds: string[]) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) return { success: false, error: 'Unauthorized - Admin session required' };
+  return await publishJurySelectedFinalists(selectedTeamIds);
+}
+
+export async function upsertEvalRecordAdmin(round: 'prelims' | 'finale', recordData: any) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) return { success: false, error: 'Unauthorized - Admin session required' };
+  return await upsertEvalRecord(round, recordData);
+}
+
+export async function updateTeamInDomainDocAdmin(teamId: string, updates: Record<string, any>) {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) return { success: false, error: 'Unauthorized - Admin session required' };
+  return await updateTeamInDomainDoc(teamId, updates);
 }
 
 

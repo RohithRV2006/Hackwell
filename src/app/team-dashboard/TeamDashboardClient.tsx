@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { clearSessionCookie } from '@/app/actions/session';
-import { savePPTLink, checkPPTSubmissionTimelineStatus } from '@/app/actions/drive';
+import { savePPTLink, checkPPTSubmissionTimelineStatus, uploadPPTToDrive } from '@/app/actions/drive';
 import { changeTeamPassword } from '@/app/actions/forgot-password';
 import { KeyRound, LogOut, CheckCircle2, Clock, UploadCloud, MapPin, Download, FileText, Users, Info, Trophy, FileUp, ExternalLink, Eye, EyeOff, Lock, AlertTriangle, XCircle } from 'lucide-react';
 import { sendPasswordResetEmail } from 'firebase/auth';
@@ -159,50 +159,27 @@ export default function TeamDashboardClient({ team }: { team: any }) {
       reader.onload = async () => {
         const base64Data = (reader.result as string).split(',')[1];
         
-        const scriptUrl = process.env.NEXT_PUBLIC_GOOGLE_SCRIPT_URL;
-        if (!scriptUrl) {
-          setIsSubmitting(false);
-          setPptMessage('Error: NEXT_PUBLIC_GOOGLE_SCRIPT_URL is not configured.');
-          return;
-        }
-
         try {
-          // Direct fetch to Google Apps Script to bypass Next.js size limits
-          const response = await fetch(scriptUrl, {
-            method: 'POST',
-            body: JSON.stringify({
-              fileName: fileName,
-              mimeType: file.type,
-              base64Data: base64Data,
-              oldFileId: currentFileId
-            }),
+          // Send base64 upload to server action (runs in Node server, avoiding browser CORS errors)
+          const uploadRes = await uploadPPTToDrive(team.id, {
+            fileName,
+            mimeType: file.type,
+            base64Data,
+            oldFileId: currentFileId,
           });
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Network response was not ok: ${response.status} ${response.statusText} - ${errorText}`);
-          }
+          setIsSubmitting(false);
 
-          const res = await response.json();
-          
-          if (res.status === 'success') {
-            // Only use Server Action to save the final URL
-            const saveRes = await savePPTLink(team.id, res.url, res.fileId);
-            setIsSubmitting(false);
-            if (saveRes.success) {
-              setPptMessage('PPT submitted successfully!');
-              setPptLink(res.url);
-              setCurrentFileId(res.fileId);
-            } else {
-              setPptMessage(saveRes.error || 'Failed to save PPT link.');
-            }
+          if (uploadRes.success && uploadRes.url) {
+            setPptMessage('PPT submitted successfully!');
+            setPptLink(uploadRes.url);
+            if (uploadRes.fileId) setCurrentFileId(uploadRes.fileId);
           } else {
-            setIsSubmitting(false);
-            setPptMessage(res.message || 'Failed to upload PPT to Drive.');
+            setPptMessage(uploadRes.error || 'Failed to upload PPT to Drive.');
           }
         } catch (err: any) {
           setIsSubmitting(false);
-          setPptMessage('Network error during upload.');
+          setPptMessage(err.message || 'Error occurred during PPT upload.');
           console.error(err);
         }
       };

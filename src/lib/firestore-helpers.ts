@@ -234,34 +234,95 @@ export async function updateTeamInDomainDoc(
   updates: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const found = await findTeamInDomainDocs(teamId);
-    if (!found) {
-      return { success: false, error: 'Team not found' };
+    let found = await findTeamInDomainDocs(teamId);
+    if (!found && updates.leadEmail) {
+      found = await findTeamByLeadEmail(updates.leadEmail);
     }
 
     const db = getAdminDb();
 
-    await db.runTransaction(async (transaction: any) => {
-      const snap = await transaction.get(found.domainDocRef);
-      if (!snap.exists) throw new Error('Domain document not found');
+    if (found) {
+      await db.runTransaction(async (transaction: any) => {
+        const snap = await transaction.get(found.domainDocRef);
+        if (!snap.exists) throw new Error('Domain document not found');
 
-      const data = snap.data();
-      const teamsArr = Array.isArray(data.teams) ? [...data.teams] : [];
-      const idx = teamsArr.findIndex((t: any) => t.id === teamId);
+        const data = snap.data();
+        const teamsArr = Array.isArray(data?.teams) ? [...data.teams] : [];
+        const idx = teamsArr.findIndex((t: any) => t.id === found.team.id || t.id === teamId);
 
-      if (idx === -1) throw new Error('Team not found in array');
+        if (idx !== -1) {
+          teamsArr[idx] = {
+            ...teamsArr[idx],
+            ...updates,
+            updatedAt: new Date().toISOString(),
+          };
+        } else {
+          teamsArr.push({
+            id: teamId,
+            ...updates,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
 
-      teamsArr[idx] = {
-        ...teamsArr[idx],
-        ...updates,
-        updatedAt: new Date().toISOString(),
-      };
-
-      transaction.update(found.domainDocRef, {
-        teams: teamsArr,
-        updatedAt: new Date(),
+        transaction.set(
+          found.domainDocRef,
+          {
+            teams: teamsArr,
+            teamCount: teamsArr.length,
+            updatedAt: new Date(),
+          },
+          { merge: true }
+        );
       });
-    });
+    } else {
+      // If team is not found in schema/domain doc yet, create and add it within the teams array
+      const domainId = resolveDomainId(updates.theme);
+      const domainRef = db.collection('teams').doc(domainId);
+
+      await db.runTransaction(async (transaction: any) => {
+        const snap = await transaction.get(domainRef);
+        let teamsArr: any[] = [];
+        let domainName = DOMAIN_SLUGS[domainId]?.name || 'Domain';
+
+        if (snap.exists) {
+          const data = snap.data();
+          teamsArr = Array.isArray(data?.teams) ? [...data.teams] : [];
+          domainName = data?.domainName || domainName;
+        }
+
+        const idx = teamsArr.findIndex((t: any) => t.id === teamId);
+        if (idx !== -1) {
+          teamsArr[idx] = {
+            ...teamsArr[idx],
+            ...updates,
+            updatedAt: new Date().toISOString(),
+          };
+        } else {
+          teamsArr.push({
+            id: teamId,
+            teamName: updates.teamName || teamId,
+            displayId: updates.displayId || teamId,
+            domainId,
+            ...updates,
+            createdAt: updates.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+
+        transaction.set(
+          domainRef,
+          {
+            domainId,
+            domainName,
+            teamCount: teamsArr.length,
+            teams: teamsArr,
+            updatedAt: new Date(),
+          },
+          { merge: true }
+        );
+      });
+    }
 
     return { success: true };
   } catch (error: any) {
@@ -334,6 +395,8 @@ export async function getEvalRecords(round: 'prelims' | 'finale'): Promise<Admin
     totalScore: typeof r.totalScore === 'number' ? r.totalScore : 0,
     remarks: r.remarks || '',
     feedback: r.feedback || '',
+    selectedForFinal: Boolean(r.selectedForFinal),
+    selectionReason: r.selectionReason || '',
     highlighted: Boolean(r.highlighted),
     isFrozen: Boolean(r.isFrozen),
     createdAt: r.createdAt ? (typeof r.createdAt === 'string' ? r.createdAt : r.createdAt.toDate?.()?.toISOString() || '') : '',
@@ -510,4 +573,130 @@ export async function getWinners(): Promise<any[]> {
   const snap = await db.collection('metadata').doc('eventWinners').get();
   if (!snap.exists) return [];
   return snap.data()?.winners || [];
+}
+
+export async function publishJurySelectedFinalists(selectedTeamIds: string[]): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    const db = getAdminDb();
+    const selectedSet = new Set(selectedTeamIds);
+
+    const snaps = await Promise.all(
+      ALL_DOMAIN_DOC_IDS.map((docId) => db.collection('teams').doc(docId).get())
+    );
+
+    for (const snap of snaps) {
+      if (snap.exists) {
+        const data = snap.data();
+        const teamsArr = Array.isArray(data?.teams) ? [...data.teams] : [];
+        let modified = false;
+
+        teamsArr.forEach((t: any) => {
+          const isSelected = selectedSet.has(t.id);
+          const newPrelimsStatus = isSelected ? 'selected' : 'not_selected';
+          const newFinaleQualified = isSelected;
+
+          if (t.prelimsStatus !== newPrelimsStatus || t.finaleQualified !== newFinaleQualified) {
+            t.prelimsStatus = newPrelimsStatus;
+            t.finaleQualified = newFinaleQualified;
+            t.finalStatus = isSelected ? (t.finalStatus || 'pending') : 'not_qualified';
+            t.updatedAt = new Date().toISOString();
+            modified = true;
+          }
+        });
+
+        if (modified) {
+          await snap.ref.update({
+            teams: teamsArr,
+            updatedAt: new Date(),
+          });
+        }
+      }
+    }
+
+    return { success: true, count: selectedSet.size };
+  } catch (error: any) {
+    console.error('Error publishing finalists:', error);
+    return { success: false, error: error.message || 'Failed to publish finalists' };
+  }
+}
+
+/**
+ * Bulk-update multiple teams across the 5 domain documents in a single pass.
+ * Reads all 5 domain docs once, groups updates by domain, then applies one
+ * transaction per domain document that has teams to update.
+ *
+ * For fields that should be REMOVED from the team object, pass `null` as the
+ * value (equivalent of Firestore's FieldValue.delete() for individual docs).
+ */
+export async function bulkUpdateTeamsInDomainDocs(
+  updates: { teamId: string; fields: Record<string, any> }[]
+): Promise<{ success: boolean; updatedCount: number; error?: string }> {
+  if (updates.length === 0) return { success: true, updatedCount: 0 };
+
+  const db = getAdminDb();
+
+  // Read all 5 domain docs in one pass
+  const snaps = await Promise.all(
+    ALL_DOMAIN_DOC_IDS.map((docId) => db.collection('teams').doc(docId).get())
+  );
+
+  // Build teamId → domain snap mapping
+  const teamDomainMap = new Map<string, any>(); // teamId → snap
+  snaps.forEach((snap) => {
+    if (snap.exists) {
+      const teamsArr = Array.isArray(snap.data()?.teams) ? snap.data()!.teams : [];
+      teamsArr.forEach((t: any) => {
+        if (t.id) teamDomainMap.set(t.id, snap);
+      });
+    }
+  });
+
+  // Group updates by domain doc ref id
+  const byDomain = new Map<string, { snap: any; updateMap: Map<string, Record<string, any>> }>();
+  updates.forEach(({ teamId, fields }) => {
+    const snap = teamDomainMap.get(teamId);
+    if (!snap) return;
+    const domainId = snap.ref.id;
+    if (!byDomain.has(domainId)) {
+      byDomain.set(domainId, { snap, updateMap: new Map() });
+    }
+    byDomain.get(domainId)!.updateMap.set(teamId, fields);
+  });
+
+  let updatedCount = 0;
+
+  // One transaction per domain doc
+  for (const { snap: domainSnap, updateMap } of byDomain.values()) {
+    await db.runTransaction(async (transaction: any) => {
+      const freshSnap = await transaction.get(domainSnap.ref);
+      if (!freshSnap.exists) return;
+
+      const data = freshSnap.data()!;
+      const teamsArr = Array.isArray(data.teams) ? [...data.teams] : [];
+
+      teamsArr.forEach((t: any, idx: number) => {
+        if (!updateMap.has(t.id)) return;
+        const fields = updateMap.get(t.id)!;
+        const updated = { ...teamsArr[idx] };
+        for (const [key, value] of Object.entries(fields)) {
+          if (value === null) {
+            // null = delete this field from the team object
+            delete updated[key];
+          } else {
+            updated[key] = value;
+          }
+        }
+        updated.updatedAt = new Date().toISOString();
+        teamsArr[idx] = updated;
+        updatedCount++;
+      });
+
+      transaction.update(domainSnap.ref, {
+        teams: teamsArr,
+        updatedAt: new Date(),
+      });
+    });
+  }
+
+  return { success: true, updatedCount };
 }
