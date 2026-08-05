@@ -3,6 +3,7 @@ import { getAdminAuth } from '@/lib/firebase-admin';
 import { redirect } from 'next/navigation';
 import { getTeamDataByEmail } from '@/app/actions/auth';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { getAllTeamsFlatFromDomainDocs } from '@/lib/firestore-helpers';
 import { getUserRole } from '@/app/actions/session';
 import TeamDashboardClient from './TeamDashboardClient';
 
@@ -61,19 +62,14 @@ export default async function TeamDashboard() {
   // Calculate Leaderboard Position
   let leaderboardPosition = 'N/A';
   try {
-    const db = getAdminDb();
-    const teamsSnap = await db.collection('teams')
-      .orderBy('totalGameXP', 'desc')
-      .get();
-    
-    let rank = 1;
-    for (const doc of teamsSnap.docs) {
-      if (doc.id === team.id) {
-        leaderboardPosition = rank.toString();
-        break;
-      }
-      // Only increment rank if XP is greater than 0, else they might tie at 0
-      rank++;
+    const allTeams = await getAllTeamsFlatFromDomainDocs();
+    const ranked = allTeams
+      .map((t) => ({ id: t.id, totalGameXP: (t as any).totalGameXP || 0, score: t.score || 0 }))
+      .sort((a, b) => b.totalGameXP - a.totalGameXP || b.score - a.score);
+
+    const idx = ranked.findIndex((t) => t.id === team.id);
+    if (idx !== -1) {
+      leaderboardPosition = (idx + 1).toString();
     }
   } catch (err) {
     console.error('Error fetching leaderboard position', err);

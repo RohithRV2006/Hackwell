@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyAdminSession } from '@/app/admin/actions';
+import { ALL_DOMAIN_DOC_IDS, DOMAIN_SLUGS } from '@/lib/firestore-helpers';
 
 export async function GET() {
   const isAdmin = await verifyAdminSession();
@@ -9,34 +10,40 @@ export async function GET() {
   }
 
   const db = getAdminDb();
-  const collections = ['teams', 'evaluations', 'gameScores', 'roles', 'metadata'];
-  
-  let deletedCount = 0;
-  for (const collectionName of collections) {
-    const snapshot = await db.collection(collectionName).get();
-    let batch = db.batch();
-    let count = 0;
-    
-    for (const doc of snapshot.docs) {
-      batch.delete(doc.ref);
-      count++;
-      if (count === 400) {
-        await batch.commit();
-        batch = db.batch();
-        count = 0;
-      }
-    }
-    if (count > 0) {
-      await batch.commit();
-    }
-    deletedCount += snapshot.docs.length;
+
+  // Reset 5 domain docs
+  for (const domainId of ALL_DOMAIN_DOC_IDS) {
+    await db.collection('teams').doc(domainId).set({
+      domainId,
+      domainName: DOMAIN_SLUGS[domainId]?.name || 'Domain',
+      teamCount: 0,
+      updatedAt: new Date(),
+      teams: [],
+    });
   }
-  
+
+  // Reset 2 evaluation docs
+  await db.collection('evaluations').doc('prelims').set({
+    round: 'prelims',
+    totalCount: 0,
+    updatedAt: new Date(),
+    records: [],
+  });
+
+  await db.collection('evaluations').doc('finale').set({
+    round: 'finale',
+    totalCount: 0,
+    updatedAt: new Date(),
+    records: [],
+  });
+
+  // Re-seed default admins
   const admins = [
-    { email: 'rohithrv2006@gmail.com', pass: 'My.kaumodaki7' },
-    { email: 'nidthishselvam@gmail.com', pass: 'Nidthish@123' }
+    { email: 'rohithrv2006@gmail.com' },
+    { email: 'nidthishselvam@gmail.com' },
+    { email: 'nidthishselvan@gmail.com' },
   ];
-  
+
   const auth = getAdminAuth();
   for (const adminUser of admins) {
     try {
@@ -48,9 +55,9 @@ export async function GET() {
 
     await db.collection('roles').doc(adminUser.email).set({
       role: 'admin',
-      createdAt: new Date()
+      createdAt: new Date().toISOString(),
     });
   }
-  
-  return NextResponse.json({ success: true, deleted: deletedCount, seeded: admins.length });
+
+  return NextResponse.json({ success: true, message: 'Database wiped and domain/evaluation docs re-initialized.' });
 }

@@ -152,6 +152,7 @@ export interface AdminTeamData {
   finaleQualified?: boolean;
   finalStatus?: string;
   finalVenue?: string;
+  venue?: string;
   isWinner?: boolean;
   winnerRank?: number | null;
   winnerTitle?: string | null;
@@ -483,6 +484,7 @@ export interface AdminScoreData {
   rubric: Rubric;
   totalScore: number;
   remarks: string;
+  feedback?: string;
   highlighted: boolean;
   isFrozen: boolean;
   createdAt?: string;
