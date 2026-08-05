@@ -4,8 +4,7 @@ import React, { useState, useEffect } from 'react';
 import {
   getAllUsersAdmin,
   createJuryUser,
-  createStudentCoordUser,
-  createFacultyCoordUser,
+  createCoordinatorUser,
   createUserAdmin,
   deleteUserAdmin,
   AdminUser,
@@ -13,7 +12,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { verifyAdminSession } from '@/app/admin/actions';
 
-type ActiveForm = 'jury' | 'student-coord' | 'faculty-coord' | 'admin';
+type ActiveForm = 'jury' | 'coordinator' | 'admin';
 
 export default function UsersCreatorPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -33,16 +32,11 @@ export default function UsersCreatorPage() {
   const [juryEmail, setJuryEmail] = useState('');
   const [juryPassword, setJuryPassword] = useState('');
 
-  // Student Coord form
-  const [studentName, setStudentName] = useState('');
-  const [studentEmail, setStudentEmail] = useState('');
-  const [studentPassword, setStudentPassword] = useState('');
-
-  // Faculty Coord form
-  const [facultyName, setFacultyName] = useState('');
-  const [facultyDept, setFacultyDept] = useState('');
-  const [facultyEmail, setFacultyEmail] = useState('');
-  const [facultyPassword, setFacultyPassword] = useState('');
+  // Coordinator form
+  const [coordName, setCoordName] = useState('');
+  const [coordDept, setCoordDept] = useState('');
+  const [coordEmail, setCoordEmail] = useState('');
+  const [coordPassword, setCoordPassword] = useState('');
 
   // Admin form
   const [adminName, setAdminName] = useState('');
@@ -63,7 +57,7 @@ export default function UsersCreatorPage() {
     if (valid) loadUsers();
   };
 
-  useEffect(() => { checkSession(); }, []);
+  useEffect(() => { const run = async () => { await checkSession(); }; run(); }, []);
 
   const clearMessages = () => { setErrorMsg(''); setSuccessMsg(''); };
 
@@ -82,33 +76,18 @@ export default function UsersCreatorPage() {
     }
   };
 
-  const handleCreateStudentCoord = async (e: React.FormEvent) => {
+  const handleCreateCoordinator = async (e: React.FormEvent) => {
     e.preventDefault();
     clearMessages();
     setCreating(true);
-    const res = await createStudentCoordUser(studentName, studentEmail, studentPassword);
+    const res = await createCoordinatorUser(coordName, coordDept, coordEmail, coordPassword);
     setCreating(false);
     if (res.success) {
-      setSuccessMsg(`Student Coordinator account for "${studentName}" (${studentEmail}) created successfully!`);
-      setStudentName(''); setStudentEmail(''); setStudentPassword('');
+      setSuccessMsg(`Coordinator account for "${coordName}" (${coordEmail}) created successfully!`);
+      setCoordName(''); setCoordDept(''); setCoordEmail(''); setCoordPassword('');
       loadUsers();
     } else {
-      setErrorMsg(res.error || 'Failed to create student coordinator account');
-    }
-  };
-
-  const handleCreateFacultyCoord = async (e: React.FormEvent) => {
-    e.preventDefault();
-    clearMessages();
-    setCreating(true);
-    const res = await createFacultyCoordUser(facultyName, facultyDept, facultyEmail, facultyPassword);
-    setCreating(false);
-    if (res.success) {
-      setSuccessMsg(`Faculty Coordinator account for "${facultyName}" (${facultyEmail}) created successfully!`);
-      setFacultyName(''); setFacultyDept(''); setFacultyEmail(''); setFacultyPassword('');
-      loadUsers();
-    } else {
-      setErrorMsg(res.error || 'Failed to create faculty coordinator account');
+      setErrorMsg(res.error || 'Failed to create coordinator account');
     }
   };
 
@@ -189,24 +168,14 @@ export default function UsersCreatorPage() {
                 Add Jury
               </button>
               <button
-                onClick={() => { setActiveForm('student-coord'); clearMessages(); }}
+                onClick={() => { setActiveForm('coordinator'); clearMessages(); }}
                 className={`flex-1 py-3 transition ${
-                  activeForm === 'student-coord'
+                  activeForm === 'coordinator'
                     ? 'bg-white text-blue-600 border-t-2 border-blue-600'
                     : 'text-gray-500 hover:text-gray-800'
                 }`}
               >
-                Student Coord
-              </button>
-              <button
-                onClick={() => { setActiveForm('faculty-coord'); clearMessages(); }}
-                className={`flex-1 py-3 transition ${
-                  activeForm === 'faculty-coord'
-                    ? 'bg-white text-blue-600 border-t-2 border-blue-600'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                Faculty Coord
+                Add Coordinator
               </button>
               <button
                 onClick={() => { setActiveForm('admin'); clearMessages(); }}
@@ -278,74 +247,27 @@ export default function UsersCreatorPage() {
                 </form>
               )}
 
-              {/* STUDENT COORD FORM */}
-              {activeForm === 'student-coord' && (
-                <form onSubmit={handleCreateStudentCoord} className="space-y-4">
+              {/* COORDINATOR FORM */}
+              {activeForm === 'coordinator' && (
+                <form onSubmit={handleCreateCoordinator} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Student Name</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Full Name</label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. John Doe"
-                      value={studentName}
-                      onChange={e => setStudentName(e.target.value)}
+                      placeholder="e.g. Jane Doe"
+                      value={coordName}
+                      onChange={e => setCoordName(e.target.value)}
                       className="w-full bg-gray-50 border border-gray-300 rounded-sm px-4 py-2 text-sm focus:outline-none focus:border-blue-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Email Address</label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="student@saranathan.ac.in"
-                      value={studentEmail}
-                      onChange={e => setStudentEmail(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-sm px-4 py-2 text-sm focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Password</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Department (Optional)</label>
                     <input
                       type="text"
-                      required
-                      placeholder="Create a strong password"
-                      value={studentPassword}
-                      onChange={e => setStudentPassword(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-sm px-4 py-2 text-sm font-mono focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={creating}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-sm transition mt-6 text-sm disabled:opacity-50"
-                  >
-                    {creating ? 'Creating Account...' : 'Create Student Coord'}
-                  </button>
-                </form>
-              )}
-
-              {/* FACULTY COORD FORM */}
-              {activeForm === 'faculty-coord' && (
-                <form onSubmit={handleCreateFacultyCoord} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Faculty Name</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Prof. X"
-                      value={facultyName}
-                      onChange={e => setFacultyName(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-sm px-4 py-2 text-sm focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Department</label>
-                    <input
-                      type="text"
-                      required
                       placeholder="e.g. CSE"
-                      value={facultyDept}
-                      onChange={e => setFacultyDept(e.target.value)}
+                      value={coordDept}
+                      onChange={e => setCoordDept(e.target.value)}
                       className="w-full bg-gray-50 border border-gray-300 rounded-sm px-4 py-2 text-sm focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -354,9 +276,9 @@ export default function UsersCreatorPage() {
                     <input
                       type="email"
                       required
-                      placeholder="faculty@saranathan.ac.in"
-                      value={facultyEmail}
-                      onChange={e => setFacultyEmail(e.target.value)}
+                      placeholder="coordinator@example.com"
+                      value={coordEmail}
+                      onChange={e => setCoordEmail(e.target.value)}
                       className="w-full bg-gray-50 border border-gray-300 rounded-sm px-4 py-2 text-sm focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -366,8 +288,8 @@ export default function UsersCreatorPage() {
                       type="text"
                       required
                       placeholder="Create a strong password"
-                      value={facultyPassword}
-                      onChange={e => setFacultyPassword(e.target.value)}
+                      value={coordPassword}
+                      onChange={e => setCoordPassword(e.target.value)}
                       className="w-full bg-gray-50 border border-gray-300 rounded-sm px-4 py-2 text-sm font-mono focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -376,7 +298,7 @@ export default function UsersCreatorPage() {
                     disabled={creating}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-sm transition mt-6 text-sm disabled:opacity-50"
                   >
-                    {creating ? 'Creating Account...' : 'Create Faculty Coord'}
+                    {creating ? 'Creating Account...' : 'Create Coordinator'}
                   </button>
                 </form>
               )}

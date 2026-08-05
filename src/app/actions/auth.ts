@@ -2,6 +2,7 @@
 
 import { getAdminDb } from '@/lib/firebase-admin';
 import { encryptJSON } from '@/lib/encryption';
+import { invalidateCollectionCache } from '@/app/admin/actions';
 
 export async function checkTeamNameUnique(teamName: string) {
   try {
@@ -56,14 +57,12 @@ export async function checkRegistrationTimelineStatus() {
     const docSnap = await db.collection('metadata').doc('eventTimelines').get();
 
     if (!docSnap.exists) {
-      return { allowed: true, message: '' };
+      return { allowed: false, message: 'Event registration process has not been started by administrators.' };
     }
 
     const t1 = docSnap.data()?.timeline1;
-    if (!t1) return { allowed: true, message: '' };
-
-    if (t1.enabled === false) {
-      return { allowed: false, message: 'Student registration is currently disabled by administrators.' };
+    if (!t1 || t1.enabled === false || t1.state === 'not-set') {
+      return { allowed: false, message: 'Event registration process has not been started by administrators.' };
     }
 
     const now = new Date();
@@ -78,7 +77,7 @@ export async function checkRegistrationTimelineStatus() {
     return { allowed: true, message: '' };
   } catch (error: any) {
     console.error('Error checking registration timeline status:', error);
-    return { allowed: true, message: '' };
+    return { allowed: false, message: 'Unable to verify registration status.' };
   }
 }
 
@@ -116,22 +115,32 @@ export async function registerTeamData(
       });
     }
 
-    // Generate unique sequential ID using a transaction
+    // Generate unique sequential ID using a transaction with retry logic for high contention
     const counterRef = db.collection('metadata').doc('teamCounter');
     
-    const displayId = await db.runTransaction(async (transaction) => {
-      const counterDoc = await transaction.get(counterRef);
-      
-      let newCount = 1;
-      if (counterDoc.exists) {
-        newCount = (counterDoc.data()?.count || 0) + 1;
+    let displayId = '';
+    let retries = 5;
+    while (retries > 0) {
+      try {
+        displayId = await db.runTransaction(async (transaction) => {
+          const counterDoc = await transaction.get(counterRef);
+          
+          let newCount = 1;
+          if (counterDoc.exists) {
+            newCount = (counterDoc.data()?.count || 0) + 1;
+          }
+          
+          transaction.set(counterRef, { count: newCount }, { merge: true });
+          
+          return `H2O-${String(newCount).padStart(3, '0')}`;
+        });
+        break;
+      } catch (error: any) {
+        retries--;
+        if (retries === 0) throw new Error("High traffic detected. Please try registering again in a few seconds.");
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
       }
-      
-      transaction.set(counterRef, { count: newCount }, { merge: true });
-      
-      return `H2O-${String(newCount).padStart(3, '0')}`;
-    });
-    
+    }    
     // Save to Firestore using an auto-generated doc ID, but store displayId
     const teamDocRef = db.collection('teams').doc();
     await teamDocRef.set({
@@ -148,6 +157,7 @@ export async function registerTeamData(
       createdAt: new Date(),
     });
     
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error registering team data', error);
@@ -185,7 +195,12 @@ export async function getTeamDataByEmail(email: string) {
         pptLink: data.pptLink || null,
         pptDriveFileId: data.pptDriveFileId || null,
         prelimsStatus: data.prelimsStatus || 'pending',
-        venue: data.venue || null,
+        venue: (data.assignedLabName && data.assignedLabName !== 'Unassigned') ? data.assignedLabName : (data.labNo && data.labNo !== 'Unassigned') ? data.labNo : (data.venue || null),
+        assignedLabName: data.assignedLabName || data.labNo || null,
+        labNo: data.labNo || null,
+        judge: data.judge || null,
+        finalStatus: data.finalStatus || 'pending',
+        finalVenue: data.finalVenue || null,
       }
     };
   } catch (error: any) {
@@ -204,6 +219,7 @@ export async function submitPPT(teamId: string, pptLink: string) {
       pptLink: pptLink.trim(),
       updatedAt: new Date()
     });
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     const isQuota = error?.message?.includes('RESOURCE_EXHAUSTED') || error?.code === 8;

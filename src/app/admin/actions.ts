@@ -1,10 +1,37 @@
 'use server';
 
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { getUserRole } from '@/app/actions/session';
 import { FieldValue } from 'firebase-admin/firestore';
 import { unstable_cache, revalidateTag } from 'next/cache';
+import { THEME_NAMES } from '@/lib/data/themes';
+
+function resolveTeamTheme(teamData: any): string {
+  if (teamData.theme && String(teamData.theme).trim().length > 0) {
+    const raw = String(teamData.theme).trim();
+    for (const name of THEME_NAMES) {
+      if (name.toLowerCase() === raw.toLowerCase()) return name;
+    }
+    const lower = raw.toLowerCase();
+    if (lower.includes('autonomous') || lower.includes('agentic')) return "Autonomous Agentic AI";
+    if (lower.includes('adaptive') || lower.includes('intell')) return "Adaptive Intelligent Systems";
+    if (lower.includes('predictive') || lower.includes('logistics')) return "Predictive Logistics using Industrial AI";
+    if (lower.includes('business') || lower.includes('smart business')) return "AI for Smart Business Solution";
+    if (lower.includes('human') || lower.includes('centered')) return "Human Centered AI";
+    return raw;
+  }
+  if (teamData.problemStatement) {
+    const lower = String(teamData.problemStatement).toLowerCase();
+    if (lower.includes('autonomous') || lower.includes('agentic') || lower.includes('robot') || lower.includes('drone') || lower.includes('workflow')) return "Autonomous Agentic AI";
+    if (lower.includes('adaptive') || lower.includes('intell') || lower.includes('personalized')) return "Adaptive Intelligent Systems";
+    if (lower.includes('predictive') || lower.includes('logistics') || lower.includes('supply') || lower.includes('traffic')) return "Predictive Logistics using Industrial AI";
+    if (lower.includes('business') || lower.includes('finance') || lower.includes('resume') || lower.includes('waste')) return "AI for Smart Business Solution";
+    if (lower.includes('human') || lower.includes('health') || lower.includes('disaster') || lower.includes('education') || lower.includes('voting')) return "Human Centered AI";
+  }
+  return "Autonomous Agentic AI";
+}
 
 const getCachedTeamsData = unstable_cache(
   async () => {
@@ -25,7 +52,7 @@ const getCachedTeamsData = unstable_cache(
   { revalidate: 300 } // 5 minutes cache
 );
 
-export async function verifyAdminSession() {
+export const verifyAdminSession = cache(async function verifyAdminSession() {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('session')?.value;
   if (!sessionCookie) return false;
@@ -34,10 +61,57 @@ export async function verifyAdminSession() {
     const decodedToken = await getAdminAuth().verifySessionCookie(sessionCookie, true);
     if (!decodedToken.email) return false;
     
+    if (decodedToken.role === 'admin') return true;
+    
     const role = await getUserRole(decodedToken.email);
     return role === 'admin';
   } catch (error) {
     return false;
+  }
+});
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+const collectionCache = new Map<string, CacheEntry<any>>();
+const COLLECTION_CACHE_TTL = 30 * 1000; // 30 seconds TTL
+
+export async function invalidateCollectionCache(collectionName?: string) {
+  if (collectionName) {
+    collectionCache.delete(collectionName);
+  } else {
+    collectionCache.clear();
+  }
+}
+
+export async function getCachedDocs(collectionName: string) {
+  const now = Date.now();
+  const cached = collectionCache.get(collectionName);
+  if (cached && now - cached.timestamp < COLLECTION_CACHE_TTL) {
+    return cached.data;
+  }
+
+  try {
+    const db = getAdminDb();
+    let snap: any;
+    if (collectionName === 'metadata_eventTimelines') {
+      snap = await db.collection('metadata').doc('eventTimelines').get();
+    } else if (collectionName === 'gameScores') {
+      snap = await db.collection(collectionName).orderBy('createdAt', 'desc').get();
+    } else {
+      snap = await db.collection(collectionName).get();
+    }
+    collectionCache.set(collectionName, { data: snap, timestamp: now });
+    return snap;
+  } catch (error: any) {
+    console.error(`Error fetching ${collectionName}:`, error?.message || error);
+    if (cached) {
+      console.warn(`Returning stale cached data for ${collectionName}`);
+      return cached.data;
+    }
+    // Return safe fallback snapshot on Firestore quota error to avoid UI crash
+    return { docs: [], empty: true, size: 0, exists: false, data: () => ({}) };
   }
 }
 
@@ -59,15 +133,25 @@ export interface AdminTeamData {
   displayId?: string;
   teamName: string;
   problemStatement: string;
+  theme?: string;
   leadEmail: string;
   leadData: Lead;
   membersData: Member[];
   score?: number;
   judge?: string;
   labNo?: string;
+  assignedLabId?: string;
+  assignedLabName?: string;
   feedback?: string;
   pptLink?: string;
+  pptQualified?: boolean;
+  pptStatus?: string;
+  eliminated?: boolean;
+  eliminationReason?: string;
+  prelimsStatus?: string;
   finaleQualified?: boolean;
+  finalStatus?: string;
+  finalVenue?: string;
   isWinner?: boolean;
   winnerRank?: number | null;
   winnerTitle?: string | null;
@@ -82,32 +166,31 @@ export async function getAdminOverviewStats() {
   
   try {
     const db = getAdminDb();
-    
     const [teamsSnap, rolesSnap, jurySnap, prelimsSnap, finaleSnap] = await Promise.all([
       db.collection('teams').count().get(),
       db.collection('roles').count().get(),
       db.collection('roles').where('role', '==', 'jury').count().get(),
-      db.collection('prelimsEvaluations').count().get(),
-      db.collection('finaleEvaluations').count().get()
+      db.collection('evaluations').where('round', '==', 'prelims').count().get(),
+      db.collection('evaluations').where('round', '==', 'finale').count().get()
     ]);
     
     return {
       success: true,
       stats: {
-        totalTeams: teamsSnap.data().count,
-        totalRoles: rolesSnap.data().count,
-        totalJuries: jurySnap.data().count,
-        totalPrelims: prelimsSnap.data().count,
-        totalFinale: finaleSnap.data().count
+        totalTeams: teamsSnap?.data().count || 0,
+        totalRoles: rolesSnap?.data().count || 0,
+        totalJuries: jurySnap?.data().count || 0,
+        totalPrelims: prelimsSnap?.data().count || 0,
+        totalFinale: finaleSnap?.data().count || 0
       }
     };
   } catch (error: any) {
     console.error('Error fetching admin stats:', error);
-    return { success: false, error: error.message || 'Failed to fetch stats' };
+    return { success: false, error: error.message || 'Failed to fetch overview stats' };
   }
 }
 
-export async function getAllTeamsAdmin() {
+export async function getAllTeamsAdmin(): Promise<{ success: boolean; teams: AdminTeamData[]; error?: string }> {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) {
     return { success: false, error: 'Unauthorized', teams: [] };
@@ -120,23 +203,35 @@ export async function getAllTeamsAdmin() {
 
     for (const doc of cachedDocs) {
       const data = doc.data;
-      let decryptedLead: Lead = data.leadData || { name: '', batchNumber: '', department: '', year: '', section: '', contactNumber: '' };
-      let decryptedMembers: Member[] = data.membersData || [];
+      const decryptedLead: Lead = data.leadData || { name: '', batchNumber: '', department: '', year: '', section: '', contactNumber: '' };
+      const decryptedMembers: Member[] = data.membersData || [];
+
+      const hasPpt = Boolean(data.pptLink && String(data.pptLink).trim().length > 0);
 
       teams.push({
         id: doc.id,
         displayId: data.displayId || doc.id,
         teamName: data.teamName || doc.id,
         problemStatement: data.problemStatement || 'Not assigned',
+        theme: data.theme || resolveTeamTheme(data),
         leadEmail: data.leadEmail || '',
         leadData: decryptedLead,
         membersData: decryptedMembers,
         score: typeof data.score === 'number' ? data.score : 0,
         judge: data.judge || 'Unassigned',
         labNo: data.labNo || 'Unassigned',
+        assignedLabId: data.assignedLabId || '',
+        assignedLabName: data.assignedLabName || data.labNo || '',
         feedback: data.feedback || '',
         pptLink: data.pptLink || '',
+        pptQualified: data.pptQualified !== false && hasPpt,
+        pptStatus: data.pptStatus || (hasPpt ? 'submitted' : 'pending'),
+        eliminated: data.eliminated === true || (data.pptQualified === false),
+        eliminationReason: data.eliminationReason || (hasPpt ? '' : 'No PPT presentation submitted during Phase 2'),
+        prelimsStatus: data.prelimsStatus || (data.finaleQualified ? 'selected' : 'pending'),
         finaleQualified: data.finaleQualified === true,
+        finalStatus: data.finalStatus || 'pending',
+        finalVenue: data.finalVenue || 'TBA',
         isWinner: data.isWinner === true,
         winnerRank: data.winnerRank || null,
         winnerTitle: data.winnerTitle || null,
@@ -279,9 +374,12 @@ export async function updateTeamAdmin(
         payload.assignedLabId = matchedLab.id;
         payload.assignedLabName = matchedLab.data().labName || matchedLab.id;
         payload.labNo = matchedLab.data().labName || matchedLab.id;
+        payload.venue = matchedLab.data().labName || matchedLab.id;
         if (matchedLab.data().assignedJuryName && matchedLab.data().assignedJuryName !== 'Unassigned') {
           payload.judge = matchedLab.data().assignedJuryName;
         }
+      } else if (newLabNo) {
+        payload.venue = newLabNo;
       }
     }
 
@@ -299,6 +397,30 @@ export async function updateTeamAdmin(
 
     await docRef.update(payload);
     await syncLabTeamCountsAdmin(db);
+    invalidateCollectionCache('teams');
+    invalidateCollectionCache('labs');
+    const oldLabId = currentData.assignedLabId;
+    const newLabId = payload.assignedLabId;
+
+    const batch = db.batch();
+    batch.update(docRef, payload);
+
+    if (newLabId !== oldLabId) {
+      if (oldLabId) {
+        batch.update(db.collection('labs').doc(oldLabId), {
+          currentTeamCount: FieldValue.increment(-1),
+          updatedAt: new Date()
+        });
+      }
+      if (newLabId) {
+        batch.update(db.collection('labs').doc(newLabId), {
+          currentTeamCount: FieldValue.increment(1),
+          updatedAt: new Date()
+        });
+      }
+    }
+
+    await batch.commit();
     return { success: true };
   } catch (error: any) {
     console.error('Error updating team:', error);
@@ -316,6 +438,23 @@ export async function deleteTeamAdmin(teamId: string) {
     const db = getAdminDb();
     await db.collection('teams').doc(teamId).delete();
     await syncLabTeamCountsAdmin(db);
+    invalidateCollectionCache('teams');
+    invalidateCollectionCache('labs');
+    const docRef = db.collection('teams').doc(teamId);
+    const snap = await docRef.get();
+    
+    if (snap.exists) {
+      const labId = snap.data()?.assignedLabId;
+      const batch = db.batch();
+      batch.delete(docRef);
+      if (labId) {
+        batch.update(db.collection('labs').doc(labId), {
+          currentTeamCount: FieldValue.increment(-1),
+          updatedAt: new Date()
+        });
+      }
+      await batch.commit();
+    }
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting team:', error);
@@ -327,14 +466,11 @@ export async function deleteTeamAdmin(teamId: string) {
 
 
 export interface Rubric {
-  problemStatement?: number;
-  presentation?: number;
+  conceptStrength?: number;
+  buildIntelligence?: number;
+  deliveryImpact?: number;
+  liveDefenseScore?: number;
   communication?: number;
-  solution?: number;
-  idea?: number;
-  innovation?: number;
-  technicalFeasibility?: number;
-  impact?: number;
 }
 
 export interface AdminScoreData {
@@ -353,7 +489,7 @@ export interface AdminScoreData {
   updatedAt?: string;
 }
 
-export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations' | 'finaleEvaluations') {
+export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) {
     return { success: false, error: 'Unauthorized', scores: [] };
@@ -361,12 +497,16 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
 
   try {
     const db = getAdminDb();
-    const snapshot = await db.collection(collectionName).orderBy('createdAt', 'desc').get();
     
-    // Fetch teams to map names and problem statements
-    const teamsSnap = await db.collection('teams').get();
+    // We fetch teams and roles for mapping names
+    const [snapshot, teamsSnap, rolesSnap] = await Promise.all([
+      db.collection('evaluations').where('round', '==', round).get(),
+      db.collection('teams').get(),
+      db.collection('roles').where('role', '==', 'jury').get(),
+    ]);
+    
     const teamMap = new Map<string, { teamName: string; problemStatement: string }>();
-    teamsSnap.docs.forEach((doc) => {
+    teamsSnap.docs?.forEach((doc: any) => {
       const data = doc.data();
       teamMap.set(doc.id, {
         teamName: data.teamName || doc.id,
@@ -374,31 +514,27 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
       });
     });
 
-    const jurySnap = await db.collection('roles').where('role', '==', 'jury').get();
     const juryMap = new Map<string, string>();
-    jurySnap.docs.forEach((doc) => {
+    rolesSnap.docs?.forEach((doc: any) => {
       const data = doc.data();
-      // data.juryId is legacy ID, doc.id is email. We support mapping by either.
       const name = data.name || doc.id;
       juryMap.set(doc.id, name);
-      if (data.juryId) juryMap.set(data.juryId, name);
+    });
+
+    const docMap = new Map<string, any>();
+    snapshot.docs?.forEach((doc: any) => {
+      docMap.set(doc.id, doc);
     });
 
     const scores: AdminScoreData[] = [];
 
-    for (const doc of snapshot.docs) {
+    for (const doc of Array.from(docMap.values())) {
       const data = doc.data();
       
-      const rubricObj: Rubric = data.rubric || {
-        problemStatement: 0,
-        presentation: 0,
-        communication: 0,
-        solution: 0,
-        idea: 0,
-      };
+      const rubricObj: Rubric = data.rubric || {};
       
       const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : 0;
-      const remarksVal = data.remarks || '';
+      const remarksVal = data.remarks || data.feedback || '';
       const highlightedVal = typeof data.highlighted === 'boolean' ? data.highlighted : false;
       const isFrozenVal = typeof data.isFrozen === 'boolean' ? data.isFrozen : false;
       
@@ -406,12 +542,12 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
       const updatedAtStr = data.updatedAt ? new Date(data.updatedAt.toDate ? data.updatedAt.toDate() : data.updatedAt).toISOString() : createdAtStr;
 
       const teamInfo = teamMap.get(data.teamId || '');
-      const juryName = juryMap.get(data.juryId) || 'Unknown Jury';
+      const juryName = data.juryName || juryMap.get(data.juryId) || 'Unknown Jury';
 
       scores.push({
         id: doc.id,
         teamId: data.teamId || '',
-        teamName: teamInfo?.teamName || data.teamId || 'Unknown Team',
+        teamName: teamInfo?.teamName || data.teamName || data.teamId || 'Unknown Team',
         problemStatement: teamInfo?.problemStatement || 'N/A',
         juryId: data.juryId || '',
         juryName,
@@ -424,6 +560,8 @@ export async function getAllEvaluationsAdmin(collectionName: 'prelimsEvaluations
         updatedAt: updatedAtStr,
       });
     }
+
+    scores.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
     return { success: true, scores };
   } catch (error: any) {
@@ -439,17 +577,17 @@ export async function getAllGameScoresAdmin() {
   }
 
   try {
-    const db = getAdminDb();
-    const snapshot = await db.collection('gameScores').orderBy('createdAt', 'desc').get();
+    const [snapshot, teamsSnap] = await Promise.all([
+      getCachedDocs('gameScores'),
+      getCachedDocs('teams'),
+    ]);
     
-    // Fetch teams to map names
-    const teamsSnap = await db.collection('teams').get();
     const teamMap = new Map<string, { teamName: string }>();
-    teamsSnap.docs.forEach((doc) => {
+    teamsSnap.docs.forEach((doc: any) => {
       teamMap.set(doc.id, { teamName: doc.data().teamName || doc.id });
     });
 
-    const scores = snapshot.docs.map(doc => {
+    const scores = snapshot.docs.map((doc: any) => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -482,7 +620,7 @@ export async function createScoreAdmin(scoreData: {
 
   try {
     const db = getAdminDb();
-    const scoresRef = db.collection('prelimsEvaluations');
+    const scoresRef = db.collection('evaluations');
 
     // Ensure team exists
     const teamDoc = await db.collection('teams').doc(scoreData.teamId).get();
@@ -496,19 +634,22 @@ export async function createScoreAdmin(scoreData: {
       return { success: false, error: 'A score record already exists for this team by this jury.' };
     }
 
-    const { innovation, technicalFeasibility, impact, presentation } = scoreData.rubric;
-    const totalScore = Number(innovation) + Number(technicalFeasibility) + Number(impact) + Number(presentation);
+    const { conceptStrength, buildIntelligence, deliveryImpact, liveDefenseScore, communication } = scoreData.rubric;
+    const totalScore = Number(conceptStrength) + Number(buildIntelligence) + Number(deliveryImpact) + Number(liveDefenseScore) + Number(communication);
     const now = new Date();
 
-    const newDoc = scoresRef.doc();
+    const newDocId = `prelims_${scoreData.juryId}_${scoreData.teamId}`;
+    const newDoc = scoresRef.doc(newDocId);
     await newDoc.set({
+      round: 'prelims',
       teamId: scoreData.teamId,
       juryId: scoreData.juryId,
       rubric: {
-        innovation: Number(innovation),
-        technicalFeasibility: Number(technicalFeasibility),
-        impact: Number(impact),
-        presentation: Number(presentation),
+        conceptStrength: Number(conceptStrength),
+        buildIntelligence: Number(buildIntelligence),
+        deliveryImpact: Number(deliveryImpact),
+        liveDefenseScore: Number(liveDefenseScore),
+        communication: Number(communication),
       },
       totalScore,
       remarks: scoreData.remarks?.trim() || '',
@@ -541,7 +682,7 @@ export async function updateScoreAdmin(
 
   try {
     const db = getAdminDb();
-    const docRef = db.collection('prelimsEvaluations').doc(scoreId);
+    const docRef = db.collection('evaluations').doc(scoreId);
     const docSnap = await docRef.get();
 
     if (!docSnap.exists) {
@@ -560,15 +701,16 @@ export async function updateScoreAdmin(
     }
 
     if (updatedFields.rubric !== undefined) {
-      const { innovation, technicalFeasibility, impact, presentation } = updatedFields.rubric;
+      const { conceptStrength, buildIntelligence, deliveryImpact, liveDefenseScore, communication } = updatedFields.rubric;
       const parsedRubric = {
-        innovation: Number(innovation),
-        technicalFeasibility: Number(technicalFeasibility),
-        impact: Number(impact),
-        presentation: Number(presentation),
+        conceptStrength: Number(conceptStrength),
+        buildIntelligence: Number(buildIntelligence),
+        deliveryImpact: Number(deliveryImpact),
+        liveDefenseScore: Number(liveDefenseScore),
+        communication: Number(communication),
       };
       payload.rubric = parsedRubric;
-      payload.totalScore = parsedRubric.innovation + parsedRubric.technicalFeasibility + parsedRubric.impact + parsedRubric.presentation;
+      payload.totalScore = parsedRubric.conceptStrength + parsedRubric.buildIntelligence + parsedRubric.deliveryImpact + parsedRubric.liveDefenseScore + parsedRubric.communication;
     }
 
     payload.updatedAt = new Date();
@@ -589,7 +731,7 @@ export async function deleteScoreAdmin(scoreId: string) {
 
   try {
     const db = getAdminDb();
-    await db.collection('prelimsEvaluations').doc(scoreId).delete();
+    await db.collection('evaluations').doc(scoreId).delete();
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting score:', error);
@@ -606,8 +748,8 @@ export async function publishPrelimsResults() {
   try {
     const db = getAdminDb();
     
-    // 1. Fetch all prelimsEvaluations
-    const evalsSnap = await db.collection('prelimsEvaluations').get();
+    // 1. Fetch all prelims evaluations
+    const evalsSnap = await db.collection('evaluations').where('round', '==', 'prelims').get();
     
     // Group evaluations by teamId
     const teamScores: Record<string, number[]> = {};
@@ -632,6 +774,7 @@ export async function publishPrelimsResults() {
     }
 
     await batch.commit();
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error publishing prelims results:', error);
@@ -655,9 +798,7 @@ export async function getEventTimelinesAdmin() {
   }
 
   try {
-    const db = getAdminDb();
-    const docRef = db.collection('metadata').doc('eventTimelines');
-    const docSnap = await docRef.get();
+    const docSnap = await getCachedDocs('metadata_eventTimelines');
 
     const defaultData: EventTimelinesData = {
       timeline1: { name: 'Registration Phase', startDate: '', endDate: '', enabled: true, state: 'not-set' },
@@ -696,6 +837,7 @@ export async function updateEventTimelinesAdmin(timelines: EventTimelinesData) {
     const db = getAdminDb();
     const docRef = db.collection('metadata').doc('eventTimelines');
     await docRef.set(timelines, { merge: true });
+    invalidateCollectionCache('metadata_eventTimelines');
     return { success: true };
   } catch (error: any) {
     console.error('Error updating event timelines:', error);
@@ -710,12 +852,13 @@ export async function getEventManagementDashboardDataAdmin() {
   }
 
   try {
-    const [resTime, resTeams, resPrelims, resFinale, resLabs, resJuries] = await Promise.all([
+    const [resTime, resTeams, resPrelims, resFinale, resLabs, resFinalLabs, resJuries] = await Promise.all([
       getEventTimelinesAdmin(),
       getAllTeamsAdmin(),
-      getAllEvaluationsAdmin('prelimsEvaluations'),
-      getAllEvaluationsAdmin('finaleEvaluations'),
+      getAllEvaluationsAdmin('prelims'),
+      getAllEvaluationsAdmin('finale'),
       getLabsAdmin(),
+      getFinalLabsAdmin(),
       getJuriesAdmin(),
     ]);
 
@@ -726,6 +869,7 @@ export async function getEventManagementDashboardDataAdmin() {
       prelimsScores: resPrelims.scores || [],
       finaleScores: resFinale.scores || [],
       labs: resLabs.labs || [],
+      finalLabs: resFinalLabs.finalLabs || [],
       juries: resJuries.juries || [],
     };
   } catch (error: any) {
@@ -758,6 +902,7 @@ export async function setTimelinePhaseAdmin(
       },
       { merge: true }
     );
+    invalidateCollectionCache('metadata_eventTimelines');
     return { success: true };
   } catch (error: any) {
     console.error('Error setting timeline phase:', error);
@@ -779,10 +924,91 @@ export async function updateTimelinePhaseAdmin(
       { [`timeline${timeline}`]: updates },
       { merge: true }
     );
+    invalidateCollectionCache('metadata_eventTimelines');
     return { success: true };
   } catch (error: any) {
     console.error('Error updating timeline phase:', error);
     return { success: false, error: error.message || 'Failed to update timeline phase' };
+  }
+}
+
+export async function resetPrelimsFiltersAndAssignmentsAdmin(): Promise<{ success: boolean; resetCount?: number; error?: string }> {
+  const isAdmin = await verifyAdminSession();
+  if (!isAdmin) return { success: false, error: 'Unauthorized' };
+
+  try {
+    const db = getAdminDb();
+    const [teamsSnap, labsSnap] = await Promise.all([
+      db.collection('teams').get(),
+      db.collection('labs').get(),
+    ]);
+
+    let batch = db.batch();
+    let opCount = 0;
+
+    // Reset team filters and lab/jury assignments
+    teamsSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      const hasPpt = Boolean(data.pptLink && String(data.pptLink).trim().length > 0);
+
+      batch.update(doc.ref, {
+        labNo: 'Unassigned',
+        judge: 'Unassigned',
+        venue: 'TBA',
+        assignedLabId: FieldValue.delete(),
+        assignedLabName: FieldValue.delete(),
+        pptQualified: hasPpt,
+        pptStatus: hasPpt ? 'submitted' : 'pending',
+        eliminated: false,
+        eliminationReason: null,
+        prelimsStatus: 'pending',
+        prelimsAverageScore: 0,
+        finaleQualified: false,
+      });
+
+      opCount++;
+      if (opCount === 400) {
+        batch.commit();
+        batch = db.batch();
+        opCount = 0;
+      }
+    });
+
+    // Reset current team counts in labs (keep lab configuration, jury, & theme intact)
+    labsSnap.docs.forEach((doc) => {
+      batch.update(doc.ref, {
+        currentTeamCount: 0,
+        updatedAt: new Date(),
+      });
+      opCount++;
+      if (opCount === 400) {
+        batch.commit();
+        batch = db.batch();
+        opCount = 0;
+      }
+    });
+
+    if (opCount > 0) {
+      await batch.commit();
+    }
+
+    // Reset timeline metadata filter flags
+    await db.collection('metadata').doc('eventTimelines').set(
+      {
+        timeline2: { pptFilterApplied: false },
+        timeline3: { finalistsPromoted: false },
+      },
+      { merge: true }
+    );
+
+    invalidateCollectionCache('teams');
+    invalidateCollectionCache('labs');
+    invalidateCollectionCache('metadata_eventTimelines');
+
+    return { success: true, resetCount: teamsSnap.size };
+  } catch (error: any) {
+    console.error('Error resetting prelims filters:', error);
+    return { success: false, error: error.message || 'Failed to reset prelims filters' };
   }
 }
 
@@ -801,13 +1027,17 @@ export async function resetTimelinePhaseAdmin(
       state: 'not-set',
       enabled: false,
     };
-    if (timeline === '2') resetData.pptFilterApplied = false;
-    if (timeline === '3') resetData.finalistsPromoted = false;
+    if (timeline === '2' || timeline === '3') {
+      resetData.pptFilterApplied = false;
+      resetData.finalistsPromoted = false;
+      await resetPrelimsFiltersAndAssignmentsAdmin();
+    }
 
     await docRef.set(
       { [`timeline${timeline}`]: resetData },
       { merge: true }
     );
+    invalidateCollectionCache('metadata_eventTimelines');
     return { success: true };
   } catch (error: any) {
     console.error('Error resetting timeline phase:', error);
@@ -846,6 +1076,8 @@ export async function applyPptFilterAdmin(): Promise<{ success: boolean; passed?
       { merge: true }
     );
 
+    invalidateCollectionCache('teams');
+    invalidateCollectionCache('metadata_eventTimelines');
     return { success: true, passed, failed };
   } catch (error: any) {
     console.error('Error applying PPT filter:', error);
@@ -880,20 +1112,20 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
 
   try {
     const db = getAdminDb();
-    const [teamsSnap, prelimsSnap, finaleSnap, jurySnap, labsSnap] = await Promise.all([
+    const [teamsSnap, prelimsSnap, finaleSnap, rolesSnap, labsSnap] = await Promise.all([
       db.collection('teams').get(),
-      db.collection('prelimsEvaluations').get(),
-      db.collection('finaleEvaluations').get(),
-      db.collection('jury').get(),
+      db.collection('evaluations').where('round', '==', 'prelims').get(),
+      db.collection('evaluations').where('round', '==', 'finale').get(),
+      db.collection('roles').where('role', '==', 'jury').get(),
       db.collection('labs').get(),
     ]);
 
-    let totalTeams = teamsSnap.size;
+    const totalTeams = teamsSnap.size;
     let totalStudents = 0;
     let pptSubmittedCount = 0;
     let finalistCount = 0;
 
-    teamsSnap.docs.forEach((doc) => {
+    teamsSnap.docs.forEach((doc: any) => {
       const data = doc.data();
       // Count students (lead + members)
       let count = 0;
@@ -912,7 +1144,7 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
 
     // Map labs to jury
     const labJuryMap = new Map<string, string>();
-    labsSnap.docs.forEach((doc) => {
+    labsSnap.docs.forEach((doc: any) => {
       const data = doc.data();
       if (data.assignedJuryName) {
         labJuryMap.set(data.assignedJuryName, data.labName || '');
@@ -921,30 +1153,44 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
 
     // Count evals per jury name / ID
     const prelimsCountByJury: Record<string, number> = {};
-    prelimsSnap.docs.forEach((doc) => {
+    prelimsSnap.docs.forEach((doc: any) => {
       const data = doc.data();
-      const juryKey = data.judgeName || data.judgeId || data.judge || 'Unassigned';
+      const juryKey = data.juryName || data.judgeName || data.judgeId || data.juryId || data.judge || 'Unassigned';
       prelimsCountByJury[juryKey] = (prelimsCountByJury[juryKey] || 0) + 1;
     });
 
     const finaleCountByJury: Record<string, number> = {};
-    finaleSnap.docs.forEach((doc) => {
+    finaleSnap.docs.forEach((doc: any) => {
       const data = doc.data();
-      const juryKey = data.judgeName || data.judgeId || data.judge || 'Unassigned';
+      const juryKey = data.juryName || data.judgeName || data.judgeId || data.juryId || data.judge || 'Unassigned';
       finaleCountByJury[juryKey] = (finaleCountByJury[juryKey] || 0) + 1;
     });
 
-    const juryStats: JuryStat[] = [];
-    jurySnap.docs.forEach((doc) => {
+    const combinedJuriesMap = new Map<string, { id: string; name: string; institution: string }>();
+    // We don't query the legacy jury collection anymore.
+
+    rolesSnap.docs?.forEach((doc: any) => {
       const data = doc.data();
-      const juryName = data.juryName || doc.id;
+      if (data.role === 'jury' && !combinedJuriesMap.has(doc.id)) {
+        const name = data.name || data.juryName || doc.id;
+        combinedJuriesMap.set(doc.id, {
+          id: doc.id,
+          name,
+          institution: data.institution || '',
+        });
+      }
+    });
+
+    const juryStats: JuryStat[] = [];
+    combinedJuriesMap.forEach((jury, key) => {
+      const juryName = jury.name;
       juryStats.push({
-        juryId: doc.id,
+        juryId: jury.id,
         juryName: juryName,
-        institution: data.institution || '',
+        institution: jury.institution,
         assignedLab: labJuryMap.get(juryName) || 'Unassigned',
-        prelimsEvaluatedCount: prelimsCountByJury[juryName] || prelimsCountByJury[doc.id] || 0,
-        finaleEvaluatedCount: finaleCountByJury[juryName] || finaleCountByJury[doc.id] || 0,
+        prelimsEvaluatedCount: prelimsCountByJury[juryName] || prelimsCountByJury[jury.id] || 0,
+        finaleEvaluatedCount: finaleCountByJury[juryName] || finaleCountByJury[jury.id] || 0,
       });
     });
 
@@ -1008,6 +1254,7 @@ export async function setFinalWinnersAdmin(winners: { teamId: string; rank: numb
       { merge: true }
     );
 
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error setting final winners:', error);
@@ -1023,10 +1270,25 @@ export async function toggleTeamFinaleQualifiedAdmin(teamId: string, qualified: 
 
   try {
     const db = getAdminDb();
-    await db.collection('teams').doc(teamId).update({
+    const updates: Record<string, any> = {
       finaleQualified: qualified,
       prelimsStatus: qualified ? 'selected' : 'rejected',
-    });
+      finalStatus: qualified ? 'pending' : 'rejected',
+    };
+
+    if (qualified) {
+      const labsSnap = await db.collection('labs').get();
+      if (!labsSnap.empty) {
+        updates.finalVenue = labsSnap.docs[0].data().labName || 'Main Auditorium';
+      } else {
+        updates.finalVenue = 'Main Auditorium';
+      }
+    } else {
+      updates.finalVenue = 'N/A';
+    }
+
+    await db.collection('teams').doc(teamId).update(updates);
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error toggling team qualification:', error);
@@ -1047,26 +1309,67 @@ export async function autoAllocateTeamsAdmin(labs: string[], juries: string[]) {
 
     const db = getAdminDb();
     const snapshot = await db.collection('teams').get();
-
+    
     if (snapshot.empty) {
       return { success: false, error: 'No teams registered yet.' };
     }
 
     const batch = db.batch();
-    const docs = snapshot.docs;
 
-    docs.forEach((doc, idx) => {
+    // Filter ONLY teams that have uploaded PPT
+    const qualifiedDocs = snapshot.docs.filter((doc) => {
+      const data = doc.data();
+      return data.pptLink && String(data.pptLink).trim().length > 0;
+    });
+
+    const unsubmittedDocs = snapshot.docs.filter((doc) => {
+      const data = doc.data();
+      return !data.pptLink || String(data.pptLink).trim().length === 0;
+    });
+
+    if (qualifiedDocs.length === 0) {
+      return { success: false, error: 'No teams have submitted a PPT presentation yet. Cannot assign labs or juries.' };
+    }
+
+    // Assign ONLY qualified teams to labs & juries
+    qualifiedDocs.forEach((doc, idx) => {
       const assignedLab = labs[idx % labs.length];
       const assignedJury = juries[idx % juries.length];
 
       batch.update(doc.ref, {
         labNo: assignedLab,
+        assignedLabName: assignedLab,
+        venue: assignedLab,
         judge: assignedJury,
+        pptQualified: true,
+        eliminated: false,
+        eliminationReason: null,
+      });
+    });
+
+    // Mark unsubmitted teams as unassigned & eliminated
+    unsubmittedDocs.forEach((doc) => {
+      batch.update(doc.ref, {
+        labNo: 'Unassigned (Eliminated)',
+        venue: 'Unassigned (Eliminated)',
+        judge: 'Unassigned',
+        pptQualified: false,
+        eliminated: true,
+        eliminationReason: 'Eliminated: Did not submit PPT presentation during Phase 2',
       });
     });
 
     await batch.commit();
-    return { success: true, count: docs.length };
+
+    // Mark filter applied in metadata
+    await db.collection('metadata').doc('eventTimelines').set(
+      { timeline2: { pptFilterApplied: true } },
+      { merge: true }
+    );
+
+    invalidateCollectionCache('teams');
+    invalidateCollectionCache('metadata_eventTimelines');
+    return { success: true, count: qualifiedDocs.length, eliminatedCount: unsubmittedDocs.length };
   } catch (error: any) {
     console.error('Error auto allocating teams:', error);
     return { success: false, error: error.message || 'Failed to allocate teams' };
@@ -1081,10 +1384,16 @@ export async function promoteTopTeamsToFinaleAdmin(topCount: number) {
 
   try {
     const db = getAdminDb();
-    const [evalsSnap, teamsSnap] = await Promise.all([
+    const [evalsSnap, teamsSnap, labsSnap] = await Promise.all([
       db.collection('prelimsEvaluations').get(),
       db.collection('teams').get(),
+      db.collection('labs').get(),
     ]);
+
+    const labs = labsSnap.docs.map((doc) => ({
+      labId: doc.id,
+      labName: doc.data().labName || doc.id,
+    }));
 
     const teamScores: Record<string, number> = {};
     evalsSnap.docs.forEach((doc) => {
@@ -1104,18 +1413,33 @@ export async function promoteTopTeamsToFinaleAdmin(topCount: number) {
     // Sort descending by score
     teamsWithScore.sort((a, b) => b.score - a.score);
 
-    const qualifiedIds = new Set(teamsWithScore.slice(0, topCount).map((t) => t.id));
+    const qualifiedList = teamsWithScore.slice(0, topCount).map((t) => t.id);
+    const qualifiedIds = new Set(qualifiedList);
 
     const batch = db.batch();
     teamsSnap.docs.forEach((doc) => {
       const isQualified = qualifiedIds.has(doc.id);
-      batch.update(doc.ref, {
-        finaleQualified: isQualified,
-        prelimsStatus: isQualified ? 'selected' : 'rejected',
-      });
+      if (isQualified) {
+        const qIndex = qualifiedList.indexOf(doc.id);
+        const assignedVenue = labs.length > 0 ? labs[qIndex % labs.length].labName : 'Main Auditorium';
+        batch.update(doc.ref, {
+          finaleQualified: true,
+          prelimsStatus: 'selected',
+          finalStatus: 'pending',
+          finalVenue: assignedVenue,
+        });
+      } else {
+        batch.update(doc.ref, {
+          finaleQualified: false,
+          prelimsStatus: 'rejected',
+          finalStatus: 'rejected',
+          finalVenue: 'N/A',
+        });
+      }
     });
 
     await batch.commit();
+    invalidateCollectionCache('teams');
     return { success: true, promotedCount: qualifiedIds.size };
   } catch (error: any) {
     console.error('Error promoting teams to finale:', error);
@@ -1130,6 +1454,7 @@ export interface LabData {
   capacity: number;
   assignedJuryId?: string;
   assignedJuryName: string;
+  assignedTheme?: string;
   currentTeamCount: number;
   createdAt?: string;
   updatedAt?: string;
@@ -1140,10 +1465,9 @@ export async function getLabsAdmin(): Promise<{ success: boolean; labs?: LabData
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
 
-    const db = getAdminDb();
-    const snapshot = await db.collection('labs').get();
+    const snapshot = await getCachedDocs('labs');
 
-    const labs: LabData[] = snapshot.docs.map((doc) => {
+    const labs: LabData[] = snapshot.docs.map((doc: any) => {
       const data = doc.data();
       return {
         labId: doc.id,
@@ -1152,6 +1476,7 @@ export async function getLabsAdmin(): Promise<{ success: boolean; labs?: LabData
         capacity: typeof data.capacity === 'number' ? data.capacity : 25,
         assignedJuryId: data.assignedJuryId || '',
         assignedJuryName: data.assignedJuryName || 'Unassigned',
+        assignedTheme: data.assignedTheme || '',
         currentTeamCount: typeof data.currentTeamCount === 'number' ? data.currentTeamCount : 0,
         createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toISOString() : data.createdAt) : '',
         updatedAt: data.updatedAt ? (data.updatedAt.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt) : '',
@@ -1170,7 +1495,8 @@ export async function createLabAdmin(
   labName: string,
   labCode: string,
   capacity?: number,
-  assignedJuryName?: string
+  assignedJuryName?: string,
+  assignedTheme?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const valid = await verifyAdminSession();
@@ -1191,12 +1517,15 @@ export async function createLabAdmin(
       capacity: capacity || 0,
       assignedJuryId: '',
       assignedJuryName: assignedJuryName?.trim() || 'Unassigned',
+      assignedTheme: assignedTheme?.trim() || '',
       currentTeamCount: 0,
       createdAt: now,
       updatedAt: now,
     });
 
     await syncLabTeamCountsAdmin(db);
+    invalidateCollectionCache('labs');
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error creating lab:', error);
@@ -1209,7 +1538,8 @@ export async function updateLabAdmin(
   labName: string,
   labCode: string,
   capacity?: number,
-  assignedJuryName?: string
+  assignedJuryName?: string,
+  assignedTheme?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const valid = await verifyAdminSession();
@@ -1244,6 +1574,10 @@ export async function updateLabAdmin(
       payload.assignedJuryName = cleanJury;
     }
 
+    if (assignedTheme !== undefined) {
+      payload.assignedTheme = assignedTheme.trim();
+    }
+
     await docRef.update(payload);
 
     // Sync teams assigned to this lab with updated Lab Name and Jury Name
@@ -1273,6 +1607,8 @@ export async function updateLabAdmin(
     }
 
     await syncLabTeamCountsAdmin(db);
+    invalidateCollectionCache('labs');
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error updating lab:', error);
@@ -1323,6 +1659,8 @@ export async function deleteLabAdmin(labId: string): Promise<{ success: boolean;
 
     await docRef.delete();
     await syncLabTeamCountsAdmin(db);
+    invalidateCollectionCache('labs');
+    invalidateCollectionCache('teams');
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting lab:', error);
@@ -1330,7 +1668,7 @@ export async function deleteLabAdmin(labId: string): Promise<{ success: boolean;
   }
 }
 
-export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; assignedCount?: number; error?: string }> {
+export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; assignedCount?: number; eliminatedCount?: number; error?: string }> {
   try {
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
@@ -1348,35 +1686,99 @@ export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; 
     const labs: (LabData & { ref: any })[] = labsSnap.docs.map((doc) => ({
       labId: doc.id,
       labName: doc.data().labName || doc.id,
+      labCode: doc.data().labCode || '',
       capacity: typeof doc.data().capacity === 'number' ? doc.data().capacity : 0,
       assignedJuryName: doc.data().assignedJuryName || 'Unassigned',
+      assignedTheme: doc.data().assignedTheme || '',
       currentTeamCount: typeof doc.data().currentTeamCount === 'number' ? doc.data().currentTeamCount : 0,
       ref: doc.ref,
     }));
 
-    labs.sort((a, b) => a.labName.localeCompare(b.labName));
-    const allTeams = teamsSnap.docs.map((doc) => ({ id: doc.id, ref: doc.ref, ...doc.data() }));
-
-    if (allTeams.length === 0) {
+    if (teamsSnap.empty) {
       return { success: false, error: 'No teams registered yet.' };
     }
 
-    const batch = db.batch();
+    const allTeams = teamsSnap.docs.map((doc) => ({ id: doc.id, ref: doc.ref, ...doc.data() }));
+
+    // FILTER ONLY PPT SUBMITTED TEAMS FOR PRELIMS ROUND
+    const qualifiedTeams = allTeams.filter((t: any) => t.pptLink && String(t.pptLink).trim().length > 0);
+    const unsubmittedTeams = allTeams.filter((t: any) => !t.pptLink || String(t.pptLink).trim().length === 0);
+
+    if (qualifiedTeams.length === 0) {
+      return { success: false, error: 'No teams have submitted a PPT presentation yet. Cannot assign labs or juries.' };
+    }
+
+    // Group labs by theme
+    const labsByTheme = new Map<string, (LabData & { ref: any })[]>();
+    const generalLabs: (LabData & { ref: any })[] = [];
+
+    labs.forEach((lab) => {
+      const theme = (lab.assignedTheme || '').trim();
+      if (theme && theme !== 'All Themes' && theme !== 'Any Theme') {
+        if (!labsByTheme.has(theme)) labsByTheme.set(theme, []);
+        labsByTheme.get(theme)!.push(lab);
+      } else {
+        generalLabs.push(lab);
+      }
+    });
+
+    // Track team counts assigned to each lab
     const teamCounts: Record<string, number> = {};
     labs.forEach((l) => { teamCounts[l.labId] = 0; });
+    const themeIndexMap: Record<string, number> = {};
 
-    allTeams.forEach((team, idx) => {
-      const assignedLab = labs[idx % labs.length];
-      teamCounts[assignedLab.labId] = (teamCounts[assignedLab.labId] || 0) + 1;
+    const batch = db.batch();
+
+    // 1. Assign PPT-submitted qualified teams based on Theme matching
+    qualifiedTeams.forEach((team: any) => {
+      const teamTheme = resolveTeamTheme(team);
+      let targetLab: LabData & { ref: any };
+
+      const matchingThemeLabs = labsByTheme.get(teamTheme);
+      if (matchingThemeLabs && matchingThemeLabs.length > 0) {
+        const idx = themeIndexMap[teamTheme] || 0;
+        targetLab = matchingThemeLabs[idx % matchingThemeLabs.length];
+        themeIndexMap[teamTheme] = idx + 1;
+      } else if (generalLabs.length > 0) {
+        const idx = themeIndexMap['general'] || 0;
+        targetLab = generalLabs[idx % generalLabs.length];
+        themeIndexMap['general'] = idx + 1;
+      } else {
+        const idx = themeIndexMap['all_fallback'] || 0;
+        targetLab = labs[idx % labs.length];
+        themeIndexMap['all_fallback'] = idx + 1;
+      }
+
+      teamCounts[targetLab.labId] = (teamCounts[targetLab.labId] || 0) + 1;
 
       batch.update(team.ref, {
-        assignedLabId: assignedLab.labId,
-        assignedLabName: assignedLab.labName,
-        labNo: assignedLab.labName,
-        judge: assignedLab.assignedJuryName !== 'Unassigned' ? assignedLab.assignedJuryName : (team as any).judge || 'Unassigned',
+        assignedLabId: targetLab.labId,
+        assignedLabName: targetLab.labName,
+        labNo: targetLab.labName,
+        venue: targetLab.labName,
+        judge: targetLab.assignedJuryName !== 'Unassigned' ? targetLab.assignedJuryName : (team.judge || 'Unassigned'),
+        theme: teamTheme,
+        pptQualified: true,
+        eliminated: false,
+        eliminationReason: null,
       });
     });
 
+    // 2. Mark unsubmitted teams as unassigned & eliminated from Prelims round
+    unsubmittedTeams.forEach((team: any) => {
+      batch.update(team.ref, {
+        assignedLabId: FieldValue.delete(),
+        assignedLabName: FieldValue.delete(),
+        labNo: 'Unassigned (Eliminated)',
+        venue: 'Unassigned (Eliminated)',
+        judge: 'Unassigned',
+        pptQualified: false,
+        eliminated: true,
+        eliminationReason: 'Eliminated: Did not submit PPT presentation during Phase 2',
+      });
+    });
+
+    // Update labs current team counts
     labs.forEach((lab) => {
       batch.update(lab.ref, {
         currentTeamCount: teamCounts[lab.labId] || 0,
@@ -1385,12 +1787,314 @@ export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; 
     });
 
     await batch.commit();
-    return { success: true, assignedCount: allTeams.length };
+    invalidateCollectionCache('labs');
+    invalidateCollectionCache('teams');
+    return { success: true, assignedCount: qualifiedTeams.length, eliminatedCount: unsubmittedTeams.length };
   } catch (error: any) {
     console.error('Error auto assigning teams:', error);
     return { success: false, error: error.message || 'Failed to auto assign teams' };
   }
 }
+
+export interface FinalLabData {
+  labId: string;
+  labName: string;
+  labCode?: string;
+  capacity: number;
+  coordinator?: string;
+  currentTeamCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function getFinalLabsAdmin(): Promise<{ success: boolean; finalLabs?: FinalLabData[]; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    const db = getAdminDb();
+    const snapshot = await db.collection('finalLabs').get();
+
+    const finalLabs: FinalLabData[] = snapshot.docs.map((doc: any) => {
+      const data = doc.data();
+      return {
+        labId: doc.id,
+        labName: data.labName || doc.id,
+        labCode: data.labCode || '',
+        capacity: typeof data.capacity === 'number' ? data.capacity : 25,
+        coordinator: data.coordinator || 'Unassigned',
+        currentTeamCount: typeof data.currentTeamCount === 'number' ? data.currentTeamCount : 0,
+        createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toISOString() : data.createdAt) : '',
+        updatedAt: data.updatedAt ? (data.updatedAt.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt) : '',
+      };
+    });
+
+    finalLabs.sort((a, b) => a.labName.localeCompare(b.labName));
+    return { success: true, finalLabs };
+  } catch (error: any) {
+    console.error('Error fetching final labs:', error);
+    return { success: false, error: error.message || 'Failed to fetch final labs' };
+  }
+}
+
+export async function createFinalLabAdmin(
+  labName: string,
+  labCode: string,
+  capacity: number,
+  coordinator?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    if (!labName?.trim()) {
+      return { success: false, error: 'Lab Name is required.' };
+    }
+
+    const db = getAdminDb();
+    const now = new Date();
+    const labRef = db.collection('finalLabs').doc();
+
+    await labRef.set({
+      labId: labRef.id,
+      labName: labName.trim(),
+      labCode: labCode ? labCode.trim() : '',
+      capacity: capacity > 0 ? capacity : 25,
+      coordinator: coordinator?.trim() || 'Unassigned',
+      currentTeamCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await syncFinalLabTeamCountsAdmin(db);
+    invalidateCollectionCache('teams');
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error creating final lab:', error);
+    return { success: false, error: error.message || 'Failed to create final lab' };
+  }
+}
+
+export async function updateFinalLabAdmin(
+  labId: string,
+  labName: string,
+  labCode: string,
+  capacity: number,
+  coordinator?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    if (!labName?.trim()) {
+      return { success: false, error: 'Lab Name is required.' };
+    }
+
+    const db = getAdminDb();
+    const docRef = db.collection('finalLabs').doc(labId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return { success: false, error: 'Final Lab not found' };
+    }
+
+    const oldLabName = docSnap.data()?.labName;
+
+    await docRef.update({
+      labName: labName.trim(),
+      labCode: labCode ? labCode.trim() : '',
+      capacity: capacity > 0 ? capacity : 25,
+      coordinator: coordinator?.trim() || 'Unassigned',
+      updatedAt: new Date(),
+    });
+
+    if (oldLabName) {
+      const teamsSnap = await db.collection('teams').where('finalVenue', '==', oldLabName).get();
+      const batch = db.batch();
+      teamsSnap.docs.forEach((doc) => {
+        batch.update(doc.ref, { finalVenue: labName.trim() });
+      });
+      if (!teamsSnap.empty) await batch.commit();
+    }
+
+    await syncFinalLabTeamCountsAdmin(db);
+    invalidateCollectionCache('teams');
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error updating final lab:', error);
+    return { success: false, error: error.message || 'Failed to update final lab' };
+  }
+}
+
+export async function deleteFinalLabAdmin(labId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    const db = getAdminDb();
+    const docRef = db.collection('finalLabs').doc(labId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) return { success: false, error: 'Final Lab not found' };
+
+    const oldLabName = docSnap.data()?.labName;
+
+    if (oldLabName) {
+      const teamsSnap = await db.collection('teams').where('finalVenue', '==', oldLabName).get();
+      const batch = db.batch();
+      teamsSnap.docs.forEach((doc) => {
+        batch.update(doc.ref, { finalVenue: 'TBA' });
+      });
+      if (!teamsSnap.empty) await batch.commit();
+    }
+
+    await docRef.delete();
+    await syncFinalLabTeamCountsAdmin(db);
+    invalidateCollectionCache('teams');
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting final lab:', error);
+    return { success: false, error: error.message || 'Failed to delete final lab' };
+  }
+}
+
+export async function syncFinalLabTeamCountsAdmin(dbInstance?: any) {
+  try {
+    const db = dbInstance || getAdminDb();
+    const [labsSnap, teamsSnap] = await Promise.all([
+      db.collection('finalLabs').get(),
+      db.collection('teams').get(),
+    ]);
+
+    if (labsSnap.empty) return;
+
+    const countsMap = new Map<string, number>();
+    labsSnap.docs.forEach((doc: any) => {
+      countsMap.set(doc.id, 0);
+    });
+
+    teamsSnap.docs.forEach((doc: any) => {
+      const data = doc.data();
+      const venue = data.finalVenue;
+      if (venue && venue !== 'TBA' && venue !== 'N/A') {
+        const found = labsSnap.docs.find(
+          (d: any) =>
+            d.data().labName?.toLowerCase() === venue.toLowerCase() ||
+            d.data().labCode?.toLowerCase() === venue.toLowerCase()
+        );
+        if (found) {
+          countsMap.set(found.id, (countsMap.get(found.id) || 0) + 1);
+        }
+      }
+    });
+
+    const batch = db.batch();
+    labsSnap.docs.forEach((doc: any) => {
+      batch.update(doc.ref, {
+        currentTeamCount: countsMap.get(doc.id) || 0,
+        updatedAt: new Date(),
+      });
+    });
+
+    await batch.commit();
+  } catch (error) {
+    console.error('Error syncing final lab team counts:', error);
+  }
+}
+
+export async function autoAssignFinalTeamsToLabsAdmin(): Promise<{ success: boolean; assignedCount?: number; error?: string }> {
+  try {
+    const valid = await verifyAdminSession();
+    if (!valid) return { success: false, error: 'Unauthorized' };
+
+    const db = getAdminDb();
+    const [labsSnap, teamsSnap] = await Promise.all([
+      db.collection('finalLabs').get(),
+      db.collection('teams').get(),
+    ]);
+
+    if (teamsSnap.empty) {
+      return { success: false, error: 'No teams registered.' };
+    }
+
+    const finalLabs = labsSnap.docs.map((doc) => ({
+      labId: doc.id,
+      labName: doc.data().labName || doc.id,
+      labCode: doc.data().labCode || '',
+      capacity: typeof doc.data().capacity === 'number' ? doc.data().capacity : 25,
+      coordinator: doc.data().coordinator || 'Unassigned',
+      ref: doc.ref,
+    }));
+
+    if (finalLabs.length === 0) {
+      return { success: false, error: 'No Final Round Labs configured. Please create at least one Final Lab first.' };
+    }
+
+    const qualifiedTeams = teamsSnap.docs
+      .map((doc) => ({ id: doc.id, ref: doc.ref, ...doc.data() }))
+      .filter((t: any) => t.finaleQualified === true || t.prelimsStatus === 'selected');
+
+    if (qualifiedTeams.length === 0) {
+      return { success: false, error: 'No qualified teams for Final Round yet.' };
+    }
+
+    const labAssignments: Record<string, number> = {};
+    finalLabs.forEach((l) => { labAssignments[l.labId] = 0; });
+
+    let currentLabIdx = 0;
+    const batch = db.batch();
+
+    qualifiedTeams.forEach((team: any) => {
+      let chosenLab = finalLabs[currentLabIdx % finalLabs.length];
+
+      for (let i = 0; i < finalLabs.length; i++) {
+        const candidateIdx = (currentLabIdx + i) % finalLabs.length;
+        const candidate = finalLabs[candidateIdx];
+        const count = labAssignments[candidate.labId] || 0;
+        if (count < candidate.capacity) {
+          chosenLab = candidate;
+          currentLabIdx = candidateIdx;
+          break;
+        }
+      }
+
+      labAssignments[chosenLab.labId] = (labAssignments[chosenLab.labId] || 0) + 1;
+      currentLabIdx++;
+
+      batch.update(team.ref, {
+        finalVenue: chosenLab.labName,
+        finalAssignedLabId: chosenLab.labId,
+        finalAssignedLabName: chosenLab.labName,
+        finalStatus: team.finalStatus || 'pending',
+      });
+    });
+
+    teamsSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      if (!data.finaleQualified && data.prelimsStatus !== 'selected') {
+        batch.update(doc.ref, {
+          finalVenue: 'N/A',
+          finalStatus: 'rejected',
+        });
+      }
+    });
+
+    finalLabs.forEach((lab) => {
+      batch.update(lab.ref, {
+        currentTeamCount: labAssignments[lab.labId] || 0,
+        updatedAt: new Date(),
+      });
+    });
+
+    await batch.commit();
+    invalidateCollectionCache('teams');
+    return { success: true, assignedCount: qualifiedTeams.length };
+  } catch (error: any) {
+    console.error('Error auto assigning final teams to labs:', error);
+    return { success: false, error: error.message || 'Failed to auto assign final venues' };
+  }
+}
+
 
 export interface JuryOption {
   id: string;
@@ -1404,19 +2108,37 @@ export async function getJuriesAdmin(): Promise<{ success: boolean; juries?: Jur
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
 
-    const db = getAdminDb();
-    const snapshot = await db.collection('jury').get();
+    const [jurySnap, rolesSnap] = await Promise.all([
+      getCachedDocs('jury'),
+      getCachedDocs('roles'),
+    ]);
 
-    const juries: JuryOption[] = snapshot.docs.map((doc) => {
+    const juryMap = new Map<string, JuryOption>();
+
+    jurySnap.docs?.forEach((doc: any) => {
       const data = doc.data();
-      return {
+      const email = data.email || doc.id;
+      juryMap.set(doc.id, {
         id: doc.id,
         name: data.juryName || data.name || doc.id,
-        email: data.email || '',
+        email: email,
         institution: data.institution || '',
-      };
+      });
     });
 
+    rolesSnap.docs?.forEach((doc: any) => {
+      const data = doc.data();
+      if (data.role === 'jury' && !juryMap.has(doc.id)) {
+        juryMap.set(doc.id, {
+          id: doc.id,
+          name: data.name || data.juryName || doc.id,
+          email: doc.id,
+          institution: data.institution || '',
+        });
+      }
+    });
+
+    const juries = Array.from(juryMap.values());
     juries.sort((a, b) => a.name.localeCompare(b.name));
     return { success: true, juries };
   } catch (error: any) {
@@ -1510,6 +2232,7 @@ export async function seedDummyTeamsAdmin(count: number = 100): Promise<{ succes
       await batch.commit();
     }
 
+    invalidateCollectionCache('teams');
     return { success: true, seededCount: count };
   } catch (error: any) {
     console.error('Error seeding dummy teams:', error);

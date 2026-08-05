@@ -4,30 +4,58 @@ import { cookies } from 'next/headers';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { encryptJSON, decryptJSON } from '@/lib/encryption';
 
+const roleCache = new Map<string, { role: string; timestamp: number }>();
+const ROLE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes TTL
+
+export async function clearRoleCache(email?: string) {
+  if (email) {
+    roleCache.delete(email.trim().toLowerCase());
+  } else {
+    roleCache.clear();
+  }
+}
+
+const ADMIN_EMAILS = new Set(['rohithrv2006@gmail.com', 'nidthishselvam@gmail.com']);
+
+export async function isAdminEmail(email: string): Promise<boolean> {
+  return ADMIN_EMAILS.has(email.trim().toLowerCase());
+}
+
 export async function getUserRole(email: string) {
   const sanitizedEmail = email.trim().toLowerCase();
   
-  if (sanitizedEmail === 'rohithrv2006@gmail.com') {
+  if (ADMIN_EMAILS.has(sanitizedEmail)) {
     return 'admin';
+  }
+  
+  const now = Date.now();
+  const cached = roleCache.get(sanitizedEmail);
+  if (cached && now - cached.timestamp < ROLE_CACHE_TTL) {
+    return cached.role;
   }
   
   try {
     const roleDoc = await getAdminDb().collection('roles').doc(sanitizedEmail).get();
+    let fetchedRole = 'team';
     if (roleDoc.exists) {
       const encryptedData = roleDoc.data();
       if (encryptedData && encryptedData.encryptedRole) {
-        // Assume role is stored encrypted if required by user
         try {
           const decrypted = decryptJSON(encryptedData.encryptedRole);
-          if (decrypted && decrypted.role) return decrypted.role;
+          if (decrypted && decrypted.role) fetchedRole = decrypted.role;
         } catch (e) {
           console.error("Failed to decrypt role", e);
         }
       }
-      return encryptedData?.role || 'team';
+      if (fetchedRole === 'team') {
+        fetchedRole = encryptedData?.role || 'team';
+      }
     }
-  } catch (error) {
-    console.error('Error fetching role', error);
+    roleCache.set(sanitizedEmail, { role: fetchedRole, timestamp: now });
+    return fetchedRole;
+  } catch (error: any) {
+    console.error('Error fetching role:', error?.message || error);
+    if (cached) return cached.role; // fallback to stale cache on quota error
   }
   
   return 'team';
@@ -35,8 +63,8 @@ export async function getUserRole(email: string) {
 
 export async function createSessionCookie(idToken: string) {
   try {
-    // Session length is exactly 30 minutes (30 * 60 * 1000 ms)
-    const expiresIn = 30 * 60 * 1000;
+    // Session length is exactly 40 minutes (40 * 60 * 1000 ms)
+    const expiresIn = 40 * 60 * 1000;
     
     // Verify the idToken and create a session cookie
     const decodedIdToken = await getAdminAuth().verifyIdToken(idToken);
@@ -62,28 +90,10 @@ export async function createSessionCookie(idToken: string) {
     const sanitizedEmail = decodedIdToken.email?.trim().toLowerCase();
     let role = 'team';
     
-    if (sanitizedEmail === 'rohithrv2006@gmail.com') {
+    if (sanitizedEmail && ADMIN_EMAILS.has(sanitizedEmail)) {
       role = 'admin';
     } else if (sanitizedEmail) {
-      try {
-        const roleDoc = await getAdminDb().collection('roles').doc(sanitizedEmail).get();
-        if (roleDoc.exists) {
-          const encryptedData = roleDoc.data();
-          if (encryptedData && encryptedData.encryptedRole) {
-            try {
-              const decrypted = decryptJSON(encryptedData.encryptedRole);
-              if (decrypted && decrypted.role) role = decrypted.role;
-            } catch (e) {
-              console.error("Failed to decrypt role", e);
-            }
-          }
-          if (role === 'team') {
-            role = encryptedData?.role || 'team';
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching role', error);
-      }
+      role = await getUserRole(sanitizedEmail);
     }
 
     return { success: true, role };

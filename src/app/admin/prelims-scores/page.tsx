@@ -53,7 +53,7 @@ export default function AdminPrelimsScoresPage() {
     setErrorMsg('');
 
     const [resScores, resTeams, resLabs, resJuries] = await Promise.all([
-      getAllEvaluationsAdmin('prelimsEvaluations'),
+      getAllEvaluationsAdmin('prelims'),
       getAllTeamsAdmin(),
       getLabsAdmin(),
       getJuriesAdmin(),
@@ -70,15 +70,21 @@ export default function AdminPrelimsScoresPage() {
       const scores = resScores.scores || [];
       const teams = resTeams.teams || [];
 
-      const merged: MergedRecord[] = teams.map((team) => {
+      // Filter ONLY teams that have submitted a PPT presentation for the Prelims round
+      const pptQualifiedTeams = teams.filter((t) => t.pptLink && String(t.pptLink).trim().length > 0);
+
+      const merged: MergedRecord[] = pptQualifiedTeams.map((team) => {
         const teamScores = scores.filter((s) => s.teamId === team.id);
         const totalScore = teamScores.length > 0 ? (teamScores[0].totalScore || 0) : 0;
+
+        const evaluatedJuryName = teamScores.length > 0 ? (teamScores[0].juryName || teamScores[0].juryId) : '';
+        const resolvedJudge = (team.judge && team.judge !== 'Unassigned') ? team.judge : (evaluatedJuryName || 'Unassigned');
 
         return {
           teamId: team.id,
           teamName: team.teamName,
           problemStatement: team.problemStatement,
-          judge: team.judge || 'Unassigned',
+          judge: resolvedJudge,
           labNo: team.labNo || 'Unassigned',
           evaluations: teamScores,
           isEvaluated: teamScores.length > 0,
@@ -110,7 +116,8 @@ export default function AdminPrelimsScoresPage() {
   };
 
   useEffect(() => {
-    checkSession();
+    const run = async () => { await checkSession(); };
+    run();
   }, []);
 
   const handleJurySelectChange = (selectedJuryName: string) => {
@@ -124,7 +131,7 @@ export default function AdminPrelimsScoresPage() {
     const matchedLab = labs.find(
       (l) => l.assignedJuryName && l.assignedJuryName.toLowerCase() === selectedJuryName.toLowerCase()
     );
-    setAssignLabNo(matchedLab ? matchedLab.labName : 'Unassigned');
+    setAssignLabNo(matchedLab ? (matchedLab.assignedTheme ? `${matchedLab.labName} • Theme: ${matchedLab.assignedTheme}` : matchedLab.labName) : 'Unassigned');
   };
 
   const openAssignModal = (rec: MergedRecord) => {
@@ -191,8 +198,13 @@ export default function AdminPrelimsScoresPage() {
     <div className="space-y-6 animate-fadeIn">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-sm border border-gray-200 shadow-sm gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Prelims Scores</h2>
-          <p className="text-sm text-gray-500 mt-1">Manage team Jury assignment, Lab location, and view preliminary round evaluation scores.</p>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-2xl font-bold text-gray-900">Prelims Round</h2>
+            <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2.5 py-0.5 rounded border border-purple-200">
+              📄 PPT Submitted Teams Only ({mergedRecords.length})
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">Manage Jury assignments, Lab locations, and view evaluation scores for PPT-submitted teams in the Prelims round.</p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
           <input
@@ -402,29 +414,29 @@ export default function AdminPrelimsScoresPage() {
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4 text-xs">
                     <div>
-                      <div className="text-gray-500">Problem Stmt</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.problemStatement ?? 0}/10</div>
+                      <div className="text-gray-500">Concept Strength</div>
+                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.conceptStrength ?? 0}/12</div>
                     </div>
                     <div>
-                      <div className="text-gray-500">Presentation</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.presentation ?? 0}/10</div>
+                      <div className="text-gray-500">Build Intelligence</div>
+                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.buildIntelligence ?? 0}/12</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Delivery Impact</div>
+                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.deliveryImpact ?? 0}/8</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Live Defense</div>
+                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.liveDefenseScore ?? 0}/8</div>
                     </div>
                     <div>
                       <div className="text-gray-500">Communication</div>
                       <div className="font-semibold text-gray-900">{evalRecord.rubric?.communication ?? 0}/10</div>
                     </div>
-                    <div>
-                      <div className="text-gray-500">Solution</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.solution ?? 0}/10</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Idea</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric?.idea ?? 0}/10</div>
-                    </div>
                   </div>
                   {evalRecord.remarks && (
                     <div className="bg-gray-50 p-3 rounded-sm border border-gray-200 text-sm text-gray-700">
-                      <span className="font-semibold text-gray-900 block mb-1">Remarks:</span>
+                      <span className="font-semibold text-gray-900 block mb-1">Remarks / Feedback:</span>
                       {evalRecord.remarks}
                     </div>
                   )}

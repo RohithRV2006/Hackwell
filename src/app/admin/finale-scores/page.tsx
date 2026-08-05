@@ -34,7 +34,7 @@ export default function AdminFinaleScoresPage() {
     setErrorMsg('');
     
     const [resScores, resTeams] = await Promise.all([
-      getAllEvaluationsAdmin('finaleEvaluations'),
+      getAllEvaluationsAdmin('finale'),
       getAllTeamsAdmin(),
     ]);
 
@@ -42,7 +42,9 @@ export default function AdminFinaleScoresPage() {
       const scores = resScores.scores || [];
       const teams = resTeams.teams || [];
 
-      const merged: MergedRecord[] = teams.map((team) => {
+      const qualifiedTeams = teams.filter((t) => t.finaleQualified === true || t.prelimsStatus === 'selected');
+
+      const merged: MergedRecord[] = qualifiedTeams.map((team) => {
         const teamScores = scores.filter((s) => s.teamId === team.id);
         const totalAvgScore = teamScores.length > 0 
           ? teamScores.reduce((acc, s) => acc + s.totalScore, 0) / teamScores.length 
@@ -82,7 +84,8 @@ export default function AdminFinaleScoresPage() {
   };
 
   useEffect(() => {
-    checkSession();
+    const run = async () => { await checkSession(); };
+    run();
   }, []);
 
   const filteredRecords = mergedRecords.filter((rec) =>
@@ -93,7 +96,7 @@ export default function AdminFinaleScoresPage() {
   if (loading && !mergedRecords.length) {
     return (
       <div className="flex items-center justify-center p-12">
-        <div className="text-gray-500 font-bold">Loading Scores...</div>
+        <div className="text-gray-500 font-bold">Loading Final Round Scores...</div>
       </div>
     );
   }
@@ -106,8 +109,8 @@ export default function AdminFinaleScoresPage() {
     <div className="space-y-6 animate-fadeIn">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-sm border border-gray-200 shadow-sm gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Finale Scores</h2>
-          <p className="text-sm text-gray-500 mt-1">Aggregated scores from the finale round evaluations.</p>
+          <h2 className="text-2xl font-bold text-gray-900">Final Round</h2>
+          <p className="text-sm text-gray-500 mt-1">Teams selected from the prelims round and their final round evaluation scores.</p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
           <input
@@ -150,7 +153,7 @@ export default function AdminFinaleScoresPage() {
               {filteredRecords.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-8 text-center text-gray-500 text-sm">
-                    No finale scores found.
+                    No final round teams selected from Prelims Round yet.
                   </td>
                 </tr>
               ) : (
@@ -165,7 +168,7 @@ export default function AdminFinaleScoresPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">{rec.evaluations.length}</td>
-                    <td className="px-6 py-4 font-bold text-gray-900">{rec.totalAvgScore.toFixed(1)} / 40</td>
+                    <td className="px-6 py-4 font-bold text-gray-900">{rec.totalAvgScore.toFixed(1)} / 50</td>
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => setSelectedTeam(rec)}
@@ -209,24 +212,28 @@ export default function AdminFinaleScoresPage() {
                 <div key={evalRecord.id} className="bg-white border border-gray-200 rounded-sm p-4">
                   <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-100">
                     <span className="font-bold text-gray-900">Jury: {evalRecord.juryName}</span>
-                    <span className="font-bold text-blue-600 text-lg">{evalRecord.totalScore} / 40</span>
+                    <span className="font-bold text-blue-600 text-lg">{evalRecord.totalScore} / 50</span>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4 text-xs">
                     <div>
-                      <div className="text-gray-500">Innovation</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric.innovation}/10</div>
+                      <div className="text-gray-500">Concept Strength</div>
+                      <div className="font-semibold text-gray-900">{evalRecord.rubric.conceptStrength}/12</div>
                     </div>
                     <div>
-                      <div className="text-gray-500">Feasibility</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric.technicalFeasibility}/10</div>
+                      <div className="text-gray-500">Build Intelligence</div>
+                      <div className="font-semibold text-gray-900">{evalRecord.rubric.buildIntelligence}/12</div>
                     </div>
                     <div>
-                      <div className="text-gray-500">Impact</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric.impact}/10</div>
+                      <div className="text-gray-500">Delivery Impact</div>
+                      <div className="font-semibold text-gray-900">{evalRecord.rubric.deliveryImpact}/8</div>
                     </div>
                     <div>
-                      <div className="text-gray-500">Presentation</div>
-                      <div className="font-semibold text-gray-900">{evalRecord.rubric.presentation}/10</div>
+                      <div className="text-gray-500">Live Defense</div>
+                      <div className="font-semibold text-gray-900">{evalRecord.rubric.liveDefenseScore}/8</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Communication</div>
+                      <div className="font-semibold text-gray-900">{evalRecord.rubric.communication}/10</div>
                     </div>
                   </div>
                   {evalRecord.remarks && (
