@@ -2,6 +2,7 @@
 
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyAdminSession, getCachedDocs, invalidateCollectionCache } from '@/app/admin/actions';
+import { getRoles } from '@/lib/firestore-helpers';
 import { encryptJSON, decryptJSON } from '@/lib/encryption';
 import { isAdminEmail } from '@/app/actions/session';
 
@@ -27,18 +28,16 @@ export async function getAllUsersAdmin(): Promise<{ success: boolean; users?: Ad
     const authUsers = listUsersResult.users;
 
     // Fetch roles from Firestore
-    const snapshot = await getCachedDocs('roles');
+    const rolesList = await getRoles();
     const roleDocs: Record<string, { role: string; name?: string; department?: string; institution?: string }> = {};
 
-    (snapshot.docs || []).forEach((doc: any) => {
-      const data = doc.data();
-
-      const docId = doc.id.toLowerCase().trim();
+    rolesList.forEach((r: any) => {
+      const docId = (r.email || '').toLowerCase().trim();
       roleDocs[docId] = {
-        role: data.role || 'unknown',
-        name: data.name,
-        department: data.department,
-        institution: data.institution,
+        role: r.role || 'unknown',
+        name: r.name,
+        department: r.department,
+        institution: r.institution,
       };
     });
 

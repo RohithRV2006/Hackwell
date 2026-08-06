@@ -3,6 +3,7 @@
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { cookies } from 'next/headers';
 import { invalidateCollectionCache } from '@/app/admin/actions';
+import { updateTeamInDomainDoc } from '@/lib/firestore-helpers';
 
 /**
  * Checks Phase 2 (PPT Submission Phase) timeline status.
@@ -69,14 +70,15 @@ export async function savePPTLink(teamId: string, webViewLink: string, fileId: s
   }
 
   try {
-    const db = getAdminDb();
-    const teamRef = db.collection('teams').doc(teamId);
-    
-    await teamRef.update({
+    const res = await updateTeamInDomainDoc(teamId, {
       pptLink: webViewLink,
       pptDriveFileId: fileId,
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString()
     });
+
+    if (!res.success) {
+      return { success: false, error: res.error || 'Failed to save PPT link' };
+    }
 
     // Invalidate teams cache so Admin pages update immediately
     invalidateCollectionCache('teams');
@@ -85,5 +87,79 @@ export async function savePPTLink(teamId: string, webViewLink: string, fileId: s
   } catch (error: any) {
     console.error('Error saving PPT link:', error);
     return { success: false, error: error.message || 'An error occurred while saving the link.' };
+  }
+}
+
+/**
+ * Server action to upload PPT base64 data to Google Apps Script (bypassing browser CORS)
+ * and saving the URL in the team's domain schema document.
+ */
+export async function uploadPPTToDrive(
+  teamId: string,
+  payload: {
+    fileName: string;
+    mimeType: string;
+    base64Data: string;
+    oldFileId?: string;
+  }
+) {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get('session')?.value;
+
+  if (!sessionCookie) {
+    return { success: false, error: 'Unauthorized session' };
+  }
+
+  try {
+    await getAdminAuth().verifySessionCookie(sessionCookie, true);
+  } catch (error) {
+    return { success: false, error: 'Unauthorized session' };
+  }
+
+  // Enforce server-side timeline check
+  const timelineStatus = await checkPPTSubmissionTimelineStatus();
+  if (!timelineStatus.allowed) {
+    return { success: false, error: timelineStatus.message };
+  }
+
+  const scriptUrl = process.env.NEXT_PUBLIC_GOOGLE_SCRIPT_URL || process.env.GOOGLE_SCRIPT_URL;
+  if (!scriptUrl) {
+    return { success: false, error: 'Google Apps Script URL is not configured.' };
+  }
+
+  try {
+    const response = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileName: payload.fileName,
+        mimeType: payload.mimeType,
+        base64Data: payload.base64Data,
+        oldFileId: payload.oldFileId || '',
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return { success: false, error: `Drive service error (${response.status}): ${text}` };
+    }
+
+    const res = await response.json();
+
+    if (res.status === 'success' && res.url) {
+      const saveRes = await savePPTLink(teamId, res.url, res.fileId);
+      if (saveRes.success) {
+        return { success: true, url: res.url, fileId: res.fileId };
+      } else {
+        return { success: false, error: saveRes.error || 'Failed to save PPT link in database.' };
+      }
+    } else {
+      return { success: false, error: res.message || 'Failed to upload presentation to Drive.' };
+    }
+  } catch (error: any) {
+    console.error('Error uploading PPT via Google Script server action:', error);
+    return { success: false, error: error.message || 'Network error communicating with Google Drive service.' };
   }
 }
