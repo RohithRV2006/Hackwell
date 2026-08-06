@@ -17,7 +17,7 @@ export async function checkTeamNameUnique(teamName: string) {
     return { isUnique: !found };
   } catch (error: any) {
     console.error('Error checking team name', error);
-    return { error: 'Failed to check team name uniqueness' };
+    return { error: 'Failed to check team name uniquenesss'};
   }
 }
 
