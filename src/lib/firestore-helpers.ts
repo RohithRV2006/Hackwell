@@ -58,21 +58,12 @@ export function resolveDomainId(theme?: string): string {
 // Teams Collection Helpers (5 Domain Documents)
 // ─────────────────────────────────────────────────────────────────────────────
 
-let teamDataCache: { data: AdminTeamData[]; timestamp: number } | null = null;
-const TEAM_CACHE_TTL_MS = 60 * 1000; // 1 minute TTL
-
 export function invalidateTeamCache() {
-  teamDataCache = null;
+  // No-op: Cache removed, Firestore is queried directly
 }
 
-export async function getAllTeamsFlatCached(force = false): Promise<AdminTeamData[]> {
-  const now = Date.now();
-  if (!force && teamDataCache && now - teamDataCache.timestamp < TEAM_CACHE_TTL_MS) {
-    return teamDataCache.data;
-  }
-  const fresh = await getAllTeamsFlatFromDomainDocs();
-  teamDataCache = { data: fresh, timestamp: now };
-  return fresh;
+export async function getAllTeamsFlatCached(_force = false): Promise<AdminTeamData[]> {
+  return await getAllTeamsFlatFromDomainDocs();
 }
 
 export async function getAllTeamsFlatFromDomainDocs(): Promise<AdminTeamData[]> {
@@ -661,10 +652,15 @@ export async function publishJurySelectedFinalists(selectedTeamIds: string[]): P
           const newPrelimsStatus = isSelected ? 'selected' : 'not_selected';
           const newFinaleQualified = isSelected;
 
-          if (t.prelimsStatus !== newPrelimsStatus || t.finaleQualified !== newFinaleQualified) {
+          if (
+            t.prelimsStatus !== newPrelimsStatus ||
+            t.finaleQualified !== newFinaleQualified ||
+            t.draftFinalist !== undefined
+          ) {
             t.prelimsStatus = newPrelimsStatus;
             t.finaleQualified = newFinaleQualified;
             t.finalStatus = isSelected ? (t.finalStatus || 'pending') : 'not_qualified';
+            delete t.draftFinalist;
             t.updatedAt = new Date().toISOString();
             modified = true;
           }
