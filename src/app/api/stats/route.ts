@@ -1,10 +1,12 @@
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-utils';
-import { getAllTeamsFlatFromDomainDocs, getEvalRecords } from '@/lib/firestore-helpers';
+import { getAllTeamsFlatCached, getEvalRecords } from '@/lib/firestore-helpers';
+
+export const revalidate = 60;
 
 export async function GET(request: NextRequest) {
   try {
-    const teams = await getAllTeamsFlatFromDomainDocs();
+    const teams = await getAllTeamsFlatCached();
     const evalRecords = await getEvalRecords('prelims');
 
     const totalTeams = teams.length;

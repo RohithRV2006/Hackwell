@@ -13,6 +13,8 @@ import {
   getEvalRecords,
   updateTeamInDomainDoc,
   getAllTeamsFlatFromDomainDocs,
+  getAllTeamsFlatCached,
+  getEvalRecords,
   findTeamInDomainDocs,
   deleteTeamFromDomainDoc,
   createTeamInDomainDoc,
@@ -46,8 +48,7 @@ function resolveTeamTheme(teamData: any): string {
 
 const getCachedTeamsData = unstable_cache(
   async () => {
-    // Read from domain-split docs (5 domain documents, each with a teams[] array)
-    return await getAllTeamsFlatFromDomainDocs();
+    return await getAllTeamsFlatCached();
   },
   ['admin-all-teams'],
   { revalidate: 300 } // 5 minutes cache
@@ -168,12 +169,12 @@ export async function getAdminOverviewStats() {
   
   try {
     const db = getAdminDb();
-    const [allTeamsForCount, rolesSnap, jurySnap, prelimsSnap, finaleSnap] = await Promise.all([
-      getAllTeamsFlatFromDomainDocs(),
+    const [allTeamsForCount, rolesSnap, jurySnap, prelimsRecords, finaleRecords] = await Promise.all([
+      getAllTeamsFlatCached(),
       db.collection('roles').count().get(),
       db.collection('roles').where('role', '==', 'jury').count().get(),
-      db.collection('evaluations').where('round', '==', 'prelims').count().get(),
-      db.collection('evaluations').where('round', '==', 'finale').count().get()
+      getEvalRecords('prelims'),
+      getEvalRecords('finale'),
     ]);
     
     return {
@@ -182,8 +183,8 @@ export async function getAdminOverviewStats() {
         totalTeams: allTeamsForCount.length,
         totalRoles: rolesSnap?.data().count || 0,
         totalJuries: jurySnap?.data().count || 0,
-        totalPrelims: prelimsSnap?.data().count || 0,
-        totalFinale: finaleSnap?.data().count || 0
+        totalPrelims: prelimsRecords.length,
+        totalFinale: finaleRecords.length,
       }
     };
   } catch (error: any) {
@@ -213,7 +214,7 @@ export async function syncLabTeamCountsAdmin(dbInstance?: any) {
     const db = dbInstance || getAdminDb();
     const [labsSnap, allTeams] = await Promise.all([
       db.collection('labs').get(),
-      getAllTeamsFlatFromDomainDocs(),
+      getAllTeamsFlatCached(),
     ]);
 
     if (labsSnap.empty) return;
@@ -378,7 +379,6 @@ export async function updateTeamAdmin(
     const res = await updateTeamInDomainDoc(teamId, payload);
     if (!res.success) return { success: false, error: res.error };
 
-    await syncLabTeamCountsAdmin(db);
     invalidateCollectionCache('teams');
     invalidateCollectionCache('labs');
     return { success: true };
@@ -411,7 +411,6 @@ export async function deleteTeamAdmin(teamId: string) {
       });
     }
 
-    await syncLabTeamCountsAdmin(db);
     invalidateCollectionCache('teams');
     invalidateCollectionCache('labs');
     return { success: true };
@@ -460,11 +459,11 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
   try {
     const db = getAdminDb();
     
-    // Fetch evaluation records using canonical helper
-    const [evalRecords, rolesSnap, allTeams] = await Promise.all([
+    // We fetch eval records, roles and teams for mapping names
+    const [records, rolesSnap, allTeams] = await Promise.all([
       getEvalRecords(round),
       db.collection('roles').where('role', '==', 'jury').get(),
-      getAllTeamsFlatFromDomainDocs(),
+      getAllTeamsFlatCached(),
     ]);
     
     const teamMap = new Map<string, { teamName: string; problemStatement: string }>();
@@ -482,17 +481,24 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
       juryMap.set(doc.id, name);
     });
 
-    const scores: AdminScoreData[] = evalRecords.map((r) => {
+    const scores: AdminScoreData[] = records.map((r) => {
       const teamInfo = teamMap.get(r.teamId || '');
       const juryName = r.juryName || juryMap.get(r.juryId) || 'Unknown Jury';
 
       return {
-        ...r,
+        id: r.id,
+        teamId: r.teamId || '',
         teamName: teamInfo?.teamName || r.teamName || r.teamId || 'Unknown Team',
         problemStatement: teamInfo?.problemStatement || 'N/A',
+        juryId: r.juryId || '',
         juryName,
-        selectedForFinal: Boolean(r.selectedForFinal),
-        selectionReason: r.selectionReason || '',
+        rubric: r.rubric || {},
+        totalScore: r.totalScore || 0,
+        remarks: r.remarks || r.feedback || '',
+        highlighted: r.highlighted || false,
+        isFrozen: r.isFrozen || false,
+        createdAt: r.createdAt || '',
+        updatedAt: r.createdAt || '',
       };
     });
 
@@ -514,7 +520,7 @@ export async function getAllGameScoresAdmin() {
   try {
     const [snapshot, allTeams] = await Promise.all([
       getCachedDocs('gameScores'),
-      getAllTeamsFlatFromDomainDocs(),
+      getAllTeamsFlatCached(),
     ]);
     
     const teamMap = new Map<string, { teamName: string }>();
@@ -874,7 +880,7 @@ export async function resetPrelimsFiltersAndAssignmentsAdmin(): Promise<{ succes
   try {
     const db = getAdminDb();
     const [allTeams, labsSnap] = await Promise.all([
-      getAllTeamsFlatFromDomainDocs(),
+      getAllTeamsFlatCached(),
       db.collection('labs').get(),
     ]);
 
@@ -970,7 +976,7 @@ export async function applyPptFilterAdmin(): Promise<{ success: boolean; passed?
 
   try {
     const db = getAdminDb();
-    const allTeams = await getAllTeamsFlatFromDomainDocs();
+    const allTeams = await getAllTeamsFlatCached();
 
     let passed = 0;
     let failed = 0;
@@ -1031,10 +1037,10 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
 
   try {
     const db = getAdminDb();
-    const [allTeams, prelimsSnap, finaleSnap, rolesSnap, labsSnap] = await Promise.all([
-      getAllTeamsFlatFromDomainDocs(),
-      db.collection('evaluations').where('round', '==', 'prelims').get(),
-      db.collection('evaluations').where('round', '==', 'finale').get(),
+    const [allTeams, prelimsRecords, finaleRecords, rolesSnap, labsSnap] = await Promise.all([
+      getAllTeamsFlatCached(),
+      getEvalRecords('prelims'),
+      getEvalRecords('finale'),
       db.collection('roles').where('role', '==', 'jury').get(),
       db.collection('labs').get(),
     ]);
@@ -1071,21 +1077,18 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
 
     // Count evals per jury name / ID
     const prelimsCountByJury: Record<string, number> = {};
-    prelimsSnap.docs.forEach((doc: any) => {
-      const data = doc.data();
+    prelimsRecords.forEach((data: any) => {
       const juryKey = data.juryName || data.judgeName || data.judgeId || data.juryId || data.judge || 'Unassigned';
       prelimsCountByJury[juryKey] = (prelimsCountByJury[juryKey] || 0) + 1;
     });
 
     const finaleCountByJury: Record<string, number> = {};
-    finaleSnap.docs.forEach((doc: any) => {
-      const data = doc.data();
+    finaleRecords.forEach((data: any) => {
       const juryKey = data.juryName || data.judgeName || data.judgeId || data.juryId || data.judge || 'Unassigned';
       finaleCountByJury[juryKey] = (finaleCountByJury[juryKey] || 0) + 1;
     });
 
     const combinedJuriesMap = new Map<string, { id: string; name: string; institution: string }>();
-    // We don't query the legacy jury collection anymore.
 
     rolesSnap.docs?.forEach((doc: any) => {
       const data = doc.data();
@@ -1118,8 +1121,8 @@ export async function getTimelineStatsAdmin(): Promise<{ success: boolean; stats
         totalTeams,
         totalStudents,
         pptSubmittedCount,
-        prelimsEvaluatedCount: prelimsSnap.size,
-        finaleEvaluatedCount: finaleSnap.size,
+        prelimsEvaluatedCount: prelimsRecords.length,
+        finaleEvaluatedCount: finaleRecords.length,
         finalistCount,
         juryStats,
       },
@@ -1138,7 +1141,7 @@ export async function setFinalWinnersAdmin(winners: { teamId: string; rank: numb
 
   try {
     const db = getAdminDb();
-    const allTeams = await getAllTeamsFlatFromDomainDocs();
+    const allTeams = await getAllTeamsFlatCached();
 
     const winnerMap = new Map<string, { rank: number; title: string }>();
     winners.forEach((w) => winnerMap.set(w.teamId, { rank: w.rank, title: w.title }));
@@ -1218,7 +1221,7 @@ export async function autoAllocateTeamsAdmin(labs: string[], juries: string[]) {
       return { success: false, error: 'Please provide at least one Lab and one Jury.' };
     }
 
-    const allTeams = await getAllTeamsFlatFromDomainDocs();
+    const allTeams = await getAllTeamsFlatCached();
 
     if (allTeams.length === 0) {
       return { success: false, error: 'No teams registered yet.' };
@@ -1292,9 +1295,9 @@ export async function promoteTopTeamsToFinaleAdmin(topCount: number) {
 
   try {
     const db = getAdminDb();
-    const [evalsSnap, allTeams, labsSnap] = await Promise.all([
-      db.collection('prelimsEvaluations').get(),
-      getAllTeamsFlatFromDomainDocs(),
+    const [evalRecords, allTeams, labsSnap] = await Promise.all([
+      getEvalRecords('prelims'),
+      getAllTeamsFlatCached(),
       db.collection('labs').get(),
     ]);
 
@@ -1304,11 +1307,9 @@ export async function promoteTopTeamsToFinaleAdmin(topCount: number) {
     }));
 
     const teamScores: Record<string, number> = {};
-    evalsSnap.docs.forEach((doc) => {
-      const data = doc.data();
-      if (data.teamId) {
-        // Keep highest or latest total score for team
-        teamScores[data.teamId] = Math.max(teamScores[data.teamId] || 0, data.totalScore || 0);
+    evalRecords.forEach((rec: any) => {
+      if (rec.teamId) {
+        teamScores[rec.teamId] = Math.max(teamScores[rec.teamId] || 0, rec.totalScore || 0);
       }
     });
 
@@ -1478,7 +1479,7 @@ export async function updateLabAdmin(
     await docRef.update(payload);
 
     // Sync teams assigned to this lab with updated Lab Name and Jury Name
-    const allTeams = await getAllTeamsFlatFromDomainDocs();
+    const allTeams = await getAllTeamsFlatCached();
     const matchedTeams = allTeams.filter(
       (t) =>
         t.assignedLabId === labId ||
@@ -1526,7 +1527,7 @@ export async function deleteLabAdmin(labId: string): Promise<{ success: boolean;
     const oldLabName = docSnap.data()?.labName;
 
     // Unassign teams linked to this lab
-    const allTeamsForLab = await getAllTeamsFlatFromDomainDocs();
+    const allTeamsForLab = await getAllTeamsFlatCached();
     const matchedTeamsForLab = allTeamsForLab.filter(
       (t) =>
         t.assignedLabId === labId ||
@@ -1567,7 +1568,7 @@ export async function autoAssignTeamsToLabsAdmin(): Promise<{ success: boolean; 
     const db = getAdminDb();
     const [labsSnap, allTeams] = await Promise.all([
       db.collection('labs').get(),
-      getAllTeamsFlatFromDomainDocs(),
+      getAllTeamsFlatCached(),
     ]);
 
     if (labsSnap.empty) {
@@ -1807,7 +1808,7 @@ export async function updateFinalLabAdmin(
     });
 
     if (oldLabName) {
-      const allTeamsFv = await getAllTeamsFlatFromDomainDocs();
+      const allTeamsFv = await getAllTeamsFlatCached();
       const matchedFv = allTeamsFv.filter((t) => t.finalVenue === oldLabName);
       if (matchedFv.length > 0) {
         await bulkUpdateTeamsInDomainDocs(
@@ -1839,7 +1840,7 @@ export async function deleteFinalLabAdmin(labId: string): Promise<{ success: boo
     const oldLabName = docSnap.data()?.labName;
 
     if (oldLabName) {
-      const allTeamsDfl = await getAllTeamsFlatFromDomainDocs();
+      const allTeamsDfl = await getAllTeamsFlatCached();
       const matchedDfl = allTeamsDfl.filter((t) => t.finalVenue === oldLabName);
       if (matchedDfl.length > 0) {
         await bulkUpdateTeamsInDomainDocs(
@@ -1863,7 +1864,7 @@ export async function syncFinalLabTeamCountsAdmin(dbInstance?: any) {
     const db = dbInstance || getAdminDb();
     const [labsSnap, allTeams] = await Promise.all([
       db.collection('finalLabs').get(),
-      getAllTeamsFlatFromDomainDocs(),
+      getAllTeamsFlatCached(),
     ]);
 
     if (labsSnap.empty) return;
@@ -1909,7 +1910,7 @@ export async function autoAssignFinalTeamsToLabsAdmin(): Promise<{ success: bool
     const db = getAdminDb();
     const [labsSnap, allTeams] = await Promise.all([
       db.collection('finalLabs').get(),
-      getAllTeamsFlatFromDomainDocs(),
+      getAllTeamsFlatCached(),
     ]);
 
     if (allTeams.length === 0) {
@@ -2015,27 +2016,12 @@ export async function getJuriesAdmin(): Promise<{ success: boolean; juries?: Jur
     const valid = await verifyAdminSession();
     if (!valid) return { success: false, error: 'Unauthorized' };
 
-    const [jurySnap, rolesSnap] = await Promise.all([
-      getCachedDocs('jury'),
-      getCachedDocs('roles'),
-    ]);
-
+    const rolesSnap = await getCachedDocs('roles');
     const juryMap = new Map<string, JuryOption>();
-
-    jurySnap.docs?.forEach((doc: any) => {
-      const data = doc.data();
-      const email = data.email || doc.id;
-      juryMap.set(doc.id, {
-        id: doc.id,
-        name: data.juryName || data.name || doc.id,
-        email: email,
-        institution: data.institution || '',
-      });
-    });
 
     rolesSnap.docs?.forEach((doc: any) => {
       const data = doc.data();
-      if (data.role === 'jury' && !juryMap.has(doc.id)) {
+      if (data.role === 'jury') {
         juryMap.set(doc.id, {
           id: doc.id,
           name: data.name || data.juryName || doc.id,

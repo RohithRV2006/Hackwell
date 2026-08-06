@@ -1,10 +1,12 @@
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError, verifySessionAndGetRole, requireRole } from '@/lib/api-utils';
 import {
-  getAllTeamsFlatFromDomainDocs,
+  getAllTeamsFlatCached,
   findTeamByLeadEmail,
   createTeamInDomainDoc,
 } from '@/lib/firestore-helpers';
+
+export const revalidate = 60;
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +19,7 @@ export async function GET(request: NextRequest) {
       return apiSuccess({ team: found ? found.team : null });
     }
 
-    let teams = await getAllTeamsFlatFromDomainDocs();
+    let teams = await getAllTeamsFlatCached();
 
     if (domainFilter) {
       teams = teams.filter((t) => t.theme?.toLowerCase().includes(domainFilter.toLowerCase()));

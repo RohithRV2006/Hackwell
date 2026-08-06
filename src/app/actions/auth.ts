@@ -2,7 +2,7 @@
 
 import { getAdminDb } from '@/lib/firebase-admin';
 import {
-  getAllTeamsFlatFromDomainDocs,
+  getAllTeamsFlatCached,
   findTeamByLeadEmail,
   createTeamInDomainDoc,
   updateTeamInDomainDoc,
@@ -12,7 +12,7 @@ import {
 export async function checkTeamNameUnique(teamName: string) {
   try {
     const sanitizedName = teamName.trim().toLowerCase();
-    const allTeams = await getAllTeamsFlatFromDomainDocs();
+    const allTeams = await getAllTeamsFlatCached();
     const found = allTeams.some((t) => t.teamName?.trim().toLowerCase() === sanitizedName);
     return { isUnique: !found };
   } catch (error: any) {
@@ -25,7 +25,7 @@ export async function checkBatchNumbers(batchNumbers: string[]) {
   try {
     if (!batchNumbers || batchNumbers.length === 0) return { success: true, duplicates: [] };
 
-    const allTeams = await getAllTeamsFlatFromDomainDocs();
+    const allTeams = await getAllTeamsFlatCached();
     const takenBatchNumbers = new Set<string>();
 
     allTeams.forEach((t) => {
