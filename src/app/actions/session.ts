@@ -4,15 +4,8 @@ import { cookies } from 'next/headers';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { encryptJSON, decryptJSON } from '@/lib/encryption';
 
-const roleCache = new Map<string, { role: string; timestamp: number }>();
-const ROLE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes TTL
-
-export async function clearRoleCache(email?: string) {
-  if (email) {
-    roleCache.delete(email.trim().toLowerCase());
-  } else {
-    roleCache.clear();
-  }
+export async function clearRoleCache(_email?: string) {
+  // No-op: Cache removed, Firestore is queried directly
 }
 
 const ADMIN_EMAILS = new Set(['rohithrv2006@gmail.com', 'nidthishselvam@gmail.com']);
@@ -26,12 +19,6 @@ export async function getUserRole(email: string) {
   
   if (ADMIN_EMAILS.has(sanitizedEmail)) {
     return 'admin';
-  }
-  
-  const now = Date.now();
-  const cached = roleCache.get(sanitizedEmail);
-  if (cached && now - cached.timestamp < ROLE_CACHE_TTL) {
-    return cached.role;
   }
   
   try {
@@ -51,11 +38,9 @@ export async function getUserRole(email: string) {
         fetchedRole = encryptedData?.role || 'team';
       }
     }
-    roleCache.set(sanitizedEmail, { role: fetchedRole, timestamp: now });
     return fetchedRole;
   } catch (error: any) {
     console.error('Error fetching role:', error?.message || error);
-    if (cached) return cached.role; // fallback to stale cache on quota error
   }
   
   return 'team';

@@ -12,6 +12,8 @@ import {
   updateLabAdmin,
   deleteLabAdmin,
   autoAssignTeamsToLabsAdmin,
+  randomlyAssignTeamsToLabsAdmin,
+  unassignAllTeamsJuriesAdmin,
   autoAssignFinalTeamsToLabsAdmin,
   FinalLabData,
   getFinalLabsAdmin,
@@ -784,21 +786,51 @@ export default function AdminEventManagementPage() {
   };
 
   const handleAutoAssignTeams = async () => {
-    if (phase2State !== 'ended') {
-      setMsg({ type: 'error', text: 'Phase 2 hasn\'t completed yet! You cannot auto-assign teams until Phase 2 ends.' });
-      return;
-    }
     setAllocating(true);
     setMsg(null);
     const res = await autoAssignTeamsToLabsAdmin();
     if (res.success) {
       setMsg({
         type: 'success',
-        text: `Auto-assigned ${res.assignedCount} PPT-submitted teams across labs based on Problem Statement Theme matching! ${res.eliminatedCount ? `${res.eliminatedCount} non-PPT teams marked as eliminated.` : ''}`
+        text: `Auto-assigned ${res.assignedCount} teams across labs based on Problem Statement Theme matching! ${res.eliminatedCount ? `${res.eliminatedCount} non-PPT teams marked as eliminated.` : ''}`
       });
       await refreshData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Failed to auto-assign.' });
+    }
+    setAllocating(false);
+  };
+
+  const handleRandomAssignTeams = async () => {
+    if (!confirm('Randomly assign all teams across configured Juries & Labs?')) return;
+    setAllocating(true);
+    setMsg(null);
+    const res = await randomlyAssignTeamsToLabsAdmin();
+    if (res.success) {
+      setMsg({
+        type: 'success',
+        text: `🎲 Randomly assigned ${res.assignedCount} teams across active Juries & Labs! ${res.eliminatedCount ? `${res.eliminatedCount} non-PPT teams marked as eliminated.` : ''}`
+      });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to randomly assign.' });
+    }
+    setAllocating(false);
+  };
+
+  const handleUndoAllAssignments = async () => {
+    if (!confirm('Are you sure you want to undo and reset ALL Jury/Lab assignments back to Unassigned?')) return;
+    setAllocating(true);
+    setMsg(null);
+    const res = await unassignAllTeamsJuriesAdmin();
+    if (res.success) {
+      setMsg({
+        type: 'success',
+        text: `↺ Successfully undone and reset assignments for ${res.count} teams back to Unassigned.`
+      });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to undo assignments.' });
     }
     setAllocating(false);
   };
@@ -1121,6 +1153,12 @@ export default function AdminEventManagementPage() {
             </button>
             <button onClick={handleAutoAssignTeams} disabled={allocating} className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
               ⚡ {allocating ? 'Assigning...' : 'Auto Assign Teams'}
+            </button>
+            <button onClick={handleRandomAssignTeams} disabled={allocating} className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
+              🎲 Random Assign
+            </button>
+            <button onClick={handleUndoAllAssignments} disabled={allocating} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
+              ↺ Undo All
             </button>
             <button onClick={() => exportTimeline3Report('csv')} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition">📥 CSV</button>
             <button onClick={() => exportTimeline3Report('pdf')} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-sm text-xs font-bold transition">📄 PDF</button>

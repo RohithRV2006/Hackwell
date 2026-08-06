@@ -160,7 +160,7 @@ export async function registerTeamData(
 export async function getTeamDataByEmail(email: string) {
   try {
     const sanitizedEmail = email.trim().toLowerCase();
-    const found = await findTeamByLeadEmail(sanitizedEmail);
+    const found = await findTeamByLeadEmail(sanitizedEmail, true);
 
     if (!found) {
       return { success: false, error: 'Team not found' };
