@@ -1,4 +1,5 @@
 export interface ProblemStatement {
+  ps_id: string;
   id: number;
   theme: string;
   title: string;
@@ -11,6 +12,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 1,
     theme: "Adaptive Intelligence System",
+    ps_id: "AIS-01",
     title: "GameLearn AI: A Smart Adaptive Learning Adventure",
     domain: "Edutainment",
     problemStatement: "Develop an adaptive gamified learning platform that personalizes learning paths, challenges, and rewards based on each learner's performance and behavior.",
@@ -19,6 +21,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 2,
     theme: "Adaptive Intelligence System",
+    ps_id: "AIS-02",
     title: "QuizGenius AI: Your Personalized Learning Challenge Engine",
     domain: "Edutainment",
     problemStatement: "Develop an adaptive quiz platform that generates personalized questions and learning challenges based on learner performance and knowledge.",
@@ -27,6 +30,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 3,
     theme: "Adaptive Intelligence System",
+    ps_id: "AIS-03",
     title: "FinLearn AI: Intelligent Personal Finance Management and Learning Assistant",
     domain: "FinTech",
     problemStatement: "Develop an AI-powered adaptive financial assistant that combines personalized financial management and financial literacy learning by analyzing user behavior, spending patterns, financial goals, and knowledge levels to provide smart budgeting, savings, investment recommendations, and customized learning guidance.",
@@ -35,6 +39,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 4,
     theme: "Adaptive Intelligence System",
+    ps_id: "AIS-04",
     title: "TaxMate AI: Adaptive Tax Planning and Compliance Assistant",
     domain: "FinTech",
     problemStatement: "Develop an Adaptive Intelligent System that analyzes financial transactions, income patterns, and regulatory changes to provide personalized tax planning and compliance recommendations.",
@@ -43,6 +48,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 5,
     theme: "Adaptive Intelligence System",
+    ps_id: "AIS-05",
     title: "TrafficIQ AI: Intelligent Mobility Optimization for Smart Cities",
     domain: "Smart Cities",
     problemStatement: "Develop an adaptive traffic management system that continuously analyzes road conditions and optimizes traffic flow in real time.",
@@ -51,6 +57,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 6,
     theme: "Adaptive Intelligence System",
+    ps_id: "AIS-06",
     title: "SafeCity AI: Real-Time Intelligent Emergency Response Network",
     domain: "Smart Cities",
     problemStatement: "Develop an adaptive AI-based public safety system that optimizes emergency response and resource allocation using real-time incident data.",
@@ -59,6 +66,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 7,
     theme: "Adaptive Intelligence System",
+    ps_id: "AIS-07",
     title: "AI-Based Adaptive Patient Monitoring System",
     domain: "Healthcare",
     problemStatement: "Develop an adaptive intelligent system that continuously monitors patient health using real-time medical data. The solution should detect early signs of health deterioration and provide timely alerts to healthcare professionals.",
@@ -67,6 +75,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 8,
     theme: "Adaptive Intelligence System",
+    ps_id: "AIS-08",
     title: "Adaptive Hospital Resource Management System",
     domain: "Healthcare",
     problemStatement: "Design an adaptive intelligent system that dynamically predicts healthcare resource demand and optimizes hospital operations. The solution should improve patient care while maximizing the utilization of medical resources.",
@@ -75,6 +84,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 9,
     theme: "Adaptive Intelligence System",
+    ps_id: "AIS-09",
     title: "Adaptive AI Crop Intelligence for Early Pest and Disease Prevention",
     domain: "Precision Farming",
     problemStatement: "Develop an Adaptive Intelligent System for pest and disease management that continuously monitors crop health, predicts potential outbreaks, and dynamically recommends preventive and corrective actions. The solution should improve decision-making, minimize crop losses, optimize resource utilization, and support sustainable agricultural practices through real-time adaptation.",
@@ -83,6 +93,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 10,
     theme: "Adaptive Intelligence System",
+    ps_id: "AIS-10",
     title: "Adaptive Smart Farming Control for Maximum Greenhouse Productivity",
     domain: "Precision Farming",
     problemStatement: "Develop an Adaptive Intelligent System for smart greenhouse management that continuously monitors environmental conditions, predicts crop requirements, and dynamically controls greenhouse operations. The solution should optimize crop growth, improve resource efficiency, reduce manual intervention, and enable real-time adaptive decision-making.",
@@ -91,6 +102,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 11,
     theme: "Predictive Logistics using Industrial AI",
+    ps_id: "PLI-01",
     title: "AI-Based Smart Learning Resource Logistics",
     domain: "Edutainment",
     problemStatement: "Develop an Industrial AI-powered predictive logistics solution that ensures the availability and timely delivery of educational resources. The system should forecast demand patterns and optimize inventory management across educational institutions.",
@@ -99,6 +111,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 12,
     theme: "Predictive Logistics using Industrial AI",
+    ps_id: "PLI-02",
     title: "Intelligent Event Logistics for Educational Institutions",
     domain: "Edutainment",
     problemStatement: "Create an AI-driven logistics management system that predicts resource requirements and streamlines planning for educational events. The solution should improve transportation, equipment handling, and venue resource utilization.",
@@ -107,6 +120,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 13,
     theme: "Predictive Logistics using Industrial AI",
+    ps_id: "PLI-03",
     title: "Predictive Cash Logistics Management",
     domain: "FinTech",
     problemStatement: "Develop an AI-powered cash logistics optimization system that predicts financial resource requirements and improves secure cash distribution processes.",
@@ -115,6 +129,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 14,
     theme: "Predictive Logistics using Industrial AI",
+    ps_id: "PLI-04",
     title: "Intelligent Secure Asset Transportation",
     domain: "FinTech",
     problemStatement: "Build an Industrial AI solution that enhances secure asset transportation by predicting logistics requirements and optimizing risk-aware movement strategies.",
@@ -123,6 +138,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 15,
     theme: "Predictive Logistics using Industrial AI",
+    ps_id: "PLI-05",
     title: "Predictive Urban Delivery Optimization",
     domain: "Smart Cities",
     problemStatement: "Develop an Industrial AI-based urban logistics platform that predicts delivery patterns and generates optimized transportation strategies to reduce congestion and improve efficiency.",
@@ -131,6 +147,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 16,
     theme: "Predictive Logistics using Industrial AI",
+    ps_id: "PLI-06",
     title: "Smart Waste Collection Logistics",
     domain: "Smart Cities",
     problemStatement: "Design an AI-powered predictive waste logistics system that forecasts waste collection requirements and optimizes municipal resource allocation.",
@@ -139,6 +156,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 17,
     theme: "Predictive Logistics using Industrial AI",
+    ps_id: "PLI-07",
     title: "HealthLogix AI: Predictive Medical Supply and Equipment Logistics Platform",
     domain: "Healthcare",
     problemStatement: "Develop an Industrial AI-powered predictive healthcare logistics system that forecasts the demand for medical supplies and critical equipment while optimizing their allocation, inventory management, and distribution across healthcare facilities. The solution should minimize shortages, reduce operational delays, improve resource utilization, and ensure timely availability of essential healthcare resources.",
@@ -147,6 +165,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 18,
     theme: "Predictive Logistics using Industrial AI",
+    ps_id: "PLI-08",
     title: "BloodChain AI: Predictive Blood Supply Management System",
     domain: "Healthcare",
     problemStatement: "Develop an Industrial AI-powered system that predicts blood demand and optimizes blood collection, storage, and distribution across healthcare facilities.",
@@ -155,6 +174,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 19,
     theme: "Predictive Logistics using Industrial AI",
+    ps_id: "PLI-09",
     title: "AI-Based Agricultural Supply Logistics",
     domain: "Precision Farming",
     problemStatement: "Develop an Industrial AI system that predicts demand for seeds, fertilizers, and pesticides and optimizes their distribution to farms.",
@@ -163,6 +183,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 20,
     theme: "Predictive Logistics using Industrial AI",
+    ps_id: "PLI-10",
     title: "Smart Harvest Transportation Prediction",
     domain: "Precision Farming",
     problemStatement: "Build a predictive logistics platform that forecasts harvest volumes and optimizes transportation from farms to storage facilities and markets.",
@@ -171,6 +192,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 21,
     theme: "Autonomous Agentic AI",
+    ps_id: "AAA-01",
     title: "Adaptive Interactive Narrative Director",
     domain: "Edutainment",
     problemStatement: "Develop an autonomous multi-agent system that dynamically generates educational storylines, NPC behaviors, and learning challenges based on player interactions and emotions.",
@@ -179,6 +201,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 22,
     theme: "Autonomous Agentic AI",
+    ps_id: "AAA-02",
     title: "Autonomous Peer-Learning Network for Skill Mastery",
     domain: "Edutainment",
     problemStatement: "Build autonomous AI learning peers that collaborate with students to solve problems and enhance critical thinking.",
@@ -187,6 +210,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 23,
     theme: "Autonomous Agentic AI",
+    ps_id: "AAA-03",
     title: "Autonomous Portfolio Rebalancing and Hedging Agent",
     domain: "FinTech",
     problemStatement: "Design an autonomous portfolio management agent that monitors markets and executes intelligent risk mitigation strategies.",
@@ -195,6 +219,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 24,
     theme: "Autonomous Agentic AI",
+    ps_id: "AAA-04",
     title: "Agentic Fraud Ring Detection and Countermeasure Engine",
     domain: "FinTech",
     problemStatement: "Develop an autonomous fraud detection system that identifies complex fraud networks and initiates dynamic countermeasures.",
@@ -203,6 +228,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 25,
     theme: "Autonomous Agentic AI",
+    ps_id: "AAA-05",
     title: "Dynamic Multi-Modal Traffic Orchestration Network",
     domain: "Smart Cities",
     problemStatement: "Develop a decentralized multi-agent traffic management system that autonomously optimizes urban traffic flow in real time.",
@@ -211,6 +237,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 26,
     theme: "Autonomous Agentic AI",
+    ps_id: "AAA-06",
     title: "Autonomous Municipal Asset Maintenance Operations",
     domain: "Smart Cities",
     problemStatement: "Develop an autonomous platform that detects, schedules, and manages urban infrastructure maintenance using AI and IoT.",
@@ -219,6 +246,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 27,
     theme: "Autonomous Agentic AI",
+    ps_id: "AAA-07",
     title: "Autonomous Multi-Agent Hospital Operations Assistant",
     domain: "Healthcare",
     problemStatement: "Develop an autonomous multi-agent AI system that coordinates hospital operations with minimal human intervention. The solution should intelligently manage appointments, patient flow, and resource allocation while collaborating with healthcare staff.",
@@ -227,6 +255,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 28,
     theme: "Autonomous Agentic AI",
+    ps_id: "AAA-08",
     title: "Autonomous Medical Supply and Pharmacy Management",
     domain: "Healthcare",
     problemStatement: "Create an autonomous agentic AI system that monitors, predicts, and manages hospital pharmacy and medical inventory operations. The solution should proactively prevent shortages and automate supply management across healthcare facilities.",
@@ -235,6 +264,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 29,
     theme: "Autonomous Agentic AI",
+    ps_id: "AAA-09",
     title: "Autonomous Crop Pest and Disease Containment Network",
     domain: "Precision Farming",
     problemStatement: "Engineer a multi-agent crop health system that integrates early aerial detection, localized treatment dispatch, and predictive spread modeling to contain agricultural threats.",
@@ -243,6 +273,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 30,
     theme: "Autonomous Agentic AI",
+    ps_id: "AAA-10",
     title: "Dynamic Hyper-Local Irrigation and Fertilizer Orchestration",
     domain: "Precision Farming",
     problemStatement: "Create an autonomous soil-management agent that controls hyper-local drip irrigation and fertigation systems by integrating real-time soil chemistry feeds and meteorological models.",
@@ -251,6 +282,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 31,
     theme: "Cybersecurity & Digital Trust",
+    ps_id: "CDT-01",
     title: "EduChain AI: Blockchain-Based Intellectual Property and Digital Content Ownership Platform",
     domain: "Edutainment",
     problemStatement: "Develop a blockchain-powered platform that securely records ownership, licensing, and authenticity of educational content, including AI-generated learning materials, digital textbooks, simulations, videos, and interactive courses. The solution should prevent plagiarism, unauthorized distribution, and copyright infringement while ensuring transparent content attribution and trusted digital ownership.",
@@ -259,6 +291,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 32,
     theme: "Cybersecurity & Digital Trust",
+    ps_id: "CDT-02",
     title: "Student Privacy Protection in E-Learning Platforms",
     domain: "Edutainment",
     problemStatement: "Design a secure platform that protects students' personal information and learning records from cyberattacks and unauthorized access.",
@@ -267,6 +300,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 33,
     theme: "Cybersecurity & Digital Trust",
+    ps_id: "CDT-03",
     title: "Blockchain-Based Decentralized Digital Identity & KYC Verification",
     domain: "FinTech",
     problemStatement: "Develop a blockchain-based decentralized identity platform that enables secure KYC verification across multiple financial institutions without repeatedly sharing personal information.",
@@ -275,6 +309,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 34,
     theme: "Cybersecurity & Digital Trust",
+    ps_id: "CDT-04",
     title: "AI-Powered Banking Fraud Detection",
     domain: "FinTech",
     problemStatement: "Develop an AI system that detects suspicious banking transactions and prevents financial fraud in real time.",
@@ -283,6 +318,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 35,
     theme: "Cybersecurity & Digital Trust",
+    ps_id: "CDT-05",
     title: "Smart CCTV-Based Crime Detection",
     domain: "Smart Cities",
     problemStatement: "Develop an AI-powered surveillance system that detects suspicious activities and alerts authorities in real time.",
@@ -291,6 +327,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 36,
     theme: "Cybersecurity & Digital Trust",
+    ps_id: "CDT-06",
     title: "UrbanTrust AI: Blockchain-Based Decentralized Digital Identity for Smart Cities",
     domain: "Smart Cities",
     problemStatement: "Develop a blockchain-based decentralized digital identity platform that enables citizens to securely access multiple smart city services—such as transportation, healthcare, utilities, e-governance, and public safety—using a single tamper-proof digital identity. The solution should eliminate identity fraud, prevent unauthorized access, and strengthen digital trust while preserving citizen privacy.",
@@ -299,6 +336,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 37,
     theme: "Cybersecurity & Digital Trust",
+    ps_id: "CDT-07",
     title: "MedSecure AI: Blockchain-Based Electronic Health Record Protection",
     domain: "Healthcare",
     problemStatement: "Develop a blockchain-enabled platform that securely stores and manages Electronic Health Records (EHRs), ensuring data integrity, privacy, and controlled access while preventing unauthorized modifications and medical data breaches.",
@@ -307,6 +345,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 38,
     theme: "Cybersecurity & Digital Trust",
+    ps_id: "CDT-08",
     title: "HealthShield AI: Intelligent Healthcare Cyber Threat Detection",
     domain: "Healthcare",
     problemStatement: "Design an AI-driven cybersecurity platform that continuously monitors hospital networks, connected medical devices, and healthcare applications to detect, predict, and prevent cyber threats in real time.",
@@ -315,6 +354,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 39,
     theme: "Cybersecurity & Digital Trust",
+    ps_id: "CDT-09",
     title: "FarmChain AI: Blockchain-Based Transparent Farm-to-Consumer Marketplace",
     domain: "Precision Farming",
     problemStatement: "Develop a blockchain-powered agricultural marketplace that enables transparent and secure transactions between farmers, intermediaries, retailers, and consumers. The platform should record every transaction, pricing update, quality certification, and ownership transfer on an immutable blockchain ledger, ensuring fair pricing, preventing fraud, reducing disputes, and building digital trust across the agricultural supply chain.",
@@ -323,6 +363,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 40,
     theme: "Cybersecurity & Digital Trust",
+    ps_id: "CDT-10",
     title: "Smart Irrigation Security: Secure AI-Based Water Management System",
     domain: "Precision Farming",
     problemStatement: "Develop a secure AI-based irrigation system that protects automated water management systems from cyber threats while optimizing water usage.",
@@ -331,6 +372,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 41,
     theme: "Human Centered AI",
+    ps_id: "HCA-01",
     title: "AI Learning Companion for Neurodiverse Students",
     domain: "Edutainment",
     problemStatement: "Develop an AI-powered learning companion that personalizes lessons, assessments, and learning experiences for neurodiverse students.",
@@ -339,6 +381,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 42,
     theme: "Human Centered AI",
+    ps_id: "HCA-02",
     title: "Doubt-to-Meme Translator",
     domain: "Edutainment",
     problemStatement: "Develop an AI tool that transforms complex textbook concepts into engaging memes, stories, or relatable scenarios to improve learning retention.",
@@ -347,6 +390,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 43,
     theme: "Human Centered AI",
+    ps_id: "HCA-03",
     title: "AI Assistant for Smart Gold & Jewellery Decisions",
     domain: "FinTech",
     problemStatement: "Develop an AI-powered assistant that simplifies gold and jewellery purchasing through personalized guidance and transparent information.",
@@ -355,6 +399,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 44,
     theme: "Human Centered AI",
+    ps_id: "HCA-04",
     title: "Inclusive AI Banking Assistant for Rural Communities",
     domain: "FinTech",
     problemStatement: "Develop a multilingual AI banking assistant that improves digital banking accessibility for rural communities.",
@@ -363,6 +408,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 45,
     theme: "Human Centered AI",
+    ps_id: "HCA-05",
     title: "SafePath AI – AI Safe Route Planner",
     domain: "Smart Cities",
     problemStatement: "Develop an AI-powered navigation system that recommends the safest travel routes using real-time environmental and public safety data.",
@@ -371,6 +417,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 46,
     theme: "Human Centered AI",
+    ps_id: "HCA-06",
     title: "Urban Wellness AI",
     domain: "Smart Cities",
     problemStatement: "Develop an AI-powered wellness companion that monitors emotional well-being and recommends personalized wellness support.",
@@ -379,6 +426,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 47,
     theme: "Human Centered AI",
+    ps_id: "HCA-07",
     title: "Human-Centered AI for Clinical Decision Support",
     domain: "Healthcare",
     problemStatement: "Design a Human-Centered AI system that assists doctors by providing transparent and explainable clinical recommendations. The solution should improve diagnostic confidence while ensuring that final medical decisions remain under human control.",
@@ -387,6 +435,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 48,
     theme: "Human Centered AI",
+    ps_id: "HCA-08",
     title: "Accessible AI Healthcare Communication Assistant",
     domain: "Healthcare",
     problemStatement: "Create a Human-Centered AI communication platform that improves interactions between patients and healthcare providers. The solution should make healthcare information more accessible, understandable, and inclusive for people of diverse backgrounds and abilities.",
@@ -395,6 +444,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 49,
     theme: "Human Centered AI",
+    ps_id: "HCA-09",
     title: "AI Crop Rotation Planner",
     domain: "Precision Farming",
     problemStatement: "Develop an AI assistant that recommends optimal crop rotation plans to improve soil health and agricultural productivity.",
@@ -403,6 +453,7 @@ export const problemStatements: ProblemStatement[] = [
   {
     id: 50,
     theme: "Human Centered AI",
+    ps_id: "HCA-10",
     title: "Mix-and-Match Cropping",
     domain: "Precision Farming",
     problemStatement: "Develop an AI assistant that recommends suitable intercropping combinations based on farm conditions and crop requirements.",
