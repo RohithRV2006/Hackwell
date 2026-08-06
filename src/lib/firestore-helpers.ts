@@ -155,7 +155,10 @@ export async function findTeamInDomainDocs(teamId: string): Promise<{
   return null;
 }
 
-export async function findTeamByLeadEmail(email: string): Promise<{
+export async function findTeamByLeadEmail(
+  email: string,
+  fallbackToFirst: boolean = false
+): Promise<{
   team: AdminTeamData;
   domainId: string;
   domainDocRef: any;
@@ -167,13 +170,28 @@ export async function findTeamByLeadEmail(email: string): Promise<{
     ALL_DOMAIN_DOC_IDS.map((docId) => db.collection('teams').doc(docId).get())
   );
 
+  let firstFound: { team: AdminTeamData; domainId: string; domainDocRef: any; index: number } | null = null;
+
   for (const snap of snaps) {
     if (snap.exists) {
       const data = snap.data();
       const teamsArr = Array.isArray(data?.teams) ? data.teams : [];
-      const idx = teamsArr.findIndex(
-        (t: any) => String(t.leadEmail || '').toLowerCase().trim() === targetEmail
-      );
+      if (teamsArr.length > 0 && !firstFound) {
+        firstFound = {
+          team: teamsArr[0],
+          domainId: snap.id,
+          domainDocRef: snap.ref,
+          index: 0,
+        };
+      }
+      const idx = teamsArr.findIndex((t: any) => {
+        const lEmail = String(t.leadEmail || t.leadData?.email || '').toLowerCase().trim();
+        if (lEmail === targetEmail) return true;
+        if (Array.isArray(t.membersData)) {
+          return t.membersData.some((m: any) => String(m.email || '').toLowerCase().trim() === targetEmail);
+        }
+        return false;
+      });
       if (idx !== -1) {
         return {
           team: teamsArr[idx],
@@ -183,6 +201,10 @@ export async function findTeamByLeadEmail(email: string): Promise<{
         };
       }
     }
+  }
+
+  if (fallbackToFirst && firstFound) {
+    return firstFound;
   }
 
   return null;

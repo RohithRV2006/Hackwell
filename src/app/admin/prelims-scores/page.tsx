@@ -11,6 +11,9 @@ import {
   getJuriesAdmin,
   publishJurySelectedFinalistsAdmin,
   upsertEvalRecordAdmin,
+  randomlyAssignTeamsToLabsAdmin,
+  unassignTeamJuryAdmin,
+  unassignAllTeamsJuriesAdmin,
   AdminScoreData,
   AdminTeamData,
   LabData,
@@ -46,6 +49,7 @@ export default function AdminPrelimsScoresPage() {
   const [subTab, setSubTab] = useState<'scores' | 'selection'>('scores');
   const [selectedFinalistIds, setSelectedFinalistIds] = useState<Set<string>>(new Set());
   const [publishing, setPublishing] = useState(false);
+  const [allocating, setAllocating] = useState(false);
 
   // Selected Team for details popup
   const [selectedTeam, setSelectedTeam] = useState<MergedRecord | null>(null);
@@ -189,6 +193,49 @@ export default function AdminPrelimsScoresPage() {
       setErrorMsg(res.error || 'Failed to publish finalists.');
     }
     setPublishing(false);
+  };
+
+  const handleRandomAssignAll = async () => {
+    if (!confirm('Randomly assign all PPT-submitted teams to configured Juries & Labs?')) return;
+    setAllocating(true);
+    setSuccessMsg('');
+    setErrorMsg('');
+    const res = await randomlyAssignTeamsToLabsAdmin();
+    if (res.success) {
+      setSuccessMsg(`🎲 Successfully randomly assigned ${res.assignedCount} teams to Juries & Labs! (Eliminated ${res.eliminatedCount || 0} teams without PPT).`);
+      await loadData();
+    } else {
+      setErrorMsg(res.error || 'Failed to randomly assign teams.');
+    }
+    setAllocating(false);
+  };
+
+  const handleUndoAllAssignments = async () => {
+    if (!confirm('Are you sure you want to undo and reset ALL Jury/Lab assignments back to Unassigned?')) return;
+    setAllocating(true);
+    setSuccessMsg('');
+    setErrorMsg('');
+    const res = await unassignAllTeamsJuriesAdmin();
+    if (res.success) {
+      setSuccessMsg(`↺ Successfully undone and reset assignments for ${res.count} teams to Unassigned.`);
+      await loadData();
+    } else {
+      setErrorMsg(res.error || 'Failed to undo assignments.');
+    }
+    setAllocating(false);
+  };
+
+  const handleUnassignSingleTeam = async (teamId: string, teamName: string) => {
+    if (!confirm(`Undo Jury assignment for team "${teamName}"?`)) return;
+    setSuccessMsg('');
+    setErrorMsg('');
+    const res = await unassignTeamJuryAdmin(teamId);
+    if (res.success) {
+      setSuccessMsg(`↺ Undone Jury assignment for "${teamName}". Set to Unassigned.`);
+      await loadData();
+    } else {
+      setErrorMsg(res.error || 'Failed to unassign team.');
+    }
   };
 
   const handleJurySelectChange = (selectedJuryName: string) => {
@@ -336,6 +383,22 @@ export default function AdminPrelimsScoresPage() {
               className="flex-1 md:w-64 bg-gray-50 border border-gray-300 rounded-sm px-4 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
             <button
+              onClick={handleRandomAssignAll}
+              disabled={loading || allocating}
+              className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 rounded-sm text-xs font-bold transition flex items-center gap-1 shrink-0"
+              title="Randomly assign teams across active juries"
+            >
+              <span>🎲</span> Random Assign to Jury
+            </button>
+            <button
+              onClick={handleUndoAllAssignments}
+              disabled={loading || allocating}
+              className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 rounded-sm text-xs font-bold transition flex items-center gap-1 shrink-0"
+              title="Undo all jury assignments for prelims round"
+            >
+              <span>↺</span> Undo All
+            </button>
+            <button
               onClick={loadData}
               disabled={loading}
               className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-blue-600 border border-gray-300 rounded-sm text-sm font-bold transition duration-200"
@@ -447,6 +510,15 @@ export default function AdminPrelimsScoresPage() {
                         >
                           Assign / Edit
                         </button>
+                        {rec.judge !== 'Unassigned' && (
+                          <button
+                            onClick={() => handleUnassignSingleTeam(rec.teamId, rec.teamName)}
+                            className="text-amber-700 hover:text-amber-900 bg-amber-50 border border-amber-200 hover:bg-amber-100 px-2 py-1 rounded-sm text-xs font-bold transition"
+                            title="Undo jury assignment for this team"
+                          >
+                            ↺ Undo
+                          </button>
+                        )}
                         <button
                           onClick={() => setSelectedTeam(rec)}
                           disabled={!rec.isEvaluated}
@@ -601,15 +673,41 @@ export default function AdminPrelimsScoresPage() {
                 {/* Jury & Lab Selection Section */}
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Select Predefined Jury {isLabLocked ? '(Locked)' : '*'}</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-gray-700">Assigned Jury</label>
+                      <div className="flex items-center gap-2">
+                        {juriesList.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const randJury = juriesList[Math.floor(Math.random() * juriesList.length)];
+                              if (randJury) handleJurySelectChange(randJury.name);
+                            }}
+                            className="text-[11px] text-purple-700 font-bold hover:underline flex items-center gap-0.5"
+                          >
+                            <span>🎲</span> Pick Random
+                          </button>
+                        )}
+                        {assignJuryName && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAssignJuryName('');
+                              setAssignLabNo('');
+                            }}
+                            className="text-[11px] text-red-600 font-bold hover:underline flex items-center gap-0.5"
+                          >
+                            <span>↺</span> Undo Assign
+                          </button>
+                        )}
+                      </div>
+                    </div>
                     <select
                       value={assignJuryName}
-                      disabled={Boolean(isLabLocked)}
                       onChange={(e) => handleJurySelectChange(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm font-semibold focus:outline-none focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
-                      required={!isLabLocked}
+                      className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm font-semibold focus:outline-none focus:border-blue-500"
                     >
-                      <option value="">-- Select Predefined Jury --</option>
+                      <option value="">-- Unassigned (Undo Assignment) --</option>
                       {juriesList.map((j) => (
                         <option key={j.id} value={j.name}>
                           {j.name} {j.institution ? `(${j.institution})` : j.email ? `(${j.email})` : ''}
@@ -619,7 +717,7 @@ export default function AdminPrelimsScoresPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Lab No. (Auto-assigned based on Jury)</label>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Lab No. (Auto-linked based on Jury)</label>
                     <input
                       type="text"
                       readOnly
@@ -627,7 +725,7 @@ export default function AdminPrelimsScoresPage() {
                       value={assignLabNo || 'Unassigned'}
                       className="w-full bg-gray-100 border border-gray-300 rounded-sm px-3 py-2 text-sm font-bold text-gray-800 cursor-not-allowed"
                     />
-                    <p className="text-[10px] text-gray-500 mt-1">Automatically linked from Timeline 3 Lab configuration.</p>
+                    <p className="text-[10px] text-gray-500 mt-1">Automatically linked from Lab configuration.</p>
                   </div>
                 </div>
 
