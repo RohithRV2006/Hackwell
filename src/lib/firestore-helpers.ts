@@ -58,6 +58,23 @@ export function resolveDomainId(theme?: string): string {
 // Teams Collection Helpers (5 Domain Documents)
 // ─────────────────────────────────────────────────────────────────────────────
 
+let teamDataCache: { data: AdminTeamData[]; timestamp: number } | null = null;
+const TEAM_CACHE_TTL_MS = 60 * 1000; // 1 minute TTL
+
+export function invalidateTeamCache() {
+  teamDataCache = null;
+}
+
+export async function getAllTeamsFlatCached(force = false): Promise<AdminTeamData[]> {
+  const now = Date.now();
+  if (!force && teamDataCache && now - teamDataCache.timestamp < TEAM_CACHE_TTL_MS) {
+    return teamDataCache.data;
+  }
+  const fresh = await getAllTeamsFlatFromDomainDocs();
+  teamDataCache = { data: fresh, timestamp: now };
+  return fresh;
+}
+
 export async function getAllTeamsFlatFromDomainDocs(): Promise<AdminTeamData[]> {
   const db = getAdminDb();
   const snaps = await Promise.all(
@@ -222,6 +239,7 @@ export async function createTeamInDomainDoc(teamData: any): Promise<{ success: b
       );
     });
 
+    invalidateTeamCache();
     return { success: true, teamId };
   } catch (error: any) {
     console.error('Error creating team in domain doc:', error);
@@ -324,6 +342,7 @@ export async function updateTeamInDomainDoc(
       });
     }
 
+    invalidateTeamCache();
     return { success: true };
   } catch (error: any) {
     console.error('Error updating team in domain doc:', error);
@@ -354,6 +373,7 @@ export async function deleteTeamFromDomainDoc(teamId: string): Promise<{ success
       });
     });
 
+    invalidateTeamCache();
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting team from domain doc:', error);
@@ -613,6 +633,7 @@ export async function publishJurySelectedFinalists(selectedTeamIds: string[]): P
       }
     }
 
+    invalidateTeamCache();
     return { success: true, count: selectedSet.size };
   } catch (error: any) {
     console.error('Error publishing finalists:', error);
@@ -698,5 +719,6 @@ export async function bulkUpdateTeamsInDomainDocs(
     });
   }
 
+  invalidateTeamCache();
   return { success: true, updatedCount };
 }

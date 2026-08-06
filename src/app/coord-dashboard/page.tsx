@@ -3,7 +3,7 @@ import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { redirect } from 'next/navigation';
 import { getUserRole } from '@/app/actions/session';
 import CoordClientDashboard from './CoordClientDashboard';
-import { getAllTeamsFlatFromDomainDocs } from '@/lib/firestore-helpers';
+import { getAllTeamsFlatCached } from '@/lib/firestore-helpers';
 
 export default async function CoordDashboard() {
   const cookieStore = await cookies();
@@ -45,7 +45,7 @@ export default async function CoordDashboard() {
 
   let teams: any[] = [];
   try {
-    teams = await getAllTeamsFlatFromDomainDocs();
+    teams = await getAllTeamsFlatCached();
   } catch (err) {
     console.error('Error fetching teams', err);
   }

@@ -3,7 +3,7 @@ import { getAdminAuth } from '@/lib/firebase-admin';
 import { redirect } from 'next/navigation';
 import { getTeamDataByEmail } from '@/app/actions/auth';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { getAllTeamsFlatFromDomainDocs } from '@/lib/firestore-helpers';
+import { getAllTeamsFlatCached } from '@/lib/firestore-helpers';
 import { getUserRole } from '@/app/actions/session';
 import TeamDashboardClient from './TeamDashboardClient';
 
@@ -62,7 +62,7 @@ export default async function TeamDashboard() {
   // Calculate Leaderboard Position
   let leaderboardPosition = 'N/A';
   try {
-    const allTeams = await getAllTeamsFlatFromDomainDocs();
+    const allTeams = await getAllTeamsFlatCached();
     const ranked = allTeams
       .map((t) => ({ id: t.id, totalGameXP: (t as any).totalGameXP || 0, score: t.score || 0 }))
       .sort((a, b) => b.totalGameXP - a.totalGameXP || b.score - a.score);

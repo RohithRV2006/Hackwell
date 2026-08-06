@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { getUserRole } from '@/app/actions/session';
 import {
-  getAllTeamsFlatFromDomainDocs,
+  getAllTeamsFlatCached,
   findTeamInDomainDocs,
   updateTeamInDomainDoc,
   getEvalRecords,
@@ -150,8 +150,8 @@ export async function getJuryDashboardData() {
   }
 
   try {
-    // 1. Fetch all teams from 5 domain docs
-    const allTeams = await getAllTeamsFlatFromDomainDocs();
+    // 1. Fetch all teams from domain cache
+    const allTeams = await getAllTeamsFlatCached();
     if (allTeams.length === 0) {
       return { success: true, teams: [] };
     }
@@ -383,12 +383,6 @@ export async function submitAndFreezeEvaluation(
     rubric.communication;
 
   try {
-    // Verify team exists in domain docs
-    const found = await findTeamInDomainDocs(cleanTeamId);
-    if (!found) {
-      return { success: false, error: 'Team not found.' };
-    }
-
     const evaluationPayload = {
       id: evalId,
       round: 'prelims',
@@ -417,17 +411,14 @@ export async function submitAndFreezeEvaluation(
       return { success: false, error: res.error || 'Failed to save evaluation' };
     }
 
-    // Update team document's judge and labNo if unassigned
-    const teamData = found.team;
+    // Update team document's judge and labNo if session has lab info
     const teamUpdates: Record<string, any> = {};
-    if (!teamData.judge || teamData.judge === 'Unassigned') {
+    if (session.juryName) {
       teamUpdates.judge = session.juryName;
     }
-    if (!teamData.labNo || teamData.labNo === 'Unassigned') {
-      if (session.labName && session.labName !== 'N/A') {
-        teamUpdates.labNo = session.labName;
-        teamUpdates.assignedLabName = session.labName;
-      }
+    if (session.labName && session.labName !== 'N/A') {
+      teamUpdates.labNo = session.labName;
+      teamUpdates.assignedLabName = session.labName;
     }
     if (Object.keys(teamUpdates).length > 0) {
       await updateTeamInDomainDoc(cleanTeamId, teamUpdates);
