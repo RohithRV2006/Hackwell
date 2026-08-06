@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   verifyAdminSession,
   getEventManagementDashboardDataAdmin,
@@ -11,6 +12,8 @@ import {
   updateLabAdmin,
   deleteLabAdmin,
   autoAssignTeamsToLabsAdmin,
+  randomlyAssignTeamsToLabsAdmin,
+  unassignAllTeamsJuriesAdmin,
   autoAssignFinalTeamsToLabsAdmin,
   FinalLabData,
   getFinalLabsAdmin,
@@ -22,6 +25,9 @@ import {
   resetTimelinePhaseAdmin,
   applyPptFilterAdmin,
   resetPrelimsFiltersAndAssignmentsAdmin,
+  publishJurySelectedFinalistsAdmin,
+  upsertEvalRecordAdmin,
+  updateTeamInDomainDocAdmin,
   EventTimelinesData,
   PhaseState,
   LabData,
@@ -45,50 +51,7 @@ import { THEME_NAMES } from '@/lib/data/themes';
 // ─────────────────────────────────────────────────────────────────────────────
 
 function getPhaseState(tl: { startDate?: string; endDate?: string; state?: PhaseState }): PhaseState {
-  if (!tl.startDate || !tl.endDate) return tl.state || 'not-set';
-  const now = Date.now();
-  const start = new Date(tl.startDate).getTime();
-  const end = new Date(tl.endDate).getTime();
-  if (now < start) return 'not-set';
-  if (now >= start && now < end) return 'active';
-  return 'ended';
-}
-
-function formatCountdown(targetMs: number): string {
-  const diff = targetMs - Date.now();
-  if (diff <= 0) return '00:00:00';
-  const totalSec = Math.floor(diff / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':');
-}
-
-function formatDateDisplay(dateStr: string): string {
-  if (!dateStr) return '—';
-  try {
-    return new Date(dateStr).toLocaleString('en-IN', {
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: true,
-    });
-  } catch {
-    return dateStr;
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Countdown Hook
-// ─────────────────────────────────────────────────────────────────────────────
-function useCountdown(endDate: string): string {
-  const [countdown, setCountdown] = useState(() => endDate ? formatCountdown(new Date(endDate).getTime()) : '');
-  useEffect(() => {
-    if (!endDate) { setCountdown(''); return; }
-    const id = setInterval(() => {
-      setCountdown(formatCountdown(new Date(endDate).getTime()));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [endDate]);
-  return countdown;
+  return (tl.state as PhaseState) || 'not-set';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,20 +59,91 @@ function useCountdown(endDate: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 function PhaseBadge({ state }: { state: PhaseState }) {
   if (state === 'active') return (
-    <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+    <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-sm">
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-      LIVE
+      ▶️ LIVE / ACTIVE
+    </span>
+  );
+  if (state === 'paused') return (
+    <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+      ⏸️ STOPPED / PAUSED
     </span>
   );
   if (state === 'ended') return (
-    <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-      ✓ Ended
+    <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 border border-gray-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+      🏁 FINISHED
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-      ○ Not Set
+    <span className="inline-flex items-center gap-1 bg-gray-50 text-gray-500 border border-gray-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+      ○ NOT STARTED
     </span>
+  );
+}
+
+function RoundControlButtons({
+  state,
+  canStart = true,
+  canStartReason = '',
+  onStart,
+  onPause,
+  onFinish,
+  onReset,
+}: {
+  state: PhaseState;
+  canStart?: boolean;
+  canStartReason?: string;
+  onStart: () => void;
+  onPause: () => void;
+  onFinish: () => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2.5 p-3.5 bg-gray-50 border border-gray-200 rounded-sm">
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={state === 'active' || !canStart}
+          title={!canStart ? canStartReason : ''}
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-xs font-extrabold transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
+        >
+          ▶️ Start Round
+        </button>
+
+        <button
+          type="button"
+          onClick={onPause}
+          disabled={state === 'paused'}
+          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-sm text-xs font-extrabold transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
+        >
+          ⏸️ Stop / Pause Round
+        </button>
+
+        <button
+          type="button"
+          onClick={onFinish}
+          disabled={state === 'ended'}
+          className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-sm text-xs font-extrabold transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
+        >
+          🏁 Finish This Round
+        </button>
+
+        <button
+          type="button"
+          onClick={onReset}
+          className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-extrabold transition flex items-center gap-1.5 ml-auto"
+        >
+          🔄 Reset This Round
+        </button>
+      </div>
+
+      {!canStart && state !== 'active' && (
+        <div className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-sm flex items-center gap-1.5">
+          <span>⚠️</span> {canStartReason}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -117,6 +151,7 @@ function PhaseBadge({ state }: { state: PhaseState }) {
 // Main Page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AdminEventManagementPage() {
+  const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -235,13 +270,29 @@ export default function AdminEventManagementPage() {
 
   const [p3Start, setP3Start] = useState('');
   const [p3End, setP3End] = useState('');
-  const [p3TopN, setP3TopN] = useState(10);
   const [p3Saving, setP3Saving] = useState(false);
   const [promoting, setPromoting] = useState(false);
 
   const [p4Start, setP4Start] = useState('');
   const [p4End, setP4End] = useState('');
   const [p4Saving, setP4Saving] = useState(false);
+
+  // ── Prelims Selection & Sub-tabs State ─────────────────────────────────────
+  const [prelimsSubTab, setPrelimsSubTab] = useState<'scores' | 'selection'>('scores');
+  const [selectedFinalistIds, setSelectedFinalistIds] = useState<Set<string>>(new Set());
+  const [publishingFinalists, setPublishingFinalists] = useState(false);
+
+  // Admin Score Edit Modal State
+  const [editingScoreItem, setEditingScoreItem] = useState<{ team: AdminTeamData; evalRecord?: AdminScoreData } | null>(null);
+  const [editScoreConcept, setEditScoreConcept] = useState<number>(0);
+  const [editScoreBuild, setEditScoreBuild] = useState<number>(0);
+  const [editScoreDelivery, setEditScoreDelivery] = useState<number>(0);
+  const [editScoreDefense, setEditScoreDefense] = useState<number>(0);
+  const [editScoreComm, setEditScoreComm] = useState<number>(0);
+  const [editScoreFeedback, setEditScoreFeedback] = useState<string>('');
+  const [editScoreJudge, setEditScoreJudge] = useState<string>('');
+  const [editScoreLab, setEditScoreLab] = useState<string>('');
+  const [savingScoreEdit, setSavingScoreEdit] = useState(false);
 
   // ── Winner Selection ───────────────────────────────────────────────────────
   const [winner1st, setWinner1st] = useState('');
@@ -254,11 +305,7 @@ export default function AdminEventManagementPage() {
   const [modalSearchQuery, setModalSearchQuery] = useState('');
   const [selectedTeamForMembers, setSelectedTeamForMembers] = useState<AdminTeamData | null>(null);
 
-  // ── Countdowns ─────────────────────────────────────────────────────────────
-  const cd1 = useCountdown(timelines.timeline1.endDate);
-  const cd2 = useCountdown(timelines.timeline2.endDate);
-  const cd3 = useCountdown(timelines.timeline3.endDate);
-  const cd4 = useCountdown(timelines.timeline4.endDate);
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // Single-Call Data Load (Minimum Quota & Zero Duplicate Reads)
@@ -280,7 +327,6 @@ export default function AdminEventManagementPage() {
           setP2End(tl.timeline2.endDate || '');
           setP3Start(tl.timeline3.startDate || '');
           setP3End(tl.timeline3.endDate || '');
-          setP3TopN(tl.timeline3.topTeamsToFinal || 10);
           setP4Start(tl.timeline4.startDate || '');
           setP4End(tl.timeline4.endDate || '');
         }
@@ -302,6 +348,117 @@ export default function AdminEventManagementPage() {
     })();
   }, []);
 
+  // Sync selected finalist IDs from teams and prelimsScores
+  useEffect(() => {
+    const ids = new Set<string>();
+    teams.forEach((t) => {
+      if (t.finaleQualified === true || t.prelimsStatus === 'selected') {
+        ids.add(t.id);
+      }
+    });
+    prelimsScores.forEach((s) => {
+      if (s.selectedForFinal) {
+        ids.add(s.teamId);
+      }
+    });
+    setSelectedFinalistIds(ids);
+  }, [teams, prelimsScores]);
+
+  const handleToggleFinalist = (teamId: string) => {
+    setSelectedFinalistIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(teamId)) {
+        next.delete(teamId);
+      } else {
+        next.add(teamId);
+      }
+      return next;
+    });
+  };
+
+  const handlePublishFinalists = async () => {
+    if (selectedFinalistIds.size === 0) {
+      if (!confirm('No teams selected for Final Round. Proceed to clear all finalists?')) return;
+    }
+    setPublishingFinalists(true);
+    setMsg(null);
+
+    const res = await publishJurySelectedFinalistsAdmin(Array.from(selectedFinalistIds));
+    if (res.success) {
+      setMsg({
+        type: 'success',
+        text: `🚀 Successfully published ${res.count} teams to the Final Round! All student dashboards and Phase 4 are updated.`,
+      });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to publish finalists.' });
+    }
+    setPublishingFinalists(false);
+  };
+
+  const handleOpenEditScore = (team: AdminTeamData, evalRecord?: AdminScoreData) => {
+    setEditingScoreItem({ team, evalRecord });
+    const r = evalRecord?.rubric || ({} as any);
+    setEditScoreConcept(r.conceptStrength ?? 0);
+    setEditScoreBuild(r.buildIntelligence ?? 0);
+    setEditScoreDelivery(r.deliveryImpact ?? 0);
+    setEditScoreDefense(r.liveDefenseScore ?? 0);
+    setEditScoreComm(r.communication ?? 0);
+    setEditScoreFeedback(evalRecord?.feedback || evalRecord?.remarks || team.feedback || '');
+    setEditScoreJudge(evalRecord?.juryName || team.judge || 'Unassigned');
+    setEditScoreLab(team.labNo || 'Unassigned');
+  };
+
+  const handleSaveScoreEdit = async () => {
+    if (!editingScoreItem) return;
+    setSavingScoreEdit(true);
+    setMsg(null);
+
+    const team = editingScoreItem.team;
+    const totalScore = editScoreConcept + editScoreBuild + editScoreDelivery + editScoreDefense + editScoreComm;
+
+    const evalPayload = {
+      id: editingScoreItem.evalRecord?.id || `prelims_${editScoreJudge.toLowerCase().replace(/\s+/g, '_')}_${team.id}`,
+      round: 'prelims',
+      teamName: team.teamName,
+      displayId: team.displayId || team.id,
+      teamId: team.id,
+      juryId: editingScoreItem.evalRecord?.juryId || editScoreJudge.toLowerCase().replace(/\s+/g, '_'),
+      juryName: editScoreJudge,
+      rubric: {
+        conceptStrength: editScoreConcept,
+        buildIntelligence: editScoreBuild,
+        deliveryImpact: editScoreDelivery,
+        liveDefenseScore: editScoreDefense,
+        communication: editScoreComm,
+      },
+      totalScore,
+      feedback: editScoreFeedback.trim(),
+      remarks: editScoreFeedback.trim(),
+      selectedForFinal: editingScoreItem.evalRecord?.selectedForFinal || false,
+      selectionReason: editingScoreItem.evalRecord?.selectionReason || '',
+      isFrozen: true,
+    };
+
+    const evalRes = await upsertEvalRecordAdmin('prelims', evalPayload);
+    const teamRes = await updateTeamInDomainDocAdmin(team.id, {
+      score: totalScore,
+      judge: editScoreJudge,
+      labNo: editScoreLab,
+      assignedLabName: editScoreLab,
+      feedback: editScoreFeedback.trim(),
+    });
+
+    if (evalRes.success && teamRes.success) {
+      setMsg({ type: 'success', text: `Updated score & assignment for team "${team.teamName}".` });
+      setEditingScoreItem(null);
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: evalRes.error || teamRes.error || 'Failed to update score.' });
+    }
+    setSavingScoreEdit(false);
+  };
+
   const refreshData = async () => {
     const res = await getEventManagementDashboardDataAdmin();
     if (res.success && res.timelines) setTimelines(res.timelines);
@@ -314,14 +471,98 @@ export default function AdminEventManagementPage() {
   };
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Phase Handlers with Strict Sequence Checks
+  // Explicit Phase & Round Handlers (Start, Stop/Pause, Finish, Reset)
   // ─────────────────────────────────────────────────────────────────────────
+  const handleStartRound = async (timeline: '1' | '2' | '3' | '4') => {
+    setMsg(null);
+
+    // Sequence Validation: Cannot start next round unless previous round is FINISHED ('ended')
+    if (timeline === '2' && phase1State !== 'ended') {
+      setMsg({
+        type: 'error',
+        text: '❌ Cannot start Phase 2 (PPT Submission)! Phase 1 (Registration Phase) must be FINISHED before Phase 2 can begin.',
+      });
+      return;
+    }
+
+    if (timeline === '3' && phase2State !== 'ended') {
+      setMsg({
+        type: 'error',
+        text: '❌ Cannot start Phase 3 (Prelims Round)! Phase 2 (PPT Submission Phase) must be FINISHED before Phase 3 can begin.',
+      });
+      return;
+    }
+
+    if (timeline === '4' && phase3State !== 'ended') {
+      setMsg({
+        type: 'error',
+        text: '❌ Cannot start Phase 4 (Final Round)! Phase 3 (Prelims Round) must be FINISHED before Phase 4 can begin.',
+      });
+      return;
+    }
+
+    const res = await updateTimelinePhaseAdmin(timeline, {
+      state: 'active',
+      enabled: true,
+      updatedAt: new Date().toISOString(),
+    });
+    if (res.success) {
+      setMsg({ type: 'success', text: `▶️ Phase ${timeline} has been STARTED and is now LIVE.` });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to start round.' });
+    }
+  };
+
+  const handlePauseRound = async (timeline: '1' | '2' | '3' | '4') => {
+    setMsg(null);
+    const res = await updateTimelinePhaseAdmin(timeline, {
+      state: 'paused',
+      enabled: false,
+      updatedAt: new Date().toISOString(),
+    });
+    if (res.success) {
+      setMsg({ type: 'success', text: `⏸️ Phase ${timeline} has been STOPPED / PAUSED.` });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to pause round.' });
+    }
+  };
+
+  const handleFinishRound = async (timeline: '1' | '2' | '3' | '4') => {
+    if (!confirm(`Are you sure you want to FINISH Phase ${timeline}?`)) return;
+    setMsg(null);
+    const res = await updateTimelinePhaseAdmin(timeline, {
+      state: 'ended',
+      enabled: false,
+      updatedAt: new Date().toISOString(),
+    });
+    if (res.success) {
+      setMsg({ type: 'success', text: `🏁 Phase ${timeline} is now FINISHED / ENDED.` });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to finish round.' });
+    }
+  };
+
+  const handleResetRound = async (timeline: '1' | '2' | '3' | '4') => {
+    if (!confirm(`Are you sure you want to RESET Phase ${timeline}? This will reset progress for Phase ${timeline}.`)) return;
+    setMsg(null);
+    const res = await resetTimelinePhaseAdmin(timeline);
+    if (res.success) {
+      setMsg({ type: 'success', text: `🔄 Phase ${timeline} has been RESET.` });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to reset round.' });
+    }
+  };
+
   const handleSetPhase = async (phase: '1' | '2' | '3' | '4') => {
     let start = '', end = '', extra: Record<string, any> = {};
 
     if (phase === '1') { start = p1Start; end = p1End; setP1Saving(true); }
     if (phase === '2') { start = p2Start; end = p2End; setP2Saving(true); }
-    if (phase === '3') { start = p3Start; end = p3End; extra = { topTeamsToFinal: p3TopN }; setP3Saving(true); }
+    if (phase === '3') { start = p3Start; end = p3End; setP3Saving(true); }
     if (phase === '4') { start = p4Start; end = p4End; setP4Saving(true); }
 
     if (!start || !end) {
@@ -362,7 +603,7 @@ export default function AdminEventManagementPage() {
     let updates: Record<string, any> = {};
     if (phase === '1') { updates = { startDate: p1Start, endDate: p1End }; setP1Saving(true); }
     if (phase === '2') { updates = { startDate: p2Start, endDate: p2End }; setP2Saving(true); }
-    if (phase === '3') { updates = { startDate: p3Start, endDate: p3End, topTeamsToFinal: p3TopN }; setP3Saving(true); }
+    if (phase === '3') { updates = { startDate: p3Start, endDate: p3End }; setP3Saving(true); }
     if (phase === '4') { updates = { startDate: p4Start, endDate: p4End }; setP4Saving(true); }
 
     setMsg(null);
@@ -447,22 +688,7 @@ export default function AdminEventManagementPage() {
   };
 
   const handlePromoteTeams = async () => {
-    if (phase3State !== 'ended') {
-      setMsg({ type: 'error', text: 'Phase 3 hasn\'t completed yet! You cannot promote teams until Phase 3 ends.' });
-      return;
-    }
-    if (p3TopN <= 0) { setMsg({ type: 'error', text: 'Top teams count must be greater than 0.' }); return; }
-    setPromoting(true);
-    setMsg(null);
-    const res = await promoteTopTeamsToFinaleAdmin(p3TopN);
-    if (res.success) {
-      setMsg({ type: 'success', text: `🚀 Top ${res.promotedCount} teams promoted to Final Round!` });
-      await updateTimelinePhaseAdmin('3', { finalistsPromoted: true });
-      await refreshData();
-    } else {
-      setMsg({ type: 'error', text: res.error || 'Failed to promote teams.' });
-    }
-    setPromoting(false);
+    await handlePublishFinalists();
   };
 
   const handleToggleQualification = async (teamId: string, currentVal: boolean) => {
@@ -560,21 +786,51 @@ export default function AdminEventManagementPage() {
   };
 
   const handleAutoAssignTeams = async () => {
-    if (phase2State !== 'ended') {
-      setMsg({ type: 'error', text: 'Phase 2 hasn\'t completed yet! You cannot auto-assign teams until Phase 2 ends.' });
-      return;
-    }
     setAllocating(true);
     setMsg(null);
     const res = await autoAssignTeamsToLabsAdmin();
     if (res.success) {
       setMsg({
         type: 'success',
-        text: `Auto-assigned ${res.assignedCount} PPT-submitted teams across labs based on Problem Statement Theme matching! ${res.eliminatedCount ? `${res.eliminatedCount} non-PPT teams marked as eliminated.` : ''}`
+        text: `Auto-assigned ${res.assignedCount} teams across labs based on Problem Statement Theme matching! ${res.eliminatedCount ? `${res.eliminatedCount} non-PPT teams marked as eliminated.` : ''}`
       });
       await refreshData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Failed to auto-assign.' });
+    }
+    setAllocating(false);
+  };
+
+  const handleRandomAssignTeams = async () => {
+    if (!confirm('Randomly assign all teams across configured Juries & Labs?')) return;
+    setAllocating(true);
+    setMsg(null);
+    const res = await randomlyAssignTeamsToLabsAdmin();
+    if (res.success) {
+      setMsg({
+        type: 'success',
+        text: `🎲 Randomly assigned ${res.assignedCount} teams across active Juries & Labs! ${res.eliminatedCount ? `${res.eliminatedCount} non-PPT teams marked as eliminated.` : ''}`
+      });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to randomly assign.' });
+    }
+    setAllocating(false);
+  };
+
+  const handleUndoAllAssignments = async () => {
+    if (!confirm('Are you sure you want to undo and reset ALL Jury/Lab assignments back to Unassigned?')) return;
+    setAllocating(true);
+    setMsg(null);
+    const res = await unassignAllTeamsJuriesAdmin();
+    if (res.success) {
+      setMsg({
+        type: 'success',
+        text: `↺ Successfully undone and reset assignments for ${res.count} teams back to Unassigned.`
+      });
+      await refreshData();
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to undo assignments.' });
     }
     setAllocating(false);
   };
@@ -791,85 +1047,22 @@ export default function AdminEventManagementPage() {
 
         <div className="p-6 space-y-4">
           {/* Live stat */}
-          {phase1State !== 'not-set' && (
-            <div className="flex items-center gap-4 p-3.5 bg-blue-50 border border-blue-100 rounded-sm">
-              <div className="text-2xl font-extrabold text-blue-700">{liveStats?.totalTeams || 0}</div>
-              <div>
-                <div className="text-xs font-bold text-blue-900">Teams Registered</div>
-                <div className="text-xs text-blue-600">{liveStats?.totalStudents || 0} Total Students</div>
-              </div>
-              {phase1State === 'active' && cd1 && (
-                <div className="ml-auto text-right">
-                  <div className="text-[10px] text-gray-500 font-semibold uppercase">Closes In</div>
-                  <div className="text-lg font-extrabold text-gray-800 font-mono">{cd1}</div>
-                </div>
-              )}
-              {phase1State === 'ended' && (
-                <div className="ml-auto">
-                  <span className="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1 rounded-full border border-gray-200">
-                    Ended · {formatDateDisplay(timelines.timeline1.endDate)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Form */}
-          {phase1State === 'not-set' && (
-            <>
-              <p className="text-xs text-gray-500">Set the start and end time for student registration. Once set, the phase will be live.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Registration Start Time</label>
-                  <input type="datetime-local" value={p1Start} onChange={(e) => setP1Start(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Registration End Time</label>
-                  <input type="datetime-local" value={p1End} onChange={(e) => setP1End(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 pt-1">
-                <button onClick={() => handleSetPhase('1')} disabled={p1Saving}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-sm font-bold transition disabled:opacity-50 shadow-sm">
-                  {p1Saving ? 'Setting Phase...' : '⏱ Set Registration Phase'}
-                </button>
-                <button onClick={() => handleResetPhase('1')}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition">
-                  🔄 Reset Phase
-                </button>
-              </div>
-            </>
-          )}
-
-          {(phase1State === 'active' || phase1State === 'ended') && (
+          <div className="flex items-center gap-4 p-3.5 bg-blue-50 border border-blue-100 rounded-sm">
+            <div className="text-2xl font-extrabold text-blue-700">{liveStats?.totalTeams || 0}</div>
             <div>
-              <div className="text-xs text-gray-500 font-semibold mb-3">Phase Timeline</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Start Time</label>
-                  <input type="datetime-local" value={p1Start} onChange={(e) => setP1Start(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">End Time</label>
-                  <input type="datetime-local" value={p1End} onChange={(e) => setP1End(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
-                </div>
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-                <button onClick={() => handleUpdatePhase('1')} disabled={p1Saving}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded-sm text-xs font-bold transition disabled:opacity-50">
-                  {p1Saving ? 'Updating...' : '✏️ Update Timeline'}
-                </button>
-                <button onClick={() => handleResetPhase('1')}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition">
-                  🔄 Reset Phase
-                </button>
-              </div>
+              <div className="text-xs font-bold text-blue-900">Teams Registered</div>
+              <div className="text-xs text-blue-600">{liveStats?.totalStudents || 0} Total Students</div>
             </div>
-          )}
+          </div>
+
+          {/* Phase Control Buttons */}
+          <RoundControlButtons
+            state={phase1State}
+            onStart={() => handleStartRound('1')}
+            onPause={() => handlePauseRound('1')}
+            onFinish={() => handleFinishRound('1')}
+            onReset={() => handleResetRound('1')}
+          />
         </div>
       </div>
 
@@ -895,83 +1088,24 @@ export default function AdminEventManagementPage() {
 
         <div className="p-6 space-y-4">
           {/* Live stat */}
-          {phase2State !== 'not-set' && (
-            <div className="flex items-center gap-4 p-3.5 bg-purple-50 border border-purple-100 rounded-sm">
-              <div className="text-2xl font-extrabold text-purple-700">{liveStats?.pptSubmittedCount || 0}</div>
-              <div>
-                <div className="text-xs font-bold text-purple-900">PPTs Submitted</div>
-                <div className="text-xs text-purple-600">out of {liveStats?.totalTeams || 0} registered teams</div>
-              </div>
-              {phase2State === 'active' && cd2 && (
-                <div className="ml-auto text-right">
-                  <div className="text-[10px] text-gray-500 font-semibold uppercase">Closes In</div>
-                  <div className="text-lg font-extrabold text-gray-800 font-mono">{cd2}</div>
-                </div>
-              )}
-              {phase2State === 'ended' && (
-                <div className="ml-auto">
-                  <span className="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1 rounded-full border border-gray-200">
-                    Ended · {formatDateDisplay(timelines.timeline2.endDate)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {phase2State === 'not-set' && (
-            <>
-              <p className="text-xs text-gray-500">Set the PPT submission window. Teams must upload their presentations within this period.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">PPT Submission Start</label>
-                  <input type="datetime-local" value={p2Start} onChange={(e) => setP2Start(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">PPT Submission End</label>
-                  <input type="datetime-local" value={p2End} onChange={(e) => setP2End(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 pt-1">
-                <button onClick={() => handleSetPhase('2')} disabled={p2Saving}
-                  className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-sm font-bold transition disabled:opacity-50 shadow-sm">
-                  {p2Saving ? 'Setting Phase...' : '⏱ Set PPT Submission Phase'}
-                </button>
-                <button onClick={() => handleResetPhase('2')}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition">
-                  🔄 Reset Phase
-                </button>
-              </div>
-            </>
-          )}
-
-          {(phase2State === 'active' || phase2State === 'ended') && (
+          <div className="flex items-center gap-4 p-3.5 bg-purple-50 border border-purple-100 rounded-sm">
+            <div className="text-2xl font-extrabold text-purple-700">{liveStats?.pptSubmittedCount || 0}</div>
             <div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Start Time</label>
-                  <input type="datetime-local" value={p2Start} onChange={(e) => setP2Start(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">End Time</label>
-                  <input type="datetime-local" value={p2End} onChange={(e) => setP2End(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-purple-500" />
-                </div>
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-                <button onClick={() => handleUpdatePhase('2')} disabled={p2Saving}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded-sm text-xs font-bold transition disabled:opacity-50">
-                  {p2Saving ? 'Updating...' : '✏️ Update Timeline'}
-                </button>
-                <button onClick={() => handleResetPhase('2')}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition">
-                  🔄 Reset Phase
-                </button>
-              </div>
+              <div className="text-xs font-bold text-purple-900">PPTs Submitted</div>
+              <div className="text-xs text-purple-600">out of {liveStats?.totalTeams || 0} registered teams</div>
             </div>
-          )}
+          </div>
+
+          {/* Phase Control Buttons */}
+          <RoundControlButtons
+            state={phase2State}
+            canStart={phase1State === 'ended'}
+            canStartReason="Phase 1 (Registration Phase) must be FINISHED before Phase 2 can begin."
+            onStart={() => handleStartRound('2')}
+            onPause={() => handlePauseRound('2')}
+            onFinish={() => handleFinishRound('2')}
+            onReset={() => handleResetRound('2')}
+          />
 
           {/* PPT Filter */}
           <div className="bg-purple-50/80 border border-purple-200 rounded-sm p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1020,6 +1154,12 @@ export default function AdminEventManagementPage() {
             <button onClick={handleAutoAssignTeams} disabled={allocating} className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
               ⚡ {allocating ? 'Assigning...' : 'Auto Assign Teams'}
             </button>
+            <button onClick={handleRandomAssignTeams} disabled={allocating} className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
+              🎲 Random Assign
+            </button>
+            <button onClick={handleUndoAllAssignments} disabled={allocating} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
+              ↺ Undo All
+            </button>
             <button onClick={() => exportTimeline3Report('csv')} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition">📥 CSV</button>
             <button onClick={() => exportTimeline3Report('pdf')} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-sm text-xs font-bold transition">📄 PDF</button>
           </div>
@@ -1027,94 +1167,24 @@ export default function AdminEventManagementPage() {
 
         <div className="p-6 space-y-5">
           {/* Live stat */}
-          {phase3State !== 'not-set' && (
-            <div className="flex items-center gap-4 p-3.5 bg-indigo-50 border border-indigo-100 rounded-sm">
-              <div className="text-2xl font-extrabold text-indigo-700">{liveStats?.prelimsEvaluatedCount || 0}</div>
-              <div>
-                <div className="text-xs font-bold text-indigo-900">Prelims Evaluations Done</div>
-                <div className="text-xs text-indigo-600">{liveStats?.juryStats?.length || 0} active juries</div>
-              </div>
-              {phase3State === 'active' && cd3 && (
-                <div className="ml-auto text-right">
-                  <div className="text-[10px] text-gray-500 font-semibold uppercase">Closes In</div>
-                  <div className="text-lg font-extrabold text-gray-800 font-mono">{cd3}</div>
-                </div>
-              )}
-              {phase3State === 'ended' && (
-                <div className="ml-auto">
-                  <span className="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1 rounded-full border border-gray-200">
-                    Ended · {formatDateDisplay(timelines.timeline3.endDate)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Phase form */}
-          {phase3State === 'not-set' && (
-            <>
-              <p className="text-xs text-gray-500">Configure the Prelims round window and set how many top teams will advance to the Final Round.</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Prelims Start Time</label>
-                  <input type="datetime-local" value={p3Start} onChange={(e) => setP3Start(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Prelims End Time</label>
-                  <input type="datetime-local" value={p3End} onChange={(e) => setP3End(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Top Teams to Final Round</label>
-                  <input type="number" min={1} max={500} value={p3TopN} onChange={(e) => setP3TopN(Number(e.target.value))}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 pt-1">
-                <button onClick={() => handleSetPhase('3')} disabled={p3Saving}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-sm text-sm font-bold transition disabled:opacity-50 shadow-sm">
-                  {p3Saving ? 'Setting Phase...' : '⏱ Set Prelims Round'}
-                </button>
-                <button onClick={() => handleResetPhase('3')}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition">
-                  🔄 Reset Phase
-                </button>
-              </div>
-            </>
-          )}
-
-          {(phase3State === 'active' || phase3State === 'ended') && (
+          <div className="flex items-center gap-4 p-3.5 bg-indigo-50 border border-indigo-100 rounded-sm">
+            <div className="text-2xl font-extrabold text-indigo-700">{liveStats?.prelimsEvaluatedCount || 0}</div>
             <div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Start Time</label>
-                  <input type="datetime-local" value={p3Start} onChange={(e) => setP3Start(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">End Time</label>
-                  <input type="datetime-local" value={p3End} onChange={(e) => setP3End(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Top Teams to Final Round</label>
-                  <input type="number" min={1} max={500} value={p3TopN} onChange={(e) => setP3TopN(Number(e.target.value))}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                </div>
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-                <button onClick={() => handleUpdatePhase('3')} disabled={p3Saving}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded-sm text-xs font-bold transition disabled:opacity-50">
-                  {p3Saving ? 'Updating...' : '✏️ Update Settings'}
-                </button>
-                <button onClick={() => handleResetPhase('3')}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition">
-                  🔄 Reset Phase
-                </button>
-              </div>
+              <div className="text-xs font-bold text-indigo-900">Prelims Evaluations Done</div>
+              <div className="text-xs text-indigo-600">{liveStats?.juryStats?.length || 0} active juries</div>
             </div>
-          )}
+          </div>
+
+          {/* Phase Control Buttons */}
+          <RoundControlButtons
+            state={phase3State}
+            canStart={phase2State === 'ended'}
+            canStartReason="Phase 2 (PPT Submission Phase) must be FINISHED before Phase 3 can begin."
+            onStart={() => handleStartRound('3')}
+            onPause={() => handlePauseRound('3')}
+            onFinish={() => handleFinishRound('3')}
+            onReset={() => handleResetRound('3')}
+          />
 
           {/* Per-Jury Live Tracker */}
           <div className="bg-indigo-50/70 border border-indigo-100 rounded-sm p-4 space-y-3">
@@ -1144,22 +1214,18 @@ export default function AdminEventManagementPage() {
             </div>
           </div>
 
-          {/* Finalist Promotion */}
-          <div className="bg-indigo-50/80 border border-indigo-200 rounded-sm p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Finalist Selection & Publishing Bar */}
+          <div className="bg-purple-50/80 border border-purple-200 rounded-sm p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wide">Promote to Final Round</h4>
-              {timelines.timeline3.finalistsPromoted ? (
-                <p className="text-xs text-emerald-700 mt-0.5 font-semibold">
-                  ✅ Top {timelines.timeline3.topTeamsToFinal} teams promoted. Current finalists: {liveStats?.finalistCount || 0}
-                </p>
-              ) : (
-                <p className="text-xs text-gray-600 mt-0.5">Select top {p3TopN} prelims teams based on average score and qualify them for the Final Round.</p>
-              )}
+              <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wide">🌟 Final Round Selection &amp; Publishing</h4>
+              <p className="text-xs text-purple-700 mt-0.5">
+                Finalists are selected from Jury recommendations and Admin adjustments in the Prelims View. Currently selected: <strong>{liveStats?.finalistCount || selectedFinalistIds.size} teams</strong>
+              </p>
             </div>
-            <button onClick={handlePromoteTeams} disabled={promoting}
-              className="shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-sm text-xs font-bold transition disabled:opacity-50">
-              {promoting ? 'Promoting...' : `🚀 Promote Top ${p3TopN} Teams`}
-            </button>
+            <a href="/admin/prelims-scores"
+              className="shrink-0 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition inline-block">
+              🔍 Go to Prelims Round Tab
+            </a>
           </div>
 
           {/* Lab Management (Prelims Round) */}
@@ -1295,83 +1361,24 @@ export default function AdminEventManagementPage() {
 
         <div className="p-6 space-y-5">
           {/* Live stat */}
-          {phase4State !== 'not-set' && (
-            <div className="flex items-center gap-4 p-3.5 bg-emerald-50 border border-emerald-100 rounded-sm">
-              <div className="text-2xl font-extrabold text-emerald-700">{liveStats?.finalistCount || 0}</div>
-              <div>
-                <div className="text-xs font-bold text-emerald-900">Qualified Finalists</div>
-                <div className="text-xs text-emerald-600">{liveStats?.finaleEvaluatedCount || 0} evaluations recorded</div>
-              </div>
-              {phase4State === 'active' && cd4 && (
-                <div className="ml-auto text-right">
-                  <div className="text-[10px] text-gray-500 font-semibold uppercase">Closes In</div>
-                  <div className="text-lg font-extrabold text-gray-800 font-mono">{cd4}</div>
-                </div>
-              )}
-              {phase4State === 'ended' && (
-                <div className="ml-auto">
-                  <span className="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1 rounded-full border border-gray-200">
-                    Ended · {formatDateDisplay(timelines.timeline4.endDate)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {phase4State === 'not-set' && (
-            <>
-              <p className="text-xs text-gray-500">Set the Final Round window. Only teams promoted from Prelims can participate.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Final Round Start Time</label>
-                  <input type="datetime-local" value={p4Start} onChange={(e) => setP4Start(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Final Round End Time</label>
-                  <input type="datetime-local" value={p4End} onChange={(e) => setP4End(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 pt-1">
-                <button onClick={() => handleSetPhase('4')} disabled={p4Saving}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-sm font-bold transition disabled:opacity-50 shadow-sm">
-                  {p4Saving ? 'Setting Phase...' : '⏱ Set Final Round Phase'}
-                </button>
-                <button onClick={() => handleResetPhase('4')}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition">
-                  🔄 Reset Phase
-                </button>
-              </div>
-            </>
-          )}
-
-          {(phase4State === 'active' || phase4State === 'ended') && (
+          <div className="flex items-center gap-4 p-3.5 bg-emerald-50 border border-emerald-100 rounded-sm">
+            <div className="text-2xl font-extrabold text-emerald-700">{liveStats?.finalistCount || 0}</div>
             <div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">Start Time</label>
-                  <input type="datetime-local" value={p4Start} onChange={(e) => setP4Start(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">End Time</label>
-                  <input type="datetime-local" value={p4End} onChange={(e) => setP4End(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-                </div>
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-                <button onClick={() => handleUpdatePhase('4')} disabled={p4Saving}
-                  className="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded-sm text-xs font-bold transition disabled:opacity-50">
-                  {p4Saving ? 'Updating...' : '✏️ Update Timeline'}
-                </button>
-                <button onClick={() => handleResetPhase('4')}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition">
-                  🔄 Reset Phase
-                </button>
-              </div>
+              <div className="text-xs font-bold text-emerald-900">Qualified Finalists</div>
+              <div className="text-xs text-emerald-600">{liveStats?.finaleEvaluatedCount || 0} evaluations recorded</div>
             </div>
-          )}
+          </div>
+
+          {/* Phase Control Buttons */}
+          <RoundControlButtons
+            state={phase4State}
+            canStart={phase3State === 'ended'}
+            canStartReason="Phase 3 (Prelims Round) must be FINISHED before Phase 4 can begin."
+            onStart={() => handleStartRound('4')}
+            onPause={() => handlePauseRound('4')}
+            onFinish={() => handleFinishRound('4')}
+            onReset={() => handleResetRound('4')}
+          />
 
           {/* Final Round Lab Management */}
           <div className="border-t border-emerald-100 pt-5 space-y-4">
@@ -1557,7 +1564,31 @@ export default function AdminEventManagementPage() {
               <div className="flex items-center gap-2">
                 {activeModalTimeline === '1' && <><button onClick={() => exportTimeline1Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline1Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
                 {activeModalTimeline === '2' && <><button onClick={() => exportTimeline2Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline2Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
-                {activeModalTimeline === '3' && <><button onClick={() => exportAttendanceSheet('Prelims Round', teams)} className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-bold hover:bg-purple-700">📋 Attendance Sheet</button><button onClick={() => exportTimeline3Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline3Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
+                {activeModalTimeline === '3' && (
+                  <>
+                    <div className="flex items-center gap-1 bg-gray-200 p-0.5 rounded-sm mr-2">
+                      <button
+                        onClick={() => setPrelimsSubTab('scores')}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-sm transition ${
+                          prelimsSubTab === 'scores' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-700 hover:text-gray-900'
+                        }`}
+                      >
+                        📊 Score Details
+                      </button>
+                      <button
+                        onClick={() => setPrelimsSubTab('selection')}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-sm transition ${
+                          prelimsSubTab === 'selection' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-700 hover:text-gray-900'
+                        }`}
+                      >
+                        🌟 Final Selection ({selectedFinalistIds.size})
+                      </button>
+                    </div>
+                    <button onClick={() => exportAttendanceSheet('Prelims Round', teams)} className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-bold hover:bg-purple-700">📋 Attendance Sheet</button>
+                    <button onClick={() => exportTimeline3Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button>
+                    <button onClick={() => exportTimeline3Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button>
+                  </>
+                )}
                 {activeModalTimeline === '4' && <><button onClick={() => exportAttendanceSheet('Final Round (Finalists)', finaleRankedTeams)} className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-bold hover:bg-purple-700">📋 Attendance Sheet</button><button onClick={() => exportTimeline4Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline4Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
               </div>
             </div>
@@ -1632,42 +1663,133 @@ export default function AdminEventManagementPage() {
                 </table>
               )}
 
-              {activeModalTimeline === '3' && (
+              {activeModalTimeline === '3' && prelimsSubTab === 'scores' && (
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 uppercase font-bold text-[11px]">
                       <th className="px-3 py-2 text-center">Rank</th>
+                      <th className="px-3 py-2">Display ID</th>
                       <th className="px-3 py-2">Team Name</th>
+                      <th className="px-3 py-2">Theme</th>
                       <th className="px-3 py-2">Jury</th>
                       <th className="px-3 py-2">Lab</th>
                       <th className="px-3 py-2 text-center">Score (/50)</th>
-                      <th className="px-3 py-2 text-center">Finalist Status</th>
+                      <th className="px-3 py-2">Jury Feedback / Remarks</th>
                       <th className="px-3 py-2 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {prelimsRankedTeams.map((t, idx) => (
-                      <tr key={t.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-center font-bold text-gray-500">#{idx + 1}</td>
-                        <td className="px-3 py-2 font-bold text-gray-900">{t.teamName}</td>
-                        <td className="px-3 py-2 text-gray-600">{t.judge}</td>
-                        <td className="px-3 py-2 text-gray-600">{t.labNo}</td>
-                        <td className="px-3 py-2 text-center font-extrabold text-indigo-700">{t.score}</td>
-                        <td className="px-3 py-2 text-center">
-                          {t.finaleQualified
-                            ? <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Qualified</span>
-                            : <span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded">Not Qualified</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <button onClick={() => handleToggleQualification(t.id, Boolean(t.finaleQualified))}
-                            className="px-2 py-1 bg-white border border-gray-300 text-xs font-bold rounded hover:bg-gray-50">
-                            {t.finaleQualified ? 'Remove' : 'Make Finalist'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {prelimsRankedTeams
+                      .filter((t) => {
+                        const q = modalSearchQuery.toLowerCase();
+                        return !q || t.teamName.toLowerCase().includes(q) || t.displayId?.toLowerCase().includes(q) || t.leadEmail.toLowerCase().includes(q) || t.leadData?.name.toLowerCase().includes(q);
+                      })
+                      .map((t, idx) => {
+                        const evalRecord = prelimsScores.find((s) => s.teamId === t.id);
+                        return (
+                          <tr key={t.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-center font-bold text-gray-500">#{idx + 1}</td>
+                            <td className="px-3 py-2 font-mono font-bold text-indigo-700">{t.displayId || t.id}</td>
+                            <td className="px-3 py-2 font-bold text-gray-900">{t.teamName}</td>
+                            <td className="px-3 py-2 text-gray-600 text-[11px]">{t.theme}</td>
+                            <td className="px-3 py-2 text-gray-700 font-medium">{evalRecord?.juryName || t.judge || 'Unassigned'}</td>
+                            <td className="px-3 py-2 text-gray-700 font-medium">{t.labNo || 'Unassigned'}</td>
+                            <td className="px-3 py-2 text-center font-extrabold text-indigo-700 text-sm">{t.score}</td>
+                            <td className="px-3 py-2 text-gray-600 text-[11px] max-w-xs truncate">{evalRecord?.feedback || evalRecord?.remarks || '—'}</td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                onClick={() => handleOpenEditScore(t, evalRecord)}
+                                className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold rounded hover:bg-indigo-100 transition"
+                              >
+                                ✏️ Edit Score
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
+              )}
+
+              {activeModalTimeline === '3' && prelimsSubTab === 'selection' && (
+                <div className="space-y-3">
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider">🌟 Selected Teams for Final Round</h4>
+                      <p className="text-xs text-purple-700">Review Jury nominations & recommendations below. Toggle teams in/out of the list and click Publish when ready.</p>
+                    </div>
+                    <button
+                      onClick={handlePublishFinalists}
+                      disabled={publishingFinalists}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-bold transition shadow-sm disabled:opacity-50 shrink-0"
+                    >
+                      {publishingFinalists ? 'Publishing...' : `🚀 Publish ${selectedFinalistIds.size} Finalists`}
+                    </button>
+                  </div>
+
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 uppercase font-bold text-[11px]">
+                        <th className="px-3 py-2 text-center">SI No</th>
+                        <th className="px-3 py-2">Display ID</th>
+                        <th className="px-3 py-2">Team Name</th>
+                        <th className="px-3 py-2">Theme</th>
+                        <th className="px-3 py-2">Lab</th>
+                        <th className="px-3 py-2">Jury Nominated</th>
+                        <th className="px-3 py-2">Jury Recommendation Reason</th>
+                        <th className="px-3 py-2 text-center">Score</th>
+                        <th className="px-3 py-2 text-right">Finalist Selection</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {prelimsRankedTeams
+                        .filter((t) => {
+                          const q = modalSearchQuery.toLowerCase();
+                          return !q || t.teamName.toLowerCase().includes(q) || t.displayId?.toLowerCase().includes(q) || t.leadEmail.toLowerCase().includes(q) || t.leadData?.name.toLowerCase().includes(q);
+                        })
+                        .map((t, idx) => {
+                          const evalRecord = prelimsScores.find((s) => s.teamId === t.id);
+                          const isSelected = selectedFinalistIds.has(t.id);
+                          const isJuryNominated = Boolean(evalRecord?.selectedForFinal);
+
+                          return (
+                            <tr key={t.id} className={isSelected ? 'bg-purple-50/50' : 'hover:bg-gray-50'}>
+                              <td className="px-3 py-2 text-center font-bold text-gray-500">{idx + 1}</td>
+                              <td className="px-3 py-2 font-mono font-bold text-purple-800">{t.displayId || t.id}</td>
+                              <td className="px-3 py-2 font-bold text-gray-900">{t.teamName}</td>
+                              <td className="px-3 py-2 text-gray-600 text-[11px]">{t.theme}</td>
+                              <td className="px-3 py-2 text-gray-700 font-medium">{t.labNo || 'Unassigned'}</td>
+                              <td className="px-3 py-2">
+                                {isJuryNominated ? (
+                                  <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded border border-purple-200">
+                                    🌟 Nominated by {evalRecord?.juryName || 'Jury'}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 italic text-[10px]">Not Nominated</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-gray-700 text-[11px] max-w-xs">
+                                {evalRecord?.selectionReason || '—'}
+                              </td>
+                              <td className="px-3 py-2 text-center font-extrabold text-indigo-700 text-sm">{t.score}</td>
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  onClick={() => handleToggleFinalist(t.id)}
+                                  className={`px-3 py-1 text-xs font-bold rounded transition ${
+                                    isSelected
+                                      ? 'bg-purple-600 text-white hover:bg-purple-700'
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                                  }`}
+                                >
+                                  {isSelected ? '✓ Finalist Selected' : '+ Select Team'}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
               )}
 
               {activeModalTimeline === '4' && (
@@ -1765,6 +1887,83 @@ export default function AdminEventManagementPage() {
             </div>
             <div className="pt-2 flex justify-end">
               <button onClick={() => setSelectedTeamForMembers(null)} className="px-4 py-2 bg-gray-800 text-white text-xs font-bold rounded-sm">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {editingScoreItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[70]">
+          <div className="bg-white rounded-sm max-w-lg w-full shadow-2xl overflow-hidden border border-gray-300">
+            <div className="p-4 bg-indigo-900 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-bold">✏️ Edit Score & Assignment</h3>
+                <p className="text-xs text-indigo-200 mt-0.5">{editingScoreItem.team.teamName} ({editingScoreItem.team.displayId || editingScoreItem.team.id})</p>
+              </div>
+              <button onClick={() => setEditingScoreItem(null)} className="text-indigo-300 hover:text-white font-bold text-base">✕</button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Concept Strength (Max 12)</label>
+                  <input type="number" min={0} max={12} value={editScoreConcept} onChange={(e) => setEditScoreConcept(Number(e.target.value))}
+                    className="w-full bg-gray-50 border border-gray-300 rounded p-1.5 text-xs font-bold text-center" />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Build Intelligence (Max 12)</label>
+                  <input type="number" min={0} max={12} value={editScoreBuild} onChange={(e) => setEditScoreBuild(Number(e.target.value))}
+                    className="w-full bg-gray-50 border border-gray-300 rounded p-1.5 text-xs font-bold text-center" />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Delivery Impact (Max 8)</label>
+                  <input type="number" min={0} max={8} value={editScoreDelivery} onChange={(e) => setEditScoreDelivery(Number(e.target.value))}
+                    className="w-full bg-gray-50 border border-gray-300 rounded p-1.5 text-xs font-bold text-center" />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Live Defense Score (Max 8)</label>
+                  <input type="number" min={0} max={8} value={editScoreDefense} onChange={(e) => setEditScoreDefense(Number(e.target.value))}
+                    className="w-full bg-gray-50 border border-gray-300 rounded p-1.5 text-xs font-bold text-center" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Communication (Max 10)</label>
+                <input type="number" min={0} max={10} value={editScoreComm} onChange={(e) => setEditScoreComm(Number(e.target.value))}
+                  className="w-full bg-gray-50 border border-gray-300 rounded p-1.5 text-xs font-bold text-center" />
+              </div>
+
+              <div className="p-2 bg-indigo-50 border border-indigo-200 rounded flex justify-between items-center font-bold text-indigo-900">
+                <span>Calculated Total Score:</span>
+                <span className="text-sm text-indigo-700">{editScoreConcept + editScoreBuild + editScoreDelivery + editScoreDefense + editScoreComm} / 50</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Assigned Jury / Judge</label>
+                  <input type="text" value={editScoreJudge} onChange={(e) => setEditScoreJudge(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-300 rounded p-1.5 text-xs" />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Assigned Lab / Venue</label>
+                  <input type="text" value={editScoreLab} onChange={(e) => setEditScoreLab(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-300 rounded p-1.5 text-xs" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Feedback / Remarks</label>
+                <textarea rows={2} value={editScoreFeedback} onChange={(e) => setEditScoreFeedback(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 rounded p-2 text-xs" />
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-2">
+              <button onClick={() => setEditingScoreItem(null)} className="px-3 py-1.5 bg-gray-200 text-gray-700 font-bold rounded text-xs">
+                Cancel
+              </button>
+              <button onClick={handleSaveScoreEdit} disabled={savingScoreEdit} className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded text-xs disabled:opacity-50">
+                {savingScoreEdit ? 'Saving...' : '💾 Save Score & Assignments'}
+              </button>
             </div>
           </div>
         </div>

@@ -3,6 +3,7 @@ import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { redirect } from 'next/navigation';
 import { getUserRole } from '@/app/actions/session';
 import CoordClientDashboard from './CoordClientDashboard';
+import { getAllTeamsFlatCached } from '@/lib/firestore-helpers';
 
 export default async function CoordDashboard() {
   const cookieStore = await cookies();
@@ -42,30 +43,9 @@ export default async function CoordDashboard() {
     console.error('Error fetching coord details', err);
   }
 
-  const teams: any[] = [];
+  let teams: any[] = [];
   try {
-    const teamsSnap = await getAdminDb().collection('teams').get();
-    
-    const serializeData = (obj: any): any => {
-      if (obj === null || obj === undefined) return obj;
-      if (typeof obj.toDate === 'function') return obj.toDate().toISOString();
-      if (Array.isArray(obj)) return obj.map(serializeData);
-      if (typeof obj === 'object') {
-        const result: any = {};
-        for (const key in obj) {
-          result[key] = serializeData(obj[key]);
-        }
-        return result;
-      }
-      return obj;
-    };
-
-    teamsSnap.docs.forEach(doc => {
-      teams.push({
-        id: doc.id,
-        ...serializeData(doc.data())
-      });
-    });
+    teams = await getAllTeamsFlatCached();
   } catch (err) {
     console.error('Error fetching teams', err);
   }

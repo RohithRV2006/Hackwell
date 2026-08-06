@@ -3,6 +3,7 @@
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import { getUserRole } from '@/app/actions/session';
 import { cookies } from 'next/headers';
+import { findTeamByLeadEmail } from '@/lib/firestore-helpers';
 
 /**
  * Checks if the email is registered as a Team (Student) lead
@@ -22,13 +23,9 @@ export async function checkTeamEmailRegistered(email: string) {
     }
 
     // Verify the email exists in the teams collection as leadEmail
-    const db = getAdminDb();
-    const snapshot = await db.collection('teams')
-      .where('leadEmail', '==', sanitizedEmail)
-      .limit(1)
-      .get();
+    const found = await findTeamByLeadEmail(sanitizedEmail);
 
-    if (snapshot.empty) {
+    if (!found) {
       return { 
         success: false, 
         error: 'This email is not registered as a team lead.' 

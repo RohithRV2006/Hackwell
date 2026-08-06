@@ -2,6 +2,7 @@
 
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { verifyAdminSession, getCachedDocs, invalidateCollectionCache } from '@/app/admin/actions';
+import { getRoles, getEvalRecords } from '@/lib/firestore-helpers';
 import { encryptJSON, decryptJSON } from '@/lib/encryption';
 import { isAdminEmail } from '@/app/actions/session';
 
@@ -27,18 +28,16 @@ export async function getAllUsersAdmin(): Promise<{ success: boolean; users?: Ad
     const authUsers = listUsersResult.users;
 
     // Fetch roles from Firestore
-    const snapshot = await getCachedDocs('roles');
+    const rolesList = await getRoles();
     const roleDocs: Record<string, { role: string; name?: string; department?: string; institution?: string }> = {};
 
-    (snapshot.docs || []).forEach((doc: any) => {
-      const data = doc.data();
-
-      const docId = doc.id.toLowerCase().trim();
+    rolesList.forEach((r: any) => {
+      const docId = (r.email || '').toLowerCase().trim();
       roleDocs[docId] = {
-        role: data.role || 'unknown',
-        name: data.name,
-        department: data.department,
-        institution: data.institution,
+        role: r.role || 'unknown',
+        name: r.name,
+        department: r.department,
+        institution: r.institution,
       };
     });
 
@@ -235,26 +234,44 @@ export async function deleteUserAdmin(email: string): Promise<{ success: boolean
 
     const db = getAdminDb();
     const auth = getAdminAuth();
+    const cleanEmail = email.toLowerCase().trim();
 
-    // Get role before deleting so we can clean up sub-collections
-    const roleDoc = await db.collection('roles').doc(email.toLowerCase()).get();
-    const role = roleDoc.data()?.role;
+    // Get role before deleting
+    const roleDoc = await db.collection('roles').doc(cleanEmail).get();
+    if (!roleDoc.exists) {
+      return { success: false, error: 'User role record not found.' };
+    }
+    const roleData = roleDoc.data();
+    const role = roleData?.role;
 
-    // 1. Delete from roles collection
-    await db.collection('roles').doc(email.toLowerCase()).delete();
-
-    // 2. Delete from specific collections based on role
     if (role === 'jury') {
-      const juryName = roleDoc.data()?.name || '';
+      const juryName = roleData?.name || '';
       
+      // Check if jury has submitted evaluations in prelims or finale
+      const [prelimsEvals, finaleEvals] = await Promise.all([
+        getEvalRecords('prelims'),
+        getEvalRecords('finale'),
+      ]);
+
+      const hasEvals = [...prelimsEvals, ...finaleEvals].some(
+        (e) => e.juryId === cleanEmail || (juryName && e.juryName?.toLowerCase() === juryName.toLowerCase())
+      );
+
+      if (hasEvals) {
+        return {
+          success: false,
+          error: `Cannot delete Jury "${juryName || cleanEmail}": This jury member has submitted evaluations. Delete or clear their evaluations before removing the account.`,
+        };
+      }
+
       // Unassign deleted Jury from labs
       if (juryName) {
         const labsSnap = await db.collection('labs').get();
         const labBatch = db.batch();
         let labCount = 0;
         labsSnap.docs.forEach((labDoc) => {
-          if (labDoc.data().assignedJuryName?.toLowerCase() === juryName.toLowerCase()) {
-            labBatch.update(labDoc.ref, { assignedJuryName: 'Unassigned', updatedAt: new Date() });
+          if (labDoc.data().assignedJuryName?.toLowerCase() === juryName.toLowerCase() || labDoc.data().assignedJuryId === cleanEmail) {
+            labBatch.update(labDoc.ref, { assignedJuryName: 'Unassigned', assignedJuryId: '', updatedAt: new Date() });
             labCount++;
           }
         });
@@ -264,9 +281,12 @@ export async function deleteUserAdmin(email: string): Promise<{ success: boolean
       }
     }
 
-    // 3. Delete from Firebase Auth
+    // 1. Delete from roles collection
+    await db.collection('roles').doc(cleanEmail).delete();
+
+    // 2. Delete from Firebase Auth
     try {
-      const userRecord = await auth.getUserByEmail(email);
+      const userRecord = await auth.getUserByEmail(cleanEmail);
       await auth.deleteUser(userRecord.uid);
     } catch (authErr: any) {
       if (authErr.code !== 'auth/user-not-found') {
@@ -275,9 +295,11 @@ export async function deleteUserAdmin(email: string): Promise<{ success: boolean
     }
 
     invalidateCollectionCache('roles');
+    invalidateCollectionCache('labs');
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting user:', error);
     return { success: false, error: error.message || 'Failed to delete user' };
   }
 }
+

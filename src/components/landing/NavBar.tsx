@@ -21,7 +21,7 @@ export default function NavBar() {
     try {
       await signOut(auth);
       await clearSessionCookie();
-      window.location.reload();
+      window.location.href = '/login';
     } catch (error) {
       console.error('Logout failed', error);
     }
@@ -58,8 +58,9 @@ export default function NavBar() {
           switch(userRole) {
             case 'admin': setDashboardUrl('/admin'); break;
             case 'jury': setDashboardUrl('/jury-dashboard'); break;
-            case 'student-coord': setDashboardUrl('/student-coord-dashboard'); break;
-            case 'faculty-coord': setDashboardUrl('/faculty-coord-dashboard'); break;
+            case 'student-coord': 
+            case 'faculty-coord':
+            case 'coordinator': setDashboardUrl('/coord-dashboard'); break;
             default: setDashboardUrl('/team-dashboard'); break;
           }
         } catch (error) {
@@ -86,37 +87,22 @@ export default function NavBar() {
             <a href="#rules" className="text-gray-700 hover:text-blue-600 font-medium transition">Rules</a>
             
             {user ? (
-              <div className="flex items-center space-x-4">
-                <Link href={dashboardUrl} className="px-5 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md transition">
+              <div className="flex items-center space-x-3">
+                <Link href={dashboardUrl} className="px-4 py-1.5 text-sm rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-sm transition">
                   Dashboard
                 </Link>
-                <button onClick={handleLogout} className="px-5 py-2 rounded-lg border-2 border-red-500 text-red-500 font-bold hover:bg-red-50 transition">
+                <button onClick={handleLogout} className="px-4 py-1.5 text-sm rounded-md border border-red-500 text-red-500 font-bold hover:bg-red-50 transition">
                   Logout
                 </button>
               </div>
             ) : (
-              <div className="flex items-center space-x-4">
-                <Link href="/login" className="text-blue-600 font-bold hover:text-blue-700 transition">Login</Link>
+              <div className="flex items-center space-x-3">
+                <Link href="/login" className="text-blue-600 font-bold hover:text-blue-700 transition text-sm px-3 py-1.5">Login</Link>
                 
-                {isRegistrationOpen ? (
-                  <Link href="/register" className="px-5 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md transition">
+                {isRegistrationOpen === true && (
+                  <Link href="/register" className="px-4 py-1.5 text-sm rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-sm transition">
                     Register
                   </Link>
-                ) : (
-                  <div className="relative group">
-                    <button 
-                      disabled
-                      aria-disabled="true"
-                      tabIndex={-1}
-                      className="px-5 py-2 rounded-lg bg-gray-300 text-gray-500 font-bold blur-[0.5px] opacity-70 cursor-not-allowed select-none pointer-events-none flex items-center gap-1.5 border border-gray-300"
-                    >
-                      <Lock size={15} />
-                      Register
-                    </button>
-                    <div className="absolute top-full right-0 mt-2 hidden group-hover:block w-48 bg-gray-900 text-white text-xs rounded p-2 text-center shadow-lg z-50">
-                      {registrationMsg || 'Registration Not Started By Admin'}
-                    </div>
-                  </div>
                 )}
               </div>
             )}
@@ -139,24 +125,15 @@ export default function NavBar() {
             <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
               {user ? (
                 <>
-                  <Link href={dashboardUrl} className="block text-center px-4 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Dashboard</Link>
-                  <button onClick={handleLogout} className="block w-full text-center px-4 py-3 rounded-lg border-2 border-red-500 text-red-500 font-bold hover:bg-red-50 transition">Logout</button>
+                  <Link href={dashboardUrl} className="block text-center px-4 py-2 text-sm rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Dashboard</Link>
+                  <button onClick={handleLogout} className="block w-full text-center px-4 py-2 text-sm rounded-md border border-red-500 text-red-500 font-bold hover:bg-red-50 transition">Logout</button>
                 </>
               ) : (
                 <>
-                  <Link href="/login" className="block text-center px-4 py-3 rounded-lg border-2 border-blue-600 text-blue-600 font-bold hover:bg-blue-50 transition">Login</Link>
+                  <Link href="/login" className="block text-center px-4 py-2 text-sm rounded-md border border-blue-600 text-blue-600 font-bold hover:bg-blue-50 transition">Login</Link>
                   
-                  {isRegistrationOpen ? (
-                    <Link href="/register" className="block text-center px-4 py-3 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Register</Link>
-                  ) : (
-                    <button
-                      disabled
-                      aria-disabled="true"
-                      tabIndex={-1}
-                      className="block w-full text-center px-4 py-3 rounded-lg bg-gray-300 text-gray-500 font-bold blur-[0.5px] opacity-70 cursor-not-allowed select-none pointer-events-none"
-                    >
-                      🔒 Register (Closed)
-                    </button>
+                  {isRegistrationOpen === true && (
+                    <Link href="/register" className="block text-center px-4 py-2 text-sm rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Register</Link>
                   )}
                 </>
               )}

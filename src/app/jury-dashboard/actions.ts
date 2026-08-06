@@ -3,6 +3,16 @@
 import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { getUserRole } from '@/app/actions/session';
+import {
+  getAllTeamsFlatCached,
+  findTeamInDomainDocs,
+  updateTeamInDomainDoc,
+  getEvalRecords,
+  upsertEvalRecord,
+  getEventTimelines,
+  getLabs,
+  getRoles,
+} from '@/lib/firestore-helpers';
 
 export interface SimpleTeam {
   id: string; // teamName lowercase or doc.id
@@ -14,6 +24,7 @@ export interface SimpleTeam {
   judge?: string;
   labNo?: string;
   isAssignedToJury?: boolean;
+  selectedForFinal?: boolean;
 }
 
 export interface DetailedTeam {
@@ -54,6 +65,8 @@ export interface EvaluationData {
   rubric: Rubric;
   totalScore: number;
   feedback: string;
+  selectedForFinal?: boolean;
+  selectionReason?: string;
   isFrozen: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -71,40 +84,33 @@ export async function verifyJurySession() {
   try {
     const decodedToken = await getAdminAuth().verifySessionCookie(sessionCookie, true);
     if (!decodedToken.email) return { success: false, error: 'Invalid session' };
-    
+
     const email = decodedToken.email.trim().toLowerCase();
-    const role = decodedToken.role || await getUserRole(email);
-    
+    const role = decodedToken.role || (await getUserRole(email));
+
     if (role !== 'jury') {
       return { success: false, error: 'Unauthorized: Jury role required' };
     }
 
-    const db = getAdminDb();
     let juryName = email.split('@')[0];
     juryName = juryName.charAt(0).toUpperCase() + juryName.slice(1);
     let juryId = email;
 
     // Retrieve name and info from roles collection
-    const roleDoc = await db.collection('roles').doc(email).get();
-    if (roleDoc.exists) {
-      const data = roleDoc.data();
-      juryName = data?.name || data?.juryName || juryName;
-      if (data?.juryId) juryId = data.juryId;
-    } else {
-      const juryDoc = await db.collection('jury').doc(email).get();
-      if (juryDoc.exists) {
-        const data = juryDoc.data();
-        juryName = data?.juryName || data?.name || juryName;
-      }
+    const roles = await getRoles();
+    const roleData = roles.find((r) => String(r.email).toLowerCase() === email);
+
+    if (roleData) {
+      juryName = roleData.name || roleData.juryName || juryName;
+      if (roleData.juryId) juryId = roleData.juryId;
     }
 
     // Retrieve assigned lab from labs collection
     let labName = 'N/A';
     let assignedLabId = '';
     try {
-      const labsSnap = await db.collection('labs').get();
-      const matchedLab = labsSnap.docs.find(doc => {
-        const data = doc.data();
+      const labs = await getLabs();
+      const matchedLab = labs.find((data: any) => {
         const ajName = (data.assignedJuryName || '').trim().toLowerCase();
         const ajId = (data.assignedJuryId || '').trim().toLowerCase();
         const em = email.toLowerCase();
@@ -113,20 +119,20 @@ export async function verifyJurySession() {
         return ajName === jn || ajName === em || ajId === em || ajId === ji || ajName === ji;
       });
       if (matchedLab) {
-        labName = matchedLab.data().labName || matchedLab.data().labCode || matchedLab.id;
-        assignedLabId = matchedLab.id;
+        labName = matchedLab.labName || matchedLab.labCode || matchedLab.labId;
+        assignedLabId = matchedLab.labId;
       }
     } catch (e) {
       console.error('Error fetching lab assignment:', e);
     }
 
-    return { 
-      success: true, 
-      email, 
-      juryName, 
+    return {
+      success: true,
+      email,
+      juryName,
       labName,
       juryId,
-      assignedLabId
+      assignedLabId,
     };
   } catch (error: any) {
     console.error('Error verifying jury session:', error);
@@ -144,100 +150,87 @@ export async function getJuryDashboardData() {
   }
 
   try {
-    const db = getAdminDb();
-    
-    // 1. Fetch all teams
-    const teamsSnap = await db.collection('teams').get();
-    if (teamsSnap.empty) {
+    // 1. Fetch all teams from domain cache
+    const allTeams = await getAllTeamsFlatCached();
+    if (allTeams.length === 0) {
       return { success: true, teams: [] };
     }
 
-    const teamDocs = teamsSnap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+    // 2. Fetch score records in evaluations/prelims
+    const prelimsRecords = await getEvalRecords('prelims');
+    const scoreMap = new Map<string, { isFrozen: boolean; totalScore: number; selectedForFinal: boolean }>();
 
-    // 2. Fetch score records in the new evaluations table for this jury (prelims round)
-    const scoresSnap = await db.collection('evaluations')
-      .where('round', '==', 'prelims')
-      .where('juryId', '==', session.juryId)
-      .get();
+    prelimsRecords.forEach((r) => {
+      const matchJury =
+        r.juryId === session.juryId ||
+        r.juryId === session.email ||
+        (r.juryName && r.juryName.toLowerCase() === session.juryName.toLowerCase());
 
-    const scoreMap = new Map<string, { isFrozen: boolean; totalScore: number }>();
-
-    const processEvalDoc = (doc: any) => {
-      const data = doc.data();
-      const matchJury = data.juryId === session.juryId || 
-                        data.juryId === session.email || 
-                        (data.juryName && data.juryName.toLowerCase() === session.juryName.toLowerCase());
-      if (matchJury && data.teamId) {
-        const cleanTeamId = data.teamId.trim();
+      if (matchJury && r.teamId) {
+        const cleanTeamId = r.teamId.trim();
         scoreMap.set(cleanTeamId, {
-          isFrozen: data.isFrozen === true,
-          totalScore: typeof data.totalScore === 'number' ? data.totalScore : 0
+          isFrozen: r.isFrozen === true,
+          totalScore: typeof r.totalScore === 'number' ? r.totalScore : 0,
+          selectedForFinal: Boolean(r.selectedForFinal),
         });
       }
-    };
-
-    scoresSnap.docs.forEach(processEvalDoc);
+    });
 
     // 3. Check Phase 3 (Prelims Round) timeline status
     let prelimsActive = false;
     let prelimsState: 'not-set' | 'active' | 'ended' = 'not-set';
     try {
-      const timelinesDoc = await db.collection('metadata').doc('eventTimelines').get();
-      if (timelinesDoc.exists) {
-        const t3 = timelinesDoc.data()?.timeline3;
-        if (t3) {
-          prelimsState = t3.state || 'not-set';
-          prelimsActive = t3.state === 'active' && t3.enabled !== false;
-        }
+      const timelines = await getEventTimelines();
+      if (timelines?.timeline3) {
+        const t3 = timelines.timeline3;
+        prelimsState = t3.state || 'not-set';
+        prelimsActive = t3.state === 'active' && t3.enabled !== false;
       }
     } catch (err) {
       console.error('Error checking timeline status:', err);
     }
 
     // 4. Map teams list with assignment tracking
-    const teams: SimpleTeam[] = teamDocs.map(doc => {
-      const cleanId = doc.id.trim();
+    const teams: SimpleTeam[] = allTeams.map((t) => {
+      const cleanId = t.id.trim();
       const scoreInfo = scoreMap.get(cleanId);
 
-      const judgeVal = doc.judge || 'Unassigned';
-      const labNoVal = doc.labNo || doc.assignedLabName || 'Unassigned';
+      const judgeVal = t.judge || 'Unassigned';
+      const labNoVal = t.labNo || t.assignedLabName || 'Unassigned';
 
-      const isAssignedToJury = 
-        (judgeVal !== 'Unassigned' && (
-          judgeVal.toLowerCase() === session.juryName.toLowerCase() ||
-          judgeVal.toLowerCase() === session.email.toLowerCase() ||
-          judgeVal.toLowerCase() === session.juryId.toLowerCase()
-        )) ||
-        (labNoVal !== 'Unassigned' && session.labName !== 'N/A' && (
-          labNoVal.toLowerCase() === session.labName.toLowerCase()
-        )) ||
-        (doc.assignedLabId && session.assignedLabId && doc.assignedLabId === session.assignedLabId);
+      const isAssignedToJury =
+        (judgeVal !== 'Unassigned' &&
+          (judgeVal.toLowerCase() === session.juryName.toLowerCase() ||
+            judgeVal.toLowerCase() === session.email.toLowerCase() ||
+            judgeVal.toLowerCase() === session.juryId.toLowerCase())) ||
+        (labNoVal !== 'Unassigned' &&
+          session.labName !== 'N/A' &&
+          labNoVal.toLowerCase() === session.labName.toLowerCase()) ||
+        (t.assignedLabId && session.assignedLabId && t.assignedLabId === session.assignedLabId);
 
       return {
-        id: doc.id,
-        teamName: doc.teamName || doc.id,
-        displayId: doc.displayId || doc.id,
+        id: t.id,
+        teamName: t.teamName || t.id,
+        displayId: t.displayId || t.id,
         evaluationStatus: scoreInfo !== undefined ? 'Evaluated' : 'Pending',
         isFrozen: scoreInfo ? scoreInfo.isFrozen : false,
         totalScore: scoreInfo ? scoreInfo.totalScore : undefined,
         judge: judgeVal,
         labNo: labNoVal,
-        isAssignedToJury: !!isAssignedToJury
+        isAssignedToJury: !!isAssignedToJury,
+        selectedForFinal: scoreInfo ? scoreInfo.selectedForFinal : false,
       };
     });
 
-    const assignedTeams = teams.filter(t => t.isAssignedToJury);
-
-    // Sort alphabetically by team name
+    const assignedTeams = teams.filter((t) => t.isAssignedToJury);
     assignedTeams.sort((a, b) => a.teamName.localeCompare(b.teamName));
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       teams: assignedTeams,
       prelimsActive,
-      prelimsState
+      prelimsState,
     };
-
   } catch (error: any) {
     console.error('Error fetching jury dashboard data:', error);
     return { success: false, error: error.message || 'Failed to fetch dashboard data' };
@@ -245,7 +238,7 @@ export async function getJuryDashboardData() {
 }
 
 /**
- * Fetch detailed team information and decryption of PII.
+ * Fetch detailed team information.
  */
 export async function getTeamDetails(teamId: string) {
   const session = await verifyJurySession();
@@ -254,58 +247,64 @@ export async function getTeamDetails(teamId: string) {
   }
 
   try {
-    const db = getAdminDb();
     const cleanTeamId = teamId.trim();
-    
-    // Fetch team details
-    const teamDoc = await db.collection('teams').doc(cleanTeamId).get();
-    if (!teamDoc.exists) {
+
+    // Fetch team details from domain docs
+    const found = await findTeamInDomainDocs(cleanTeamId);
+    if (!found) {
       return { success: false, error: 'Team not found' };
     }
 
-    const data = teamDoc.data()!;
-    const leadData = data.leadData || { name: 'N/A', batchNumber: 'N/A', department: 'N/A', year: 'N/A', section: 'N/A', contactNumber: 'N/A' };
+    const data = found.team;
+    const leadData = data.leadData || {
+      name: 'N/A',
+      batchNumber: 'N/A',
+      department: 'N/A',
+      year: 'N/A',
+      section: 'N/A',
+      contactNumber: 'N/A',
+    };
     const membersData = data.membersData || [];
 
     const teamDetails: DetailedTeam = {
-      id: teamDoc.id,
-      teamName: data.teamName || teamDoc.id,
-      displayId: data.displayId || teamDoc.id,
+      id: data.id,
+      teamName: data.teamName || data.id,
+      displayId: data.displayId || data.id,
       leadData,
-      membersData
+      membersData,
     };
 
-    // Fetch existing evaluation in the new table evaluations
-    const docId = `prelims_${session.juryId}_${cleanTeamId}`;
-    const existingDoc = await db.collection('evaluations').doc(docId).get();
+    // Fetch existing evaluation in evaluations/prelims
+    const evalId = `prelims_${session.juryId}_${cleanTeamId}`;
+    const records = await getEvalRecords('prelims');
+    const existingRec = records.find((r) => r.id === evalId || (r.teamId === cleanTeamId && r.juryId === session.juryId));
 
     let scoreData: EvaluationData | undefined = undefined;
-    if (existingDoc.exists) {
-      const scoreDoc = existingDoc.data()!;
-      const r = scoreDoc.rubric || {};
+    if (existingRec) {
+      const r = existingRec.rubric || ({} as any);
       scoreData = {
-        teamName: scoreDoc.teamName || data.teamName || teamDoc.id,
-        displayId: scoreDoc.displayId || data.displayId || teamDoc.id,
-        teamId: scoreDoc.teamId || cleanTeamId,
-        juryId: scoreDoc.juryId || session.juryId,
-        juryName: scoreDoc.juryName || session.juryName,
+        teamName: existingRec.teamName || data.teamName || data.id,
+        displayId: (existingRec as any).displayId || data.displayId || data.id,
+        teamId: existingRec.teamId || cleanTeamId,
+        juryId: existingRec.juryId || session.juryId,
+        juryName: existingRec.juryName || session.juryName,
         rubric: {
-          conceptStrength: r.conceptStrength ?? (r.problemStatement ? Math.round((r.problemStatement / 10) * 12) : 0),
-          buildIntelligence: r.buildIntelligence ?? (r.solution ? Math.round((r.solution / 10) * 12) : 0),
-          deliveryImpact: r.deliveryImpact ?? (r.presentation ? Math.round((r.presentation / 10) * 8) : 0),
-          liveDefenseScore: r.liveDefenseScore ?? (r.idea ? Math.round((r.idea / 10) * 8) : 0),
+          conceptStrength: r.conceptStrength ?? 0,
+          buildIntelligence: r.buildIntelligence ?? 0,
+          deliveryImpact: r.deliveryImpact ?? 0,
+          liveDefenseScore: r.liveDefenseScore ?? 0,
           communication: r.communication ?? 0,
         },
-        feedback: scoreDoc.feedback || scoreDoc.remarks || '',
-        totalScore: scoreDoc.totalScore ?? 0,
-        isFrozen: scoreDoc.isFrozen === true,
-        createdAt: scoreDoc.createdAt ? (scoreDoc.createdAt.toDate ? scoreDoc.createdAt.toDate().toISOString() : scoreDoc.createdAt) : undefined,
-        updatedAt: scoreDoc.updatedAt ? (scoreDoc.updatedAt.toDate ? scoreDoc.updatedAt.toDate().toISOString() : scoreDoc.updatedAt) : undefined,
+        feedback: existingRec.feedback || existingRec.remarks || '',
+        totalScore: existingRec.totalScore ?? 0,
+        selectedForFinal: Boolean(existingRec.selectedForFinal),
+        selectionReason: existingRec.selectionReason || '',
+        isFrozen: existingRec.isFrozen === true,
+        createdAt: existingRec.createdAt || undefined,
       };
     }
 
     return { success: true, teamDetails, scoreData };
-
   } catch (error: any) {
     console.error('Error fetching team details:', error);
     return { success: false, error: error.message || 'Failed to fetch team details' };
@@ -313,14 +312,16 @@ export async function getTeamDetails(teamId: string) {
 }
 
 /**
- * Save evaluation for a team inside the new evaluations table and freeze it.
+ * Save evaluation for a team inside evaluations/prelims and freeze it.
  */
 export async function submitAndFreezeEvaluation(
   teamId: string,
   teamName: string,
   displayId: string,
   rubric: Rubric,
-  feedback: string
+  feedback: string,
+  selectedForFinal: boolean = false,
+  selectionReason: string = ''
 ) {
   const session = await verifyJurySession();
   if (!session.success || !session.email || !session.juryName) {
@@ -328,28 +329,30 @@ export async function submitAndFreezeEvaluation(
   }
 
   const cleanTeamId = teamId.trim();
-  const docId = `prelims_${session.juryId}_${cleanTeamId}`;
-  const db = getAdminDb();
 
   // Check Phase 3 (Prelims Round) timeline status
   let prelimsActive = false;
   try {
-    const timelinesDoc = await db.collection('metadata').doc('eventTimelines').get();
-    if (timelinesDoc.exists) {
-      const t3 = timelinesDoc.data()?.timeline3;
-      prelimsActive = t3?.state === 'active' && t3?.enabled !== false;
-    }
+    const timelines = await getEventTimelines();
+    const t3 = timelines?.timeline3;
+    prelimsActive = t3?.state === 'active' && t3?.enabled !== false;
   } catch (err) {
     console.error('Error checking timeline status:', err);
   }
 
   if (!prelimsActive) {
-    return { success: false, error: 'Cannot submit evaluation: Phase 3 (Prelims Round) has not been activated by the admin.' };
+    return {
+      success: false,
+      error: 'Cannot submit evaluation: Phase 3 (Prelims Round) has not been activated by the admin.',
+    };
   }
 
   // Check if already frozen
-  const existingDoc = await db.collection('evaluations').doc(docId).get();
-  if (existingDoc.exists && existingDoc.data()?.isFrozen === true) {
+  const evalId = `prelims_${session.juryId}_${cleanTeamId}`;
+  const records = await getEvalRecords('prelims');
+  const existingRec = records.find((r) => r.id === evalId || (r.teamId === cleanTeamId && r.juryId === session.juryId));
+
+  if (existingRec && existingRec.isFrozen) {
     return { success: false, error: 'Cannot save: Your scores for this team are already frozen.' };
   }
 
@@ -359,7 +362,7 @@ export async function submitAndFreezeEvaluation(
     { key: 'buildIntelligence', max: 12, label: 'Build Intelligence' },
     { key: 'deliveryImpact', max: 8, label: 'Delivery Impact' },
     { key: 'liveDefenseScore', max: 8, label: 'Live Defense Score' },
-    { key: 'communication', max: 10, label: 'Communication' }
+    { key: 'communication', max: 10, label: 'Communication' },
   ] as const;
 
   for (const config of scoreConfig) {
@@ -372,22 +375,19 @@ export async function submitAndFreezeEvaluation(
     }
   }
 
-  const totalScore = rubric.conceptStrength + rubric.buildIntelligence + rubric.deliveryImpact + rubric.liveDefenseScore + rubric.communication;
+  const totalScore =
+    rubric.conceptStrength +
+    rubric.buildIntelligence +
+    rubric.deliveryImpact +
+    rubric.liveDefenseScore +
+    rubric.communication;
 
   try {
-    // Verify team exists
-    const teamDoc = await db.collection('teams').doc(cleanTeamId).get();
-    if (!teamDoc.exists) {
-      return { success: false, error: 'Team not found.' };
-    }
-
-    const now = new Date();
-    const createdTime = existingDoc.exists ? (existingDoc.data()?.createdAt || now) : now;
-    
     const evaluationPayload = {
+      id: evalId,
       round: 'prelims',
-      teamName: teamName,
-      displayId: displayId,
+      teamName,
+      displayId,
       teamId: cleanTeamId,
       juryId: session.juryId,
       juryName: session.juryName,
@@ -398,37 +398,35 @@ export async function submitAndFreezeEvaluation(
         liveDefenseScore: rubric.liveDefenseScore,
         communication: rubric.communication,
       },
-      totalScore: totalScore,
+      totalScore,
       feedback: feedback.trim(),
       remarks: feedback.trim(),
+      selectedForFinal: Boolean(selectedForFinal),
+      selectionReason: selectionReason.trim(),
       isFrozen: true,
-      createdAt: createdTime,
-      updatedAt: now
     };
 
-    await db.collection('evaluations').doc(docId).set(evaluationPayload, { merge: true });
+    const res = await upsertEvalRecord('prelims', evaluationPayload);
+    if (!res.success) {
+      return { success: false, error: res.error || 'Failed to save evaluation' };
+    }
 
-    // Update team document's judge and labNo if unassigned
-    const teamData = teamDoc.data() || {};
+    // Update team document's judge and labNo if session has lab info
     const teamUpdates: Record<string, any> = {};
-    if (!teamData.judge || teamData.judge === 'Unassigned') {
+    if (session.juryName) {
       teamUpdates.judge = session.juryName;
     }
-    if (!teamData.labNo || teamData.labNo === 'Unassigned') {
-      if (session.labName && session.labName !== 'N/A') {
-        teamUpdates.labNo = session.labName;
-        teamUpdates.assignedLabName = session.labName;
-      }
+    if (session.labName && session.labName !== 'N/A') {
+      teamUpdates.labNo = session.labName;
+      teamUpdates.assignedLabName = session.labName;
     }
     if (Object.keys(teamUpdates).length > 0) {
-      await teamDoc.ref.update(teamUpdates);
+      await updateTeamInDomainDoc(cleanTeamId, teamUpdates);
     }
 
     return { success: true };
-
   } catch (error: any) {
     console.error('Error saving and freezing evaluation:', error);
     return { success: false, error: error.message || 'Failed to save evaluation' };
   }
 }
-

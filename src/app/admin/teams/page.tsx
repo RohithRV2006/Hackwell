@@ -225,8 +225,8 @@ export default function AdminTeamsPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-sm border border-gray-200 shadow-sm gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Team Management &amp; Prelims Filter</h2>
-          <p className="text-sm text-gray-500 mt-1">View registered teams, verify PPT submissions, and filter qualified teams for Prelims.</p>
+          <h2 className="text-2xl font-bold text-gray-900">Team Details &amp; Directory</h2>
+          <p className="text-sm text-gray-500 mt-1">View registered teams, student members, and verify PPT submission status.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <input
@@ -242,20 +242,6 @@ export default function AdminTeamsPage() {
             className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-blue-600 border border-gray-300 rounded-sm text-sm font-bold transition duration-200"
           >
             Refresh
-          </button>
-          <button
-            onClick={handleResetPrelimsFilters}
-            disabled={filterApplying}
-            className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-sm font-bold transition duration-200 disabled:opacity-50"
-          >
-            🔄 Reset Prelims Filters
-          </button>
-          <button
-            onClick={handleRunPptFilter}
-            disabled={filterApplying}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-sm font-bold transition duration-200 shadow-sm disabled:opacity-50"
-          >
-            {filterApplying ? 'Processing...' : '⚡ Apply PPT Filter'}
           </button>
         </div>
       </div>
