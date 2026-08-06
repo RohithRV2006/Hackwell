@@ -10,6 +10,7 @@ import { THEME_NAMES } from '@/lib/data/themes';
 import {
   publishJurySelectedFinalists,
   upsertEvalRecord,
+  getEvalRecords,
   updateTeamInDomainDoc,
   getAllTeamsFlatFromDomainDocs,
   findTeamInDomainDocs,
@@ -459,9 +460,9 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
   try {
     const db = getAdminDb();
     
-    // We fetch teams and roles for mapping names
-    const [snapshot, rolesSnap, allTeams] = await Promise.all([
-      db.collection('evaluations').where('round', '==', round).get(),
+    // Fetch evaluation records using canonical helper
+    const [evalRecords, rolesSnap, allTeams] = await Promise.all([
+      getEvalRecords(round),
       db.collection('roles').where('role', '==', 'jury').get(),
       getAllTeamsFlatFromDomainDocs(),
     ]);
@@ -477,49 +478,23 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
     const juryMap = new Map<string, string>();
     rolesSnap.docs?.forEach((doc: any) => {
       const data = doc.data();
-      const name = data.name || doc.id;
+      const name = data.name || data.juryName || doc.id;
       juryMap.set(doc.id, name);
     });
 
-    const docMap = new Map<string, any>();
-    snapshot.docs?.forEach((doc: any) => {
-      docMap.set(doc.id, doc);
-    });
+    const scores: AdminScoreData[] = evalRecords.map((r) => {
+      const teamInfo = teamMap.get(r.teamId || '');
+      const juryName = r.juryName || juryMap.get(r.juryId) || 'Unknown Jury';
 
-    const scores: AdminScoreData[] = [];
-
-    for (const doc of Array.from(docMap.values())) {
-      const data = doc.data();
-      
-      const rubricObj: Rubric = data.rubric || {};
-      
-      const totalScoreVal = typeof data.totalScore === 'number' ? data.totalScore : 0;
-      const remarksVal = data.remarks || data.feedback || '';
-      const highlightedVal = typeof data.highlighted === 'boolean' ? data.highlighted : false;
-      const isFrozenVal = typeof data.isFrozen === 'boolean' ? data.isFrozen : false;
-      
-      const createdAtStr = data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : '';
-      const updatedAtStr = data.updatedAt ? new Date(data.updatedAt.toDate ? data.updatedAt.toDate() : data.updatedAt).toISOString() : createdAtStr;
-
-      const teamInfo = teamMap.get(data.teamId || '');
-      const juryName = data.juryName || juryMap.get(data.juryId) || 'Unknown Jury';
-
-      scores.push({
-        id: doc.id,
-        teamId: data.teamId || '',
-        teamName: teamInfo?.teamName || data.teamName || data.teamId || 'Unknown Team',
+      return {
+        ...r,
+        teamName: teamInfo?.teamName || r.teamName || r.teamId || 'Unknown Team',
         problemStatement: teamInfo?.problemStatement || 'N/A',
-        juryId: data.juryId || '',
         juryName,
-        rubric: rubricObj,
-        totalScore: totalScoreVal,
-        remarks: remarksVal,
-        highlighted: highlightedVal,
-        isFrozen: isFrozenVal,
-        createdAt: createdAtStr,
-        updatedAt: updatedAtStr,
-      });
-    }
+        selectedForFinal: Boolean(r.selectedForFinal),
+        selectionReason: r.selectionReason || '',
+      };
+    });
 
     scores.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
@@ -2162,7 +2137,7 @@ export async function publishJurySelectedFinalistsAdmin(selectedTeamIds: string[
 export async function upsertEvalRecordAdmin(round: 'prelims' | 'finale', recordData: any) {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) return { success: false, error: 'Unauthorized - Admin session required' };
-  return await upsertEvalRecord(round, recordData);
+  return await upsertEvalRecord(round, recordData, true);
 }
 
 export async function updateTeamInDomainDocAdmin(teamId: string, updates: Record<string, any>) {

@@ -367,14 +367,37 @@ export async function deleteTeamFromDomainDoc(teamId: string): Promise<{ success
 
 export async function getEvalRecords(round: 'prelims' | 'finale'): Promise<AdminScoreData[]> {
   const db = getAdminDb();
+  let rawRecords: any[] = [];
+
   const snap = await db.collection('evaluations').doc(round).get();
+  if (snap.exists) {
+    const data = snap.data();
+    if (Array.isArray(data?.records)) {
+      rawRecords = [...data.records];
+    }
+  }
 
-  if (!snap.exists) return [];
+  // Also query individual documents in evaluations collection (if any were created separately)
+  try {
+    const querySnap = await db.collection('evaluations').where('round', '==', round).get();
+    querySnap.docs.forEach((doc) => {
+      if (doc.id !== round) {
+        const d = doc.data();
+        const recId = doc.id;
+        const existingIdx = rawRecords.findIndex((r) => r.id === recId || (r.teamId === d.teamId && r.juryId === d.juryId));
+        const item = { id: recId, ...d };
+        if (existingIdx >= 0) {
+          rawRecords[existingIdx] = { ...rawRecords[existingIdx], ...item };
+        } else {
+          rawRecords.push(item);
+        }
+      }
+    });
+  } catch (e) {
+    // Ignore error if query fails
+  }
 
-  const data = snap.data();
-  const records = Array.isArray(data?.records) ? data.records : [];
-
-  return records.map((r: any) => ({
+  return rawRecords.map((r: any) => ({
     id: r.id || `${round}_${r.juryId}_${r.teamId}`,
     teamId: r.teamId || '',
     teamName: r.teamName || '',
@@ -405,7 +428,8 @@ export async function getEvalRecords(round: 'prelims' | 'finale'): Promise<Admin
 
 export async function upsertEvalRecord(
   round: 'prelims' | 'finale',
-  recordData: any
+  recordData: any,
+  isAdmin: boolean = false
 ): Promise<{ success: boolean; recordId?: string; error?: string }> {
   try {
     const db = getAdminDb();
@@ -432,7 +456,7 @@ export async function upsertEvalRecord(
       const existingIdx = recordsArr.findIndex((r: any) => r.id === evalId || (r.teamId === recordData.teamId && r.juryId === recordData.juryId));
 
       if (existingIdx !== -1) {
-        if (recordsArr[existingIdx].isFrozen) {
+        if (recordsArr[existingIdx].isFrozen && !isAdmin) {
           throw new Error('This evaluation is already submitted and frozen.');
         }
         recordsArr[existingIdx] = { ...recordsArr[existingIdx], ...newRecord };

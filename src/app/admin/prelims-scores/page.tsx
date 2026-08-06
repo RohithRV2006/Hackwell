@@ -105,7 +105,8 @@ export default function AdminPrelimsScoresPage() {
         const resolvedJudge = (team.judge && team.judge !== 'Unassigned') ? team.judge : (evaluatedJuryName || 'Unassigned');
 
         const isQualified = team.finaleQualified === true || team.prelimsStatus === 'selected';
-        const isJuryNominated = Boolean(evalRec?.selectedForFinal);
+        const nominatedEval = teamScores.find((s) => Boolean(s.selectedForFinal)) || evalRec;
+        const isJuryNominated = teamScores.some((s) => Boolean(s.selectedForFinal));
 
         if (isQualified || isJuryNominated) {
           finalistSet.add(team.id);
@@ -123,7 +124,7 @@ export default function AdminPrelimsScoresPage() {
           isEvaluated: teamScores.length > 0,
           totalScore,
           selectedForFinal: isJuryNominated,
-          selectionReason: evalRec?.selectionReason || '',
+          selectionReason: nominatedEval?.selectionReason || '',
           finaleQualified: isQualified,
         };
       });
@@ -274,8 +275,8 @@ export default function AdminPrelimsScoresPage() {
       totalScore,
       feedback: editFeedback.trim(),
       remarks: editFeedback.trim(),
-      selectedForFinal: evalRec?.selectedForFinal || false,
-      selectionReason: evalRec?.selectionReason || '',
+      selectedForFinal: editingAssignTeam.selectedForFinal || Boolean(evalRec?.selectedForFinal),
+      selectionReason: evalRec?.selectionReason || editingAssignTeam.selectionReason || '',
       isFrozen: true,
     };
 
