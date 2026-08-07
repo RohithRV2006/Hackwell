@@ -11,9 +11,9 @@ import {
 
 export async function checkTeamNameUnique(teamName: string) {
   try {
-    const sanitizedName = teamName.trim().toLowerCase();
+    const sanitizedName = teamName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const allTeams = await getAllTeamsFlatCached();
-    const found = allTeams.some((t) => t.teamName?.trim().toLowerCase() === sanitizedName);
+    const found = allTeams.some((t) => t.teamName?.toLowerCase().replace(/[^a-z0-9]/g, '') === sanitizedName);
     return { isUnique: !found };
   } catch (error: any) {
     console.error('Error checking team name', error);
@@ -89,7 +89,7 @@ export async function registerTeamData(
       return { success: false, error: timelineCheck.message };
     }
 
-    const sanitizedName = teamName.trim().toLowerCase();
+    const sanitizedName = teamName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
     // Double check uniqueness
     const teamNameCheck = await checkTeamNameUnique(sanitizedName);
@@ -160,7 +160,7 @@ export async function registerTeamData(
 export async function getTeamDataByEmail(email: string) {
   try {
     const sanitizedEmail = email.trim().toLowerCase();
-    const found = await findTeamByLeadEmail(sanitizedEmail);
+    const found = await findTeamByLeadEmail(sanitizedEmail, false);
 
     if (!found) {
       return { success: false, error: 'Team not found' };
