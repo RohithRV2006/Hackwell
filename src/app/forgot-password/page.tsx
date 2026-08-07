@@ -36,7 +36,8 @@ function ForgotPasswordForm() {
       // 1. Verify email registration and student role on server
       const checkRes = await checkTeamEmailRegistered(data.email);
       if (!checkRes.success) {
-        throw new Error(checkRes.error || 'Email verification failed.');
+        setError(checkRes.error || 'Email verification failed.');
+        return;
       }
 
       // 2. Trigger password reset email via Firebase Client SDK

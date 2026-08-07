@@ -9,6 +9,7 @@ import {
   updateTeamInDomainDoc,
   getEvalRecords,
   upsertEvalRecord,
+  patchEvalRecord,
   getEventTimelines,
   getLabs,
   getRoles,
@@ -25,6 +26,10 @@ export interface SimpleTeam {
   labNo?: string;
   isAssignedToJury?: boolean;
   selectedForFinal?: boolean;
+  selectionReason?: string;
+  theme?: string;
+  problemStatement?: string;
+  evaluatedBy?: string;
 }
 
 export interface DetailedTeam {
@@ -73,8 +78,13 @@ export interface EvaluationData {
 }
 
 /**
+ * Helper to normalize string for flexible matching (removes non-alphanumeric chars)
+ */
+const cleanNorm = (str: string) => (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
  * Verify session and ensure role is 'jury'.
- * Fetches the lab assigned to this jury.
+ * Fetches the lab assigned to this jury with robust fuzzy string matching.
  */
 export async function verifyJurySession() {
   const cookieStore = await cookies();
@@ -105,7 +115,7 @@ export async function verifyJurySession() {
       if (roleData.juryId) juryId = roleData.juryId;
     }
 
-    // Retrieve assigned lab from labs collection
+    // Retrieve assigned lab from labs collection with robust matching
     let labName = 'N/A';
     let assignedLabId = '';
     try {
@@ -116,7 +126,17 @@ export async function verifyJurySession() {
         const em = email.toLowerCase();
         const jn = juryName.toLowerCase();
         const ji = juryId.toLowerCase();
-        return ajName === jn || ajName === em || ajId === em || ajId === ji || ajName === ji;
+
+        return (
+          ajName === jn ||
+          ajName === em ||
+          ajId === em ||
+          ajId === ji ||
+          ajName === ji ||
+          (ajName && cleanNorm(ajName) === cleanNorm(jn)) ||
+          (ajId && cleanNorm(ajId) === cleanNorm(em)) ||
+          (ajName && cleanNorm(ajName) === cleanNorm(em))
+        );
       });
       if (matchedLab) {
         labName = matchedLab.labName || matchedLab.labCode || matchedLab.labId;
@@ -153,18 +173,33 @@ export async function getJuryDashboardData() {
     // 1. Fetch all teams from domain cache
     const allTeams = await getAllTeamsFlatCached();
     if (allTeams.length === 0) {
-      return { success: true, teams: [] };
+      return {
+        success: true,
+        teams: [],
+        prelimsTeams: [],
+        finaleTeams: [],
+        prelimsActive: false,
+        prelimsState: 'not-set',
+        finaleActive: false,
+        finaleState: 'not-set',
+      };
     }
 
-    // 2. Fetch score records in evaluations/prelims
-    const prelimsRecords = await getEvalRecords('prelims');
-    const scoreMap = new Map<string, { isFrozen: boolean; totalScore: number; selectedForFinal: boolean }>();
+    // 2. Fetch score records in evaluations/prelims and evaluations/finale
+    const [prelimsRecords, finaleRecords] = await Promise.all([
+      getEvalRecords('prelims'),
+      getEvalRecords('finale'),
+    ]);
+
+    const scoreMap = new Map<string, { isFrozen: boolean; totalScore: number; selectedForFinal: boolean; selectionReason: string }>();
 
     prelimsRecords.forEach((r) => {
       const matchJury =
         r.juryId === session.juryId ||
         r.juryId === session.email ||
-        (r.juryName && r.juryName.toLowerCase() === session.juryName.toLowerCase());
+        (r.juryName && r.juryName.toLowerCase() === session.juryName.toLowerCase()) ||
+        cleanNorm(r.juryName || '') === cleanNorm(session.juryName) ||
+        cleanNorm(r.juryId || '') === cleanNorm(session.email);
 
       if (matchJury && r.teamId) {
         const cleanTeamId = r.teamId.trim();
@@ -172,13 +207,31 @@ export async function getJuryDashboardData() {
           isFrozen: r.isFrozen === true,
           totalScore: typeof r.totalScore === 'number' ? r.totalScore : 0,
           selectedForFinal: Boolean(r.selectedForFinal),
+          selectionReason: r.selectionReason || '',
         });
       }
     });
 
-    // 3. Check Phase 3 (Prelims Round) timeline status
+    // In Finale Round, any jury can view finale records. Store who evaluated each team.
+    const finaleScoreMap = new Map<string, { isFrozen: boolean; totalScore: number; juryName: string; juryId: string }>();
+    finaleRecords.forEach((r) => {
+      if (r.teamId) {
+        const cleanTeamId = r.teamId.trim();
+        finaleScoreMap.set(cleanTeamId, {
+          isFrozen: r.isFrozen === true,
+          totalScore: typeof r.totalScore === 'number' ? r.totalScore : 0,
+          juryName: r.juryName || r.juryId || 'Jury',
+          juryId: r.juryId || '',
+        });
+      }
+    });
+
+    // 3. Check timelines status
     let prelimsActive = false;
     let prelimsState: 'not-set' | 'active' | 'ended' = 'not-set';
+    let finaleActive = false;
+    let finaleState: 'not-set' | 'active' | 'ended' = 'not-set';
+
     try {
       const timelines = await getEventTimelines();
       if (timelines?.timeline3) {
@@ -186,11 +239,16 @@ export async function getJuryDashboardData() {
         prelimsState = t3.state || 'not-set';
         prelimsActive = t3.state === 'active' && t3.enabled !== false;
       }
+      if (timelines?.timeline4) {
+        const t4 = timelines.timeline4;
+        finaleState = t4.state || 'not-set';
+        finaleActive = t4.state === 'active' && t4.enabled !== false;
+      }
     } catch (err) {
       console.error('Error checking timeline status:', err);
     }
 
-    // 4. Map teams list with assignment tracking
+    // 4. Map prelims assigned teams list with robust lab and judge matching
     const teams: SimpleTeam[] = allTeams.map((t) => {
       const cleanId = t.id.trim();
       const scoreInfo = scoreMap.get(cleanId);
@@ -202,11 +260,17 @@ export async function getJuryDashboardData() {
         (judgeVal !== 'Unassigned' &&
           (judgeVal.toLowerCase() === session.juryName.toLowerCase() ||
             judgeVal.toLowerCase() === session.email.toLowerCase() ||
-            judgeVal.toLowerCase() === session.juryId.toLowerCase())) ||
+            judgeVal.toLowerCase() === session.juryId.toLowerCase() ||
+            cleanNorm(judgeVal) === cleanNorm(session.juryName) ||
+            cleanNorm(judgeVal) === cleanNorm(session.email))) ||
         (labNoVal !== 'Unassigned' &&
           session.labName !== 'N/A' &&
-          labNoVal.toLowerCase() === session.labName.toLowerCase()) ||
-        (t.assignedLabId && session.assignedLabId && t.assignedLabId === session.assignedLabId);
+          (labNoVal.toLowerCase() === session.labName.toLowerCase() ||
+            cleanNorm(labNoVal) === cleanNorm(session.labName))) ||
+        (t.assignedLabId &&
+          session.assignedLabId &&
+          (t.assignedLabId === session.assignedLabId ||
+            cleanNorm(t.assignedLabId) === cleanNorm(session.assignedLabId)));
 
       return {
         id: t.id,
@@ -219,17 +283,53 @@ export async function getJuryDashboardData() {
         labNo: labNoVal,
         isAssignedToJury: !!isAssignedToJury,
         selectedForFinal: scoreInfo ? scoreInfo.selectedForFinal : false,
+        selectionReason: scoreInfo ? scoreInfo.selectionReason : '',
+        theme: t.theme || '',
+        problemStatement: t.problemStatement || '',
       };
     });
 
     const assignedTeams = teams.filter((t) => t.isAssignedToJury);
     assignedTeams.sort((a, b) => a.teamName.localeCompare(b.teamName));
 
+    // 5. Map finale qualified teams list (No jury pre-assignment filter for finale)
+    const finaleQualifiedTeams: SimpleTeam[] = allTeams
+      .filter((t) => t.finaleQualified === true || t.prelimsStatus === 'selected')
+      .map((t) => {
+        const cleanId = t.id.trim();
+        const scoreInfo = finaleScoreMap.get(cleanId);
+        return {
+          id: t.id,
+          teamName: t.teamName || t.id,
+          displayId: t.displayId || t.id,
+          evaluationStatus: scoreInfo !== undefined ? 'Evaluated' : 'Pending',
+          isFrozen: scoreInfo ? scoreInfo.isFrozen : false,
+          totalScore: scoreInfo ? scoreInfo.totalScore : undefined,
+          evaluatedBy: scoreInfo ? scoreInfo.juryName : undefined,
+          judge: t.judge || 'Unassigned',
+          labNo: t.finalVenue || t.labNo || 'Unassigned',
+          isAssignedToJury: true,
+          theme: t.theme || '',
+          problemStatement: t.problemStatement || '',
+        };
+      });
+
+    finaleQualifiedTeams.sort((a, b) => a.teamName.localeCompare(b.teamName));
+
     return {
       success: true,
       teams: assignedTeams,
+      prelimsTeams: assignedTeams,
+      finaleTeams: finaleQualifiedTeams,
       prelimsActive,
       prelimsState,
+      finaleActive,
+      finaleState,
+      sessionInfo: {
+        juryName: session.juryName,
+        email: session.email,
+        labName: session.labName,
+      },
     };
   } catch (error: any) {
     console.error('Error fetching jury dashboard data:', error);
@@ -240,7 +340,7 @@ export async function getJuryDashboardData() {
 /**
  * Fetch detailed team information.
  */
-export async function getTeamDetails(teamId: string) {
+export async function getTeamDetails(teamId: string, round: 'prelims' | 'finale' = 'prelims') {
   const session = await verifyJurySession();
   if (!session.success || !session.email) {
     return { success: false, error: session.error || 'Unauthorized' };
@@ -274,10 +374,22 @@ export async function getTeamDetails(teamId: string) {
       membersData,
     };
 
-    // Fetch existing evaluation in evaluations/prelims
-    const evalId = `prelims_${session.juryId}_${cleanTeamId}`;
-    const records = await getEvalRecords('prelims');
-    const existingRec = records.find((r) => r.id === evalId || (r.teamId === cleanTeamId && r.juryId === session.juryId));
+    // Fetch existing evaluation in evaluations/prelims or evaluations/finale
+    const records = await getEvalRecords(round);
+    let existingRec;
+    if (round === 'finale') {
+      existingRec = records.find((r) => r.teamId === cleanTeamId);
+    } else {
+      const evalId = `${round}_${session.juryId}_${cleanTeamId}`;
+      existingRec = records.find(
+        (r) =>
+          r.id === evalId ||
+          (r.teamId === cleanTeamId &&
+            (r.juryId === session.juryId ||
+              r.juryId === session.email ||
+              (r.juryName && r.juryName.toLowerCase() === session.juryName.toLowerCase())))
+      );
+    }
 
     let scoreData: EvaluationData | undefined = undefined;
     if (existingRec) {
@@ -312,7 +424,7 @@ export async function getTeamDetails(teamId: string) {
 }
 
 /**
- * Save evaluation for a team inside evaluations/prelims and freeze it.
+ * Save evaluation for a team inside evaluations/prelims or evaluations/finale and freeze it.
  */
 export async function submitAndFreezeEvaluation(
   teamId: string,
@@ -321,7 +433,8 @@ export async function submitAndFreezeEvaluation(
   rubric: Rubric,
   feedback: string,
   selectedForFinal: boolean = false,
-  selectionReason: string = ''
+  selectionReason: string = '',
+  round: 'prelims' | 'finale' = 'prelims'
 ) {
   const session = await verifyJurySession();
   if (!session.success || !session.email || !session.juryName) {
@@ -330,30 +443,50 @@ export async function submitAndFreezeEvaluation(
 
   const cleanTeamId = teamId.trim();
 
-  // Check Phase 3 (Prelims Round) timeline status
-  let prelimsActive = false;
+  // Check timeline status
+  let roundActive = false;
   try {
     const timelines = await getEventTimelines();
-    const t3 = timelines?.timeline3;
-    prelimsActive = t3?.state === 'active' && t3?.enabled !== false;
+    if (round === 'prelims') {
+      const t3 = timelines?.timeline3;
+      roundActive = t3?.state === 'active' && t3?.enabled !== false;
+    } else {
+      const t4 = timelines?.timeline4;
+      roundActive = t4?.state === 'active' && t4?.enabled !== false;
+    }
   } catch (err) {
     console.error('Error checking timeline status:', err);
   }
 
-  if (!prelimsActive) {
+  if (!roundActive) {
     return {
       success: false,
-      error: 'Cannot submit evaluation: Phase 3 (Prelims Round) has not been activated by the admin.',
+      error: `Cannot submit evaluation: ${round === 'prelims' ? 'Phase 3 (Prelims Round)' : 'Phase 4 (Grand Finale)'} has not been activated by the admin.`,
     };
   }
 
   // Check if already frozen
-  const evalId = `prelims_${session.juryId}_${cleanTeamId}`;
-  const records = await getEvalRecords('prelims');
-  const existingRec = records.find((r) => r.id === evalId || (r.teamId === cleanTeamId && r.juryId === session.juryId));
+  const records = await getEvalRecords(round);
+  let existingRec;
+  if (round === 'finale') {
+    existingRec = records.find((r) => r.teamId === cleanTeamId);
+  } else {
+    const evalId = `${round}_${session.juryId}_${cleanTeamId}`;
+    existingRec = records.find(
+      (r) =>
+        r.id === evalId ||
+        (r.teamId === cleanTeamId &&
+          (r.juryId === session.juryId ||
+            r.juryId === session.email ||
+            (r.juryName && r.juryName.toLowerCase() === session.juryName.toLowerCase())))
+    );
+  }
 
   if (existingRec && existingRec.isFrozen) {
-    return { success: false, error: 'Cannot save: Your scores for this team are already frozen.' };
+    return {
+      success: false,
+      error: `Cannot save: This team has already been evaluated by ${existingRec.juryName || 'another jury'}.`,
+    };
   }
 
   // Validate rubric scores
@@ -383,9 +516,11 @@ export async function submitAndFreezeEvaluation(
     rubric.communication;
 
   try {
+    const evalId = round === 'finale' ? `finale_${cleanTeamId}` : `prelims_${session.juryId}_${cleanTeamId}`;
+
     const evaluationPayload = {
       id: evalId,
-      round: 'prelims',
+      round,
       teamName,
       displayId,
       teamId: cleanTeamId,
@@ -401,27 +536,29 @@ export async function submitAndFreezeEvaluation(
       totalScore,
       feedback: feedback.trim(),
       remarks: feedback.trim(),
-      selectedForFinal: Boolean(selectedForFinal),
-      selectionReason: selectionReason.trim(),
+      selectedForFinal: existingRec ? Boolean(existingRec.selectedForFinal) : Boolean(selectedForFinal),
+      selectionReason: existingRec ? (existingRec.selectionReason || '') : selectionReason.trim(),
       isFrozen: true,
     };
 
-    const res = await upsertEvalRecord('prelims', evaluationPayload);
+    const res = await upsertEvalRecord(round, evaluationPayload);
     if (!res.success) {
       return { success: false, error: res.error || 'Failed to save evaluation' };
     }
 
     // Update team document's judge and labNo if session has lab info
-    const teamUpdates: Record<string, any> = {};
-    if (session.juryName) {
-      teamUpdates.judge = session.juryName;
-    }
-    if (session.labName && session.labName !== 'N/A') {
-      teamUpdates.labNo = session.labName;
-      teamUpdates.assignedLabName = session.labName;
-    }
-    if (Object.keys(teamUpdates).length > 0) {
-      await updateTeamInDomainDoc(cleanTeamId, teamUpdates);
+    if (round === 'prelims') {
+      const teamUpdates: Record<string, any> = {};
+      if (session.juryName) {
+        teamUpdates.judge = session.juryName;
+      }
+      if (session.labName && session.labName !== 'N/A') {
+        teamUpdates.labNo = session.labName;
+        teamUpdates.assignedLabName = session.labName;
+      }
+      if (Object.keys(teamUpdates).length > 0) {
+        await updateTeamInDomainDoc(cleanTeamId, teamUpdates);
+      }
     }
 
     return { success: true };
@@ -429,4 +566,49 @@ export async function submitAndFreezeEvaluation(
     console.error('Error saving and freezing evaluation:', error);
     return { success: false, error: error.message || 'Failed to save evaluation' };
   }
+}
+
+/**
+ * Update the final round recommendation (selectedForFinal & selectionReason) for an evaluated team.
+ * Persists immediately in evaluations/prelims Firestore document with proper sync.
+ */
+export async function updateFinalRoundRecommendation(
+  teamId: string,
+  selectedForFinal: boolean,
+  selectionReason: string = ''
+) {
+  const session = await verifyJurySession();
+  if (!session.success || !session.email || !session.juryId) {
+    return { success: false, error: session.error || 'Unauthorized' };
+  }
+
+  const cleanTeamId = teamId.trim();
+
+  // Find evaluation record in evaluations/prelims
+  const records = await getEvalRecords('prelims');
+  const existingRec = records.find(
+    (r) =>
+      r.id === `prelims_${session.juryId}_${cleanTeamId}` ||
+      (r.teamId === cleanTeamId &&
+        (r.juryId === session.juryId ||
+          r.juryId === session.email ||
+          (r.juryName && r.juryName.toLowerCase() === session.juryName.toLowerCase())))
+  );
+
+  if (!existingRec) {
+    return { success: false, error: 'Team must be evaluated in the Score tab before managing final round recommendation.' };
+  }
+
+  const evalId = existingRec.id || `prelims_${session.juryId}_${cleanTeamId}`;
+
+  const res = await patchEvalRecord('prelims', evalId, {
+    selectedForFinal: Boolean(selectedForFinal),
+    selectionReason: selectionReason.trim(),
+  });
+
+  if (!res.success) {
+    return { success: false, error: res.error || 'Failed to save recommendation changes to database.' };
+  }
+
+  return { success: true };
 }
