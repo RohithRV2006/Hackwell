@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { getAdminDb, getAdminAuth } from '@/lib/firebase-admin';
 import { getUserRole } from '@/app/actions/session';
 import { FieldValue } from 'firebase-admin/firestore';
-import { unstable_cache, revalidateTag } from 'next/cache';
+import { revalidatePath } from 'next/cache';
 import { THEME_NAMES } from '@/lib/data/themes';
 import {
   publishJurySelectedFinalists,
@@ -48,14 +48,6 @@ function resolveTeamTheme(teamData: any): string {
   return "Autonomous Agentic AI";
 }
 
-const getCachedTeamsData = unstable_cache(
-  async () => {
-    return await getAllTeamsFlatCached();
-  },
-  ['admin-all-teams'],
-  { revalidate: 300 } // 5 minutes cache
-);
-
 export const verifyAdminSession = cache(async function verifyAdminSession() {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('session')?.value;
@@ -84,8 +76,6 @@ export async function getCachedDocs(collectionName: string) {
     let snap: any;
     if (collectionName === 'metadata_eventTimelines') {
       snap = await db.collection('metadata').doc('eventTimelines').get();
-    } else if (collectionName === 'gameScores') {
-      snap = await db.collection(collectionName).orderBy('createdAt', 'desc').get();
     } else {
       snap = await db.collection(collectionName).get();
     }
@@ -516,8 +506,9 @@ export async function getAllGameScoresAdmin() {
   }
 
   try {
+    const db = getAdminDb();
     const [snapshot, allTeams] = await Promise.all([
-      getCachedDocs('gameScores'),
+      db.collection('gameScores').doc('all_scores').get(),
       getAllTeamsFlatCached(),
     ]);
     
@@ -526,15 +517,16 @@ export async function getAllGameScoresAdmin() {
       teamMap.set(team.id, { teamName: team.teamName || team.id });
     });
 
-    const scores = snapshot.docs.map((doc: any) => {
-      const data = doc.data();
+    const records = snapshot.exists && Array.isArray(snapshot.data()?.records) ? snapshot.data()!.records : [];
+
+    const scores = records.map((data: any) => {
       return {
-        id: doc.id,
+        id: data.id || '',
         teamId: data.teamId || '',
         teamName: teamMap.get(data.teamId)?.teamName || data.teamId || 'Unknown Team',
         gameName: data.gameName || 'Unknown Game',
         xpAwarded: data.xpAwarded || 0,
-        createdAt: data.createdAt ? new Date(data.createdAt.toDate ? data.createdAt.toDate() : data.createdAt).toISOString() : '',
+        createdAt: data.createdAt ? new Date(data.createdAt).toISOString() : '',
       };
     });
 
@@ -2312,6 +2304,7 @@ export async function updateFinalLabAdmin(
     await syncFinalLabTeamCountsAdmin(db);
     invalidateTeamCache();
     invalidateCollectionCache('teams');
+    revalidatePath('/admin', 'layout');
     return { success: true };
   } catch (error: any) {
     console.error('Error updating final lab:', error);
@@ -2358,6 +2351,7 @@ export async function deleteFinalLabAdmin(labId: string): Promise<{ success: boo
     await syncFinalLabTeamCountsAdmin(db);
     invalidateTeamCache();
     invalidateCollectionCache('teams');
+    revalidatePath('/admin', 'layout');
     return { success: true };
   } catch (error: any) {
     console.error('Error deleting final lab:', error);
@@ -2502,6 +2496,7 @@ export async function autoAssignFinalTeamsToLabsAdmin(): Promise<{ success: bool
     await labsBatch.commit();
 
     invalidateCollectionCache('teams');
+    revalidatePath('/admin', 'layout');
     return { success: true, assignedCount: qualifiedTeams.length };
   } catch (error: any) {
     console.error('Error auto assigning final teams to labs:', error);
@@ -2613,6 +2608,7 @@ export async function seedDummyTeamsAdmin(count: number = 100): Promise<{ succes
     }
 
     invalidateCollectionCache('teams');
+    revalidatePath('/admin', 'layout');
     return { success: true, seededCount };
   } catch (error: any) {
     console.error('Error seeding dummy teams:', error);
@@ -2623,13 +2619,17 @@ export async function seedDummyTeamsAdmin(count: number = 100): Promise<{ succes
 export async function publishJurySelectedFinalistsAdmin(selectedTeamIds: string[]) {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) return { success: false, error: 'Unauthorized - Admin session required' };
-  return await publishJurySelectedFinalists(selectedTeamIds);
+  const res = await publishJurySelectedFinalists(selectedTeamIds);
+  if (res.success) revalidatePath('/admin', 'layout');
+  return res;
 }
 
 export async function upsertEvalRecordAdmin(round: 'prelims' | 'finale', recordData: any) {
   const isAdmin = await verifyAdminSession();
   if (!isAdmin) return { success: false, error: 'Unauthorized - Admin session required' };
-  return await upsertEvalRecord(round, recordData, true);
+  const res = await upsertEvalRecord(round, recordData, true);
+  if (res.success) revalidatePath('/admin', 'layout');
+  return res;
 }
 
 export async function updateTeamInDomainDocAdmin(teamId: string, updates: Record<string, any>) {

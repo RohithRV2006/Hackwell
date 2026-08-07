@@ -203,7 +203,7 @@ export default function AdminPrelimsScoresPage() {
 
     const res = await publishJurySelectedFinalistsAdmin(Array.from(selectedFinalistIds));
     if (res.success) {
-      setSuccessMsg(`🚀 Successfully promoted and published ${res.count} teams to the Final Round! Changes are live on Final Round tab & Student Dashboards.`);
+      setSuccessMsg(` Successfully promoted and published ${res.count} teams to the Final Round! Changes are live on Final Round tab & Student Dashboards.`);
       await loadData();
     } else {
       setErrorMsg(res.error || 'Failed to publish finalists.');
@@ -218,7 +218,7 @@ export default function AdminPrelimsScoresPage() {
     setErrorMsg('');
     const res = await randomlyAssignTeamsToLabsAdmin();
     if (res.success) {
-      setSuccessMsg(`🎲 Successfully randomly assigned ${res.assignedCount} teams to Juries & Labs! (Eliminated ${res.eliminatedCount || 0} teams without PPT).`);
+      setSuccessMsg(` Successfully randomly assigned ${res.assignedCount} teams to Juries & Labs! (Eliminated ${res.eliminatedCount || 0} teams without PPT).`);
       await loadData();
     } else {
       setErrorMsg(res.error || 'Failed to randomly assign teams.');
@@ -408,7 +408,7 @@ export default function AdminPrelimsScoresPage() {
             <div className="flex items-center gap-2.5">
               <h2 className="text-2xl font-bold text-gray-900">Prelims Round</h2>
               <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2.5 py-0.5 rounded border border-purple-200">
-                📄 PPT Submitted Teams Only ({mergedRecords.length})
+                 PPT Submitted Teams Only ({mergedRecords.length})
               </span>
             </div>
             <p className="text-sm text-gray-500 mt-1">Manage score evaluations, Jury assignments, and select finalists for promotion to the Final Round.</p>
@@ -427,7 +427,7 @@ export default function AdminPrelimsScoresPage() {
               className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-300 rounded-sm text-xs font-bold transition flex items-center gap-1 shrink-0"
               title="Randomly assign teams across active juries"
             >
-              <span>🎲</span> Random Assign to Jury
+              <span></span> Random Assign to Jury
             </button>
             <button
               onClick={handleUndoAllAssignments}
@@ -457,7 +457,7 @@ export default function AdminPrelimsScoresPage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
             }`}
           >
-            📊 Prelims Round Score Details
+             Prelims Round Score Details
           </button>
           <button
             onClick={() => setSubTab('selection')}
@@ -467,7 +467,7 @@ export default function AdminPrelimsScoresPage() {
                 : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
             }`}
           >
-            <span>🌟 Final Round Selection</span>
+            <span> Final Round Selection</span>
             <span className="bg-white/20 text-current px-1.5 py-0.5 rounded-full text-[10px]">
               {selectedFinalistIds.size}
             </span>
@@ -478,7 +478,7 @@ export default function AdminPrelimsScoresPage() {
       {successMsg && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-sm text-sm font-medium flex justify-between items-center shadow-sm">
           <span>{successMsg}</span>
-          <button onClick={() => setSuccessMsg('')} className="text-emerald-600 hover:text-emerald-800 font-bold">✕</button>
+          <button onClick={() => setSuccessMsg('')} className="text-emerald-600 hover:text-emerald-800 font-bold"></button>
         </div>
       )}
 
@@ -547,13 +547,13 @@ export default function AdminPrelimsScoresPage() {
                           onClick={() => openJuryModal(rec)}
                           className="text-purple-700 hover:text-purple-900 bg-purple-50 border border-purple-200 hover:bg-purple-100 px-3 py-1 rounded-sm text-xs font-bold transition"
                         >
-                          👤 {rec.judge !== 'Unassigned' ? 'Change Jury' : 'Assign Jury'}
+                           {rec.judge !== 'Unassigned' ? 'Change Jury' : 'Assign Jury'}
                         </button>
                         <button
                           onClick={() => openMarksModal(rec)}
                           className="text-emerald-700 hover:text-emerald-900 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-3 py-1 rounded-sm text-xs font-bold transition"
                         >
-                          ✏️ Edit Marks
+                           Edit Marks
                         </button>
                         {rec.judge !== 'Unassigned' && (
                           <button
@@ -591,7 +591,7 @@ export default function AdminPrelimsScoresPage() {
           {/* Action Header Card */}
           <div className="p-4 bg-purple-50 border border-purple-200 rounded flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
             <div>
-              <h4 className="text-sm font-bold text-purple-900 uppercase tracking-wider">🌟 Final Round Selected Finalists ({selectedFinalistIds.size})</h4>
+              <h4 className="text-sm font-bold text-purple-900 uppercase tracking-wider"> Final Round Selected Finalists ({selectedFinalistIds.size})</h4>
               <p className="text-xs text-purple-700 mt-0.5">
                 Review Jury recommendations below. Add or remove teams from the finalist list and click <strong>Publish Finalists</strong> to promote them to the next round.
               </p>
@@ -601,7 +601,7 @@ export default function AdminPrelimsScoresPage() {
               disabled={publishing}
               className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-extrabold transition shadow-md disabled:opacity-50 shrink-0"
             >
-              {publishing ? 'Publishing...' : `🚀 Publish ${selectedFinalistIds.size} Finalists`}
+              {publishing ? 'Publishing...' : ` Publish ${selectedFinalistIds.size} Finalists`}
             </button>
           </div>
 
@@ -642,7 +642,7 @@ export default function AdminPrelimsScoresPage() {
                           <td className="px-4 py-3.5">
                             {rec.selectedForFinal ? (
                               <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded border border-purple-200">
-                                🌟 Nominated by {rec.judge || 'Jury'}
+                                 Nominated by {rec.judge || 'Jury'}
                               </span>
                             ) : (
                               <span className="text-gray-400 italic text-[10px]">Not Nominated</span>
@@ -661,7 +661,7 @@ export default function AdminPrelimsScoresPage() {
                                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
                               }`}
                             >
-                              {isSelected ? '✓ Finalist Selected' : '+ Select Team'}
+                              {isSelected ? ' Finalist Selected' : '+ Select Team'}
                             </button>
                           </td>
                         </tr>
@@ -681,14 +681,14 @@ export default function AdminPrelimsScoresPage() {
           <div className="bg-white border border-gray-200 rounded-sm p-6 w-full max-w-lg shadow-xl my-8">
             <div className="flex justify-between items-start border-b border-gray-200 pb-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">👤 Assign / Change Jury</h3>
+                <h3 className="text-lg font-bold text-gray-900"> Assign / Change Jury</h3>
                 <p className="text-xs text-gray-500 font-semibold">{editingJuryTeam.teamName} ({editingJuryTeam.displayId})</p>
               </div>
               <button
                 onClick={() => setEditingJuryTeam(null)}
                 className="text-gray-400 hover:text-gray-600 font-bold px-2 py-1"
               >
-                ✕
+                
               </button>
             </div>
 
@@ -713,7 +713,7 @@ export default function AdminPrelimsScoresPage() {
                           }}
                           className="text-[11px] text-purple-700 font-bold hover:underline flex items-center gap-0.5"
                         >
-                          <span>🎲</span> Pick Random
+                          <span></span> Pick Random
                         </button>
                       )}
                       {assignJuryName && (
@@ -785,14 +785,14 @@ export default function AdminPrelimsScoresPage() {
           <div className="bg-white border border-gray-200 rounded-sm p-6 w-full max-w-lg shadow-xl my-8">
             <div className="flex justify-between items-start border-b border-gray-200 pb-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">✏️ Edit Team Marks &amp; Rubric</h3>
+                <h3 className="text-lg font-bold text-gray-900"> Edit Team Marks &amp; Rubric</h3>
                 <p className="text-xs text-gray-500 font-semibold">{editingMarksTeam.teamName} ({editingMarksTeam.displayId}) • Jury: {editingMarksTeam.judge || 'Admin'}</p>
               </div>
               <button
                 onClick={() => setEditingMarksTeam(null)}
                 className="text-gray-400 hover:text-gray-600 font-bold px-2 py-1"
               >
-                ✕
+                
               </button>
             </div>
 
@@ -804,7 +804,7 @@ export default function AdminPrelimsScoresPage() {
 
             <form onSubmit={handleSaveMarksOnly} className="space-y-4">
               <div className="space-y-3">
-                <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">✏️ Rubric Breakdown</h4>
+                <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider"> Rubric Breakdown</h4>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -856,7 +856,7 @@ export default function AdminPrelimsScoresPage() {
                       onChange={(e) => setEditSelectedForFinal(e.target.checked)}
                       className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
                     />
-                    <span>🌟 Nominate Team for Final Round</span>
+                    <span> Nominate Team for Final Round</span>
                   </label>
                   {editSelectedForFinal && (
                     <div>
@@ -949,7 +949,7 @@ export default function AdminPrelimsScoresPage() {
                   )}
                   {evalRecord.selectedForFinal && (
                     <div className="bg-purple-50 p-3 rounded-sm border border-purple-200 text-xs text-purple-900">
-                      <span className="font-bold block mb-1">🌟 Nominated for Final Round:</span>
+                      <span className="font-bold block mb-1"> Nominated for Final Round:</span>
                       {evalRecord.selectionReason || 'No specific reason provided.'}
                     </div>
                   )}

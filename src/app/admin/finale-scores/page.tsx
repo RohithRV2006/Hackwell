@@ -129,7 +129,7 @@ export default function AdminFinaleScoresPage() {
   };
 
   const handlePublishFinalResults = async () => {
-    if (!confirm('🚀 Are you sure you want to PUBLISH the Final Round Winners & Scores? This will update the database permanently and show final results on student dashboards.')) return;
+    if (!confirm(' Are you sure you want to PUBLISH the Final Round Winners & Scores? This will update the database permanently and show final results on student dashboards.')) return;
 
     setPublishing(true);
     setErrorMsg('');
@@ -142,7 +142,7 @@ export default function AdminFinaleScoresPage() {
 
     const res = await publishFinalRoundResultsAdmin(explicitWinners);
     if (res.success) {
-      setSuccessMsg(`🚀 Successfully published Final Round Winners & Scores to the database! (${res.count} finalist teams updated).`);
+      setSuccessMsg(` Successfully published Final Round Winners & Scores to the database! (${res.count} finalist teams updated).`);
       setIsPublished(true);
       await loadData();
     } else {
@@ -232,7 +232,7 @@ export default function AdminFinaleScoresPage() {
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className="text-2xl font-bold text-gray-900">Final Round</h2>
             <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2.5 py-0.5 rounded border border-purple-200">
-              🏆 {mergedRecords.length} Finalists Qualified
+               {mergedRecords.length} Finalists Qualified
             </span>
             {isPublished ? (
               <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
@@ -269,21 +269,16 @@ export default function AdminFinaleScoresPage() {
             disabled={publishing || mergedRecords.length === 0}
             className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-sm font-extrabold transition shadow-sm disabled:opacity-50 flex items-center gap-1.5"
           >
-            {publishing ? 'Publishing to DB...' : '🚀 Publish Final Round Results'}
+            {publishing ? 'Publishing to DB...' : ' Publish Final Round Results'}
           </button>
         </div>
       </div>
 
-      {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-sm text-sm font-medium flex justify-between items-center shadow-sm">
-          <span>{successMsg}</span>
-          <button onClick={() => setSuccessMsg('')} className="text-emerald-600 hover:text-emerald-800 font-bold">✕</button>
-        </div>
-      )}
-
-      {errorMsg && (
-        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-sm text-sm font-medium">
-          {errorMsg}
+      {/* Floating Notifications */}
+      {(successMsg || errorMsg) && (
+        <div className={`fixed top-24 right-6 z-50 p-4 border rounded-sm text-sm font-bold shadow-lg flex items-center justify-between gap-4 min-w-[300px] ${successMsg ? 'bg-white border-green-500 text-green-700' : 'bg-white border-red-500 text-red-700'}`}>
+          <span>{successMsg || errorMsg}</span>
+          <button onClick={() => { setSuccessMsg(''); setErrorMsg(''); }} className="text-gray-400 hover:text-gray-600"></button>
         </div>
       )}
 
@@ -293,9 +288,9 @@ export default function AdminFinaleScoresPage() {
         <div className="bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-sm p-4 shadow-sm relative">
           <div className="flex justify-between items-center mb-2">
             <span className="text-[11px] font-extrabold text-amber-800 uppercase tracking-wider flex items-center gap-1">
-              🥇 1st Place • Champion
+               1st Place • Champion
             </span>
-            <span className="text-xl">🏆</span>
+            <span className="text-xl"></span>
           </div>
           <select
             value={selected1st}
@@ -326,9 +321,9 @@ export default function AdminFinaleScoresPage() {
         <div className="bg-gradient-to-br from-slate-50 to-gray-100 border-2 border-slate-300 rounded-sm p-4 shadow-sm relative">
           <div className="flex justify-between items-center mb-2">
             <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1">
-              🥈 2nd Place • Runner-Up
+               2nd Place • Runner-Up
             </span>
-            <span className="text-xl">🥈</span>
+            <span className="text-xl"></span>
           </div>
           <select
             value={selected2nd}
@@ -359,9 +354,9 @@ export default function AdminFinaleScoresPage() {
         <div className="bg-gradient-to-br from-orange-50 to-amber-50/60 border-2 border-orange-300 rounded-sm p-4 shadow-sm relative">
           <div className="flex justify-between items-center mb-2">
             <span className="text-[11px] font-extrabold text-orange-800 uppercase tracking-wider flex items-center gap-1">
-              🥉 3rd Place • 2nd Runner-Up
+               3rd Place • 2nd Runner-Up
             </span>
-            <span className="text-xl">🥉</span>
+            <span className="text-xl"></span>
           </div>
           <select
             value={selected3rd}
@@ -430,9 +425,9 @@ export default function AdminFinaleScoresPage() {
                       }
                     >
                       <td className="px-4 py-3.5 text-center font-bold text-xs">
-                        {isTop1 && <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full font-black text-xs">🥇 #1 Champion</span>}
-                        {isTop2 && <span className="bg-slate-100 text-slate-900 border border-slate-300 px-2 py-0.5 rounded-full font-black text-xs">🥈 #2 Runner-Up</span>}
-                        {isTop3 && <span className="bg-orange-100 text-orange-900 border border-orange-300 px-2 py-0.5 rounded-full font-black text-xs">🥉 #3 2nd Runner-Up</span>}
+                        {isTop1 && <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full font-black text-xs"> #1 Champion</span>}
+                        {isTop2 && <span className="bg-slate-100 text-slate-900 border border-slate-300 px-2 py-0.5 rounded-full font-black text-xs"> #2 Runner-Up</span>}
+                        {isTop3 && <span className="bg-orange-100 text-orange-900 border border-orange-300 px-2 py-0.5 rounded-full font-black text-xs"> #3 2nd Runner-Up</span>}
                         {!isTop1 && !isTop2 && !isTop3 && <span className="text-gray-400">#{displayRank}</span>}
                       </td>
                       <td className="px-4 py-3.5 font-mono font-bold text-purple-900 text-xs">{rec.displayId}</td>
@@ -441,7 +436,7 @@ export default function AdminFinaleScoresPage() {
                       <td className="px-4 py-3.5 font-mono">
                         {rec.finalVenue && rec.finalVenue !== 'TBA' ? (
                           <span className="bg-blue-50 text-blue-800 px-2.5 py-1 rounded text-xs font-bold border border-blue-200">
-                            🏛️ {rec.finalVenue}
+                             {rec.finalVenue}
                           </span>
                         ) : (
                           <span className="text-gray-400 italic text-xs">TBA (Unassigned)</span>
@@ -461,7 +456,7 @@ export default function AdminFinaleScoresPage() {
                           onClick={() => openChangeLabModal(rec)}
                           className="text-purple-700 hover:text-purple-900 bg-purple-50 border border-purple-200 hover:bg-purple-100 px-2.5 py-1 rounded-sm text-xs font-bold transition"
                         >
-                          🏛️ Change Lab
+                           Change Lab
                         </button>
                         <button
                           onClick={() => setSelectedTeam(rec)}
@@ -490,14 +485,14 @@ export default function AdminFinaleScoresPage() {
           <div className="bg-white border border-gray-200 rounded-sm p-6 w-full max-w-lg shadow-xl my-8">
             <div className="flex justify-between items-start border-b border-gray-200 pb-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">🏛️ Assign / Change Final Lab</h3>
+                <h3 className="text-lg font-bold text-gray-900"> Assign / Change Final Lab</h3>
                 <p className="text-xs text-gray-500 font-semibold">{editingLabTeam.teamName} ({editingLabTeam.displayId})</p>
               </div>
               <button
                 onClick={() => setEditingLabTeam(null)}
                 className="text-gray-400 hover:text-gray-600 font-bold px-2 py-1"
               >
-                ✕
+                
               </button>
             </div>
 

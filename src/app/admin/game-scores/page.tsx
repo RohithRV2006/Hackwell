@@ -88,9 +88,11 @@ export default function AdminGameScoresPage() {
         </div>
       </div>
 
+      {/* Floating Notifications */}
       {errorMsg && (
-        <div className="p-4 bg-gray-50 border border-gray-300 text-gray-700 rounded-sm text-sm font-medium">
-          {errorMsg}
+        <div className="fixed top-24 right-6 z-50 p-4 bg-white border border-red-500 text-red-700 rounded-sm text-sm font-bold shadow-lg flex items-center justify-between gap-4 min-w-[300px]">
+          <span>{errorMsg}</span>
+          <button onClick={() => setErrorMsg('')} className="text-gray-400 hover:text-gray-600"></button>
         </div>
       )}
 
