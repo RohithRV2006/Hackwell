@@ -12,10 +12,7 @@ export default function NavBar() {
   const [user, setUser] = useState<User | null>(null);
   const [dashboardUrl, setDashboardUrl] = useState('/team-dashboard');
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
-
   const [isRegistrationOpen, setIsRegistrationOpen] = useState<boolean | null>(null);
-  const [registrationMsg, setRegistrationMsg] = useState<string>('');
 
   const handleLogout = async () => {
     try {
@@ -44,7 +41,6 @@ export default function NavBar() {
     const checkTimeline = async () => {
       const res = await checkRegistrationTimelineStatus();
       setIsRegistrationOpen(res.allowed);
-      setRegistrationMsg(res.message || 'Registration is currently not started.');
     };
     checkTimeline();
   }, []);
@@ -58,8 +54,6 @@ export default function NavBar() {
           switch(userRole) {
             case 'admin': setDashboardUrl('/admin'); break;
             case 'jury': setDashboardUrl('/jury-dashboard'); break;
-            case 'student-coord': 
-            case 'faculty-coord':
             case 'coordinator': setDashboardUrl('/coord-dashboard'); break;
             default: setDashboardUrl('/team-dashboard'); break;
           }
@@ -71,77 +65,36 @@ export default function NavBar() {
     return () => unsubscribe();
   }, []);
 
+  const openSideMenu = () => {
+    window.dispatchEvent(new Event('open-side-menu'));
+  };
+
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-white shadow-md py-2 border-b border-gray-100' : 'bg-transparent py-4 opacity-0 pointer-events-none'}`}>
+    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-white/80 backdrop-blur-md shadow-sm py-3 border-b border-gray-200/50' : 'bg-transparent py-4 opacity-0 pointer-events-none'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center">
-          <div className="flex items-center">
+          <div className="flex items-center space-x-3">
+            <img src="/vercel.svg" alt="Logo" className="w-8 h-8 rounded-full" />
             <Link href="/" className="flex-shrink-0 flex items-center">
-              <span className="text-2xl font-extrabold text-blue-600">Hackwell 2.O</span>
+              <span className="text-xl font-extrabold text-blue-600">Hackwell 2.0</span>
             </Link>
           </div>
-          <div className="hidden md:flex items-center space-x-8">
-            <a href="#about" className="text-gray-700 hover:text-blue-600 font-medium transition">About</a>
-            <a href="#themes" className="text-gray-700 hover:text-blue-600 font-medium transition">Themes</a>
-            <a href="#timeline" className="text-gray-700 hover:text-blue-600 font-medium transition">Timeline</a>
-            <a href="#rules" className="text-gray-700 hover:text-blue-600 font-medium transition">Rules</a>
-            
+          <div className="flex items-center space-x-4">
             {user ? (
-              <div className="flex items-center space-x-3">
-                <Link href={dashboardUrl} className="px-4 py-1.5 text-sm rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-sm transition">
-                  Dashboard
-                </Link>
-                <button onClick={handleLogout} className="px-4 py-1.5 text-sm rounded-md border border-red-500 text-red-500 font-bold hover:bg-red-50 transition">
-                  Logout
-                </button>
-              </div>
+              <Link href={dashboardUrl} className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-sm transition">
+                Dashboard
+              </Link>
             ) : (
-              <div className="flex items-center space-x-3">
-                <Link href="/login" className="text-blue-600 font-bold hover:text-blue-700 transition text-sm px-3 py-1.5">Login</Link>
-                
-                {isRegistrationOpen === true && (
-                  <Link href="/register" className="px-4 py-1.5 text-sm rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-sm transition">
-                    Register
-                  </Link>
-                )}
-              </div>
+              <Link href="/login" className="text-blue-600 font-bold hover:text-blue-700 transition text-sm px-4 py-2 border-2 border-transparent hover:border-blue-100 rounded-md">
+                Login
+              </Link>
             )}
-          </div>
-          <div className="flex items-center md:hidden">
-            <button onClick={() => setIsMobileOpen(!isMobileOpen)} className="text-gray-600 hover:text-blue-600 focus:outline-none p-2">
-              {isMobileOpen ? <X size={28} /> : <Menu size={28} />}
+            <button onClick={openSideMenu} className="p-2 bg-white/50 rounded-md shadow-sm border border-gray-200 text-gray-700 hover:text-blue-600 transition">
+              <Menu size={20} />
             </button>
           </div>
         </div>
       </div>
-
-      {isMobileOpen && (
-        <div className="md:hidden bg-white border-t border-gray-100 shadow-xl absolute w-full">
-          <div className="px-4 pt-2 pb-6 space-y-2">
-            <a href="#about" onClick={() => setIsMobileOpen(false)} className="block px-3 py-3 text-gray-800 font-medium hover:bg-blue-50 hover:text-blue-600 rounded-lg">About</a>
-            <a href="#themes" onClick={() => setIsMobileOpen(false)} className="block px-3 py-3 text-gray-800 font-medium hover:bg-blue-50 hover:text-blue-600 rounded-lg">Themes</a>
-            <a href="#timeline" onClick={() => setIsMobileOpen(false)} className="block px-3 py-3 text-gray-800 font-medium hover:bg-blue-50 hover:text-blue-600 rounded-lg">Timeline</a>
-            <a href="#rules" onClick={() => setIsMobileOpen(false)} className="block px-3 py-3 text-gray-800 font-medium hover:bg-blue-50 hover:text-blue-600 rounded-lg">Rules</a>
-            <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
-              {user ? (
-                <>
-                  <Link href={dashboardUrl} className="block text-center px-4 py-2 text-sm rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Dashboard</Link>
-                  <button onClick={handleLogout} className="block w-full text-center px-4 py-2 text-sm rounded-md border border-red-500 text-red-500 font-bold hover:bg-red-50 transition">Logout</button>
-                </>
-              ) : (
-                <>
-                  <Link href="/login" className="block text-center px-4 py-2 text-sm rounded-md border border-blue-600 text-blue-600 font-bold hover:bg-blue-50 transition">Login</Link>
-                  
-                  {isRegistrationOpen === true && (
-                    <Link href="/register" className="block text-center px-4 py-2 text-sm rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Register</Link>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </nav>
   );
 }
-

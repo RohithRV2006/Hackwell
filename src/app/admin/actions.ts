@@ -448,9 +448,9 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
     const db = getAdminDb();
     
     // We fetch eval records, roles and teams for mapping names
-    const [records, rolesSnap, allTeams] = await Promise.all([
+    const [records, juriesRes, allTeams] = await Promise.all([
       getEvalRecords(round),
-      db.collection('roles').where('role', '==', 'jury').get(),
+      getJuriesAdmin(),
       getAllTeamsFlatCached(),
     ]);
     
@@ -463,11 +463,11 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
     });
 
     const juryMap = new Map<string, string>();
-    rolesSnap.docs?.forEach((doc: any) => {
-      const data = doc.data();
-      const name = data.name || data.juryName || doc.id;
-      juryMap.set(doc.id, name);
-    });
+    if (juriesRes.juries) {
+      juriesRes.juries.forEach((j) => {
+        juryMap.set(j.id, j.name);
+      });
+    }
 
     const scores: AdminScoreData[] = records.map((r) => {
       const teamInfo = teamMap.get(r.teamId || '');
@@ -722,6 +722,7 @@ export interface EventTimelinesData {
   timeline2: { name: string; startDate: string; endDate: string; enabled: boolean; state?: PhaseState; pptFilterApplied?: boolean };
   timeline3: { name: string; startDate: string; endDate: string; enabled: boolean; topTeamsToFinal?: number; state?: PhaseState; finalistsPromoted?: boolean };
   timeline4: { name: string; startDate: string; endDate: string; enabled: boolean; winnerCount?: number; state?: PhaseState };
+  consentLetterEnabled?: boolean;
 }
 
 export async function getEventTimelinesAdmin() {
@@ -738,6 +739,7 @@ export async function getEventTimelinesAdmin() {
       timeline2: { name: 'PPT Submission Phase', startDate: '', endDate: '', enabled: true, state: 'not-set', pptFilterApplied: false },
       timeline3: { name: 'Prelims Round', startDate: '', endDate: '', enabled: true, topTeamsToFinal: 10, state: 'not-set', finalistsPromoted: false },
       timeline4: { name: 'Final Round', startDate: '', endDate: '', enabled: true, winnerCount: 3, state: 'not-set' },
+      consentLetterEnabled: false,
     };
 
     if (!docSnap.exists) {

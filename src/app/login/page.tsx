@@ -58,7 +58,7 @@ function LoginForm() {
         router.push('/admin');
       } else if (role === 'jury') {
         router.push('/jury-dashboard');
-      } else if (role === 'coordinator' || role === 'student-coord' || role === 'faculty-coord') {
+      } else if (role === 'coordinator') {
         router.push('/coord-dashboard');
       } else {
         router.push('/team-dashboard');

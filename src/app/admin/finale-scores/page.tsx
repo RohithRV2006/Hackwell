@@ -278,7 +278,7 @@ export default function AdminFinaleScoresPage() {
       {(successMsg || errorMsg) && (
         <div className={`fixed top-24 right-6 z-50 p-4 border rounded-sm text-sm font-bold shadow-lg flex items-center justify-between gap-4 min-w-[300px] ${successMsg ? 'bg-white border-green-500 text-green-700' : 'bg-white border-red-500 text-red-700'}`}>
           <span>{successMsg || errorMsg}</span>
-          <button onClick={() => { setSuccessMsg(''); setErrorMsg(''); }} className="text-gray-400 hover:text-gray-600"></button>
+          <button onClick={() => { setSuccessMsg(''); setErrorMsg(''); }} className="text-gray-400 hover:text-gray-600">&times;</button>
         </div>
       )}
 

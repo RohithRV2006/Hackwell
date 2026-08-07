@@ -14,12 +14,15 @@ export async function checkPPTSubmissionTimelineStatus() {
     const docSnap = await db.collection('metadata').doc('eventTimelines').get();
 
     if (!docSnap.exists) {
-      return { allowed: false, state: 'not-set', message: 'PPT Submission Phase has not been activated by administrators yet.' };
+      return { allowed: false, state: 'not-set', message: 'PPT Submission Phase has not been activated by administrators yet.', consentLetterEnabled: false };
     }
 
-    const t2 = docSnap.data()?.timeline2;
+    const data = docSnap.data();
+    const consentLetterEnabled = data?.consentLetterEnabled || false;
+    const t2 = data?.timeline2;
+
     if (!t2 || t2.enabled === false || t2.state === 'not-set') {
-      return { allowed: false, state: 'not-set', message: 'PPT Submission Phase has not been activated by administrators yet.' };
+      return { allowed: false, state: 'not-set', message: 'PPT Submission Phase has not been activated by administrators yet.', consentLetterEnabled };
     }
 
     const now = new Date();
@@ -27,7 +30,8 @@ export async function checkPPTSubmissionTimelineStatus() {
       return { 
         allowed: false, 
         state: 'not-started',
-        message: `PPT Submission opens on ${new Date(t2.startDate).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}.` 
+        message: `PPT Submission opens on ${new Date(t2.startDate).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}.`,
+        consentLetterEnabled
       };
     }
 
@@ -35,14 +39,19 @@ export async function checkPPTSubmissionTimelineStatus() {
       return { 
         allowed: false, 
         state: 'ended',
-        message: `PPT Submission Phase closed on ${new Date(t2.endDate).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}.` 
+        message: `PPT Submission Phase closed on ${new Date(t2.endDate).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}.`,
+        consentLetterEnabled
       };
     }
 
-    return { allowed: true, state: 'active', message: '' };
+    if (t2.state === 'paused') {
+      return { allowed: false, state: 'paused', message: 'PPT Submission Phase is temporarily paused.', consentLetterEnabled };
+    }
+
+    return { allowed: true, state: 'active', message: '', consentLetterEnabled };
   } catch (error: any) {
     console.error('Error checking PPT timeline status:', error);
-    return { allowed: false, state: 'error', message: 'Unable to verify PPT submission timeline status.' };
+    return { allowed: false, state: 'error', message: 'Unable to verify PPT submission timeline status.', consentLetterEnabled: false };
   }
 }
 

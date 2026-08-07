@@ -26,7 +26,7 @@ export default async function CoordDashboard() {
   }
 
   const role = await getUserRole(email);
-  if (role !== 'coordinator' && role !== 'student-coord' && role !== 'faculty-coord') {
+  if (role !== 'coordinator') {
     redirect('/');
   }
 

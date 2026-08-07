@@ -80,6 +80,15 @@ export async function createSessionCookie(idToken: string) {
     } else if (sanitizedEmail) {
       role = await getUserRole(sanitizedEmail);
     }
+    
+    // Set the role cookie for middleware routing
+    cookieStore.set('user_role', role, {
+      maxAge: Math.floor(expiresIn / 1000),
+      httpOnly: false, // Must be readable by client or middleware easily, though edge middleware can read HTTP-only anyway. It's safe to be false, but true is fine too.
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      sameSite: 'lax',
+    });
 
     return { success: true, role };
   } catch (error: any) {
@@ -91,4 +100,5 @@ export async function createSessionCookie(idToken: string) {
 export async function clearSessionCookie() {
   const cookieStore = await cookies();
   cookieStore.delete('session');
+  cookieStore.delete('user_role');
 }

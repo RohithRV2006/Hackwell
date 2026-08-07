@@ -23,6 +23,7 @@ import {
   setTimelinePhaseAdmin,
   updateTimelinePhaseAdmin,
   resetTimelinePhaseAdmin,
+  updateEventTimelinesAdmin,
   applyPptFilterAdmin,
   resetPrelimsFiltersAndAssignmentsAdmin,
   publishJurySelectedFinalistsAdmin,
@@ -581,7 +582,7 @@ export default function AdminEventManagementPage() {
       setTimelines((prev) => ({
         ...prev,
         [`timeline${phase}`]: {
-          ...prev[`timeline${phase}` as keyof EventTimelinesData],
+          ...prev[`timeline${phase}` as 'timeline1' | 'timeline2' | 'timeline3' | 'timeline4'],
           startDate: start,
           endDate: end,
           state: 'active',
@@ -599,6 +600,24 @@ export default function AdminEventManagementPage() {
     if (phase === '4') setP4Saving(false);
   };
 
+  const handleToggleConsent = async () => {
+    setMsg(null);
+    const newValue = !timelines.consentLetterEnabled;
+    const newTimelines = { ...timelines, consentLetterEnabled: newValue };
+    
+    // Optimistic update
+    setTimelines(newTimelines);
+
+    const res = await updateEventTimelinesAdmin(newTimelines);
+    if (res.success) {
+      setMsg({ type: 'success', text: `Consent Letter is now ${newValue ? 'ENABLED (Visible)' : 'DISABLED (Hidden)'} for students.` });
+    } else {
+      setMsg({ type: 'error', text: res.error || 'Failed to toggle consent letter.' });
+      // Revert on failure
+      setTimelines(timelines);
+    }
+  };
+
   const handleUpdatePhase = async (phase: '1' | '2' | '3' | '4') => {
     let updates: Record<string, any> = {};
     if (phase === '1') { updates = { startDate: p1Start, endDate: p1End }; setP1Saving(true); }
@@ -613,7 +632,7 @@ export default function AdminEventManagementPage() {
       setTimelines((prev) => ({
         ...prev,
         [`timeline${phase}`]: {
-          ...prev[`timeline${phase}` as keyof EventTimelinesData],
+          ...prev[`timeline${phase}` as 'timeline1' | 'timeline2' | 'timeline3' | 'timeline4'],
           ...updates,
         },
       }));
@@ -642,7 +661,7 @@ export default function AdminEventManagementPage() {
       setTimelines((prev) => ({
         ...prev,
         [`timeline${phase}`]: {
-          ...prev[`timeline${phase}` as keyof EventTimelinesData],
+          ...prev[`timeline${phase}` as 'timeline1' | 'timeline2' | 'timeline3' | 'timeline4'],
           startDate: '',
           endDate: '',
           state: 'not-set',
@@ -1012,6 +1031,27 @@ export default function AdminEventManagementPage() {
             );
           })}
         </div>
+
+        {/* Global Event Settings */}
+        <div className="mt-5 p-4 border border-blue-200 bg-blue-50/50 rounded-sm flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-bold text-gray-900">Consent Letter</h4>
+            <p className="text-xs text-gray-500 mt-0.5">Toggle whether the Consent Letter tab is visible to students in their Team Dashboard.</p>
+          </div>
+          <button
+            onClick={handleToggleConsent}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+              timelines.consentLetterEnabled ? 'bg-blue-600' : 'bg-gray-300'
+            }`}
+          >
+            <span className="sr-only">Toggle Consent Letter</span>
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                timelines.consentLetterEnabled ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       {/* ── MESSAGE BAR ───────────────────────────────────────────────────── */}
@@ -1019,7 +1059,7 @@ export default function AdminEventManagementPage() {
       {msg && (
         <div className={`fixed top-24 right-6 z-50 p-4 border rounded-sm text-sm font-bold shadow-lg flex items-center justify-between gap-4 min-w-[300px] ${msg.type === 'success' ? 'bg-white border-green-500 text-green-700' : 'bg-white border-red-500 text-red-700'}`}>
           <span>{msg.text}</span>
-          <button onClick={() => setMsg(null)} className="text-gray-400 hover:text-gray-600"></button>
+          <button onClick={() => setMsg(null)} className="text-gray-400 hover:text-gray-600">&times;</button>
         </div>
       )}
 
