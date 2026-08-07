@@ -7,8 +7,10 @@ import { checkRegistrationTimelineStatus } from '@/app/actions/auth';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { clearSessionCookie, getUserRole } from '@/app/actions/session';
+import { useRouter } from 'next/navigation';
 
 export default function Hero() {
+  const router = useRouter();
   const [isRegistrationOpen, setIsRegistrationOpen] = useState<boolean | null>(null);
   const [registrationMsg, setRegistrationMsg] = useState<string>('');
   const [user, setUser] = useState<User | null>(null);

@@ -84,17 +84,17 @@ export default function CoordClientDashboard({ coordName, coordEmail, initialTea
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Display ID
+                  <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-gray-100/50">
+                    Team ID
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-gray-100/50">
                     Team Name
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider bg-gray-100/50">
                     Venue
                   </th>
-                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
+                  <th scope="col" className="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider bg-gray-100/50">
+                    View Details
                   </th>
                 </tr>
               </thead>
@@ -153,22 +153,26 @@ export default function CoordClientDashboard({ coordName, coordEmail, initialTea
                     </h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
-                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                        <p className="text-gray-500 font-medium mb-1">Display ID</p>
-                        <p className="font-semibold">{selectedTeam.displayId || 'N/A'}</p>
+                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <p className="text-gray-500 font-bold mb-1 text-xs uppercase tracking-wider">Team ID</p>
+                        <p className="font-semibold text-gray-900 text-base">{selectedTeam.displayId || 'N/A'}</p>
                       </div>
-                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                        <p className="text-gray-500 font-medium mb-1">Venue</p>
-                        <p className="font-semibold">{selectedTeam.assignedLabName || selectedTeam.labNo || selectedTeam.venue || 'Not Assigned'}</p>
+                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <p className="text-gray-500 font-bold mb-1 text-xs uppercase tracking-wider">Venue</p>
+                        <p className="font-semibold text-gray-900 text-base">{selectedTeam.assignedLabName || selectedTeam.labNo || selectedTeam.venue || 'Not Assigned'}</p>
                       </div>
-                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 md:col-span-2">
-                        <p className="text-gray-500 font-medium mb-1">Lead Email</p>
-                        <p className="font-semibold break-all">{selectedTeam.leadEmail || 'N/A'}</p>
+                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <p className="text-gray-500 font-bold mb-1 text-xs uppercase tracking-wider">Lead Email</p>
+                        <p className="font-semibold text-gray-900 text-base break-all">{selectedTeam.leadEmail || 'N/A'}</p>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <p className="text-gray-500 font-bold mb-1 text-xs uppercase tracking-wider">Phone</p>
+                        <p className="font-semibold text-gray-900 text-base break-all">{selectedTeam.leadData?.contactNumber || selectedTeam.leadData?.phone || 'N/A'}</p>
                       </div>
                     </div>
 
                     <div className="mb-4 border border-gray-200 rounded-lg overflow-hidden">
-                      <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 font-medium text-gray-700">
+                      <div className="bg-gray-100/80 px-4 py-2 border-b border-gray-200 font-bold text-gray-800 text-sm uppercase tracking-wider">
                         Problem Statement
                       </div>
                       <div className="p-4 text-gray-600 bg-white whitespace-pre-wrap">
@@ -176,20 +180,56 @@ export default function CoordClientDashboard({ coordName, coordEmail, initialTea
                       </div>
                     </div>
 
+                    {/* Members Table */}
                     <div className="mb-4">
                       <h4 className="font-semibold text-gray-800 mb-2 border-b pb-1">Members</h4>
-                      {selectedTeam.membersData && Array.isArray(selectedTeam.membersData) && selectedTeam.membersData.length > 0 ? (
-                        <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg">
-                          {selectedTeam.membersData.map((m: any, i: number) => (
-                            <li key={i} className="py-2 px-3 flex justify-between items-center text-sm hover:bg-gray-50 bg-white">
-                              <span className="font-medium">{m.name || 'Unnamed'}</span>
-                              <span className="text-gray-500">{m.email || ''} {m.phone ? `• ${m.phone}` : ''}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-gray-500 text-sm italic mt-2">No extra members documented.</p>
-                      )}
+                      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mt-3">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse min-w-[600px]">
+                            <thead>
+                              <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold">
+                                <th className="py-3 px-4">Role</th>
+                                <th className="py-3 px-4">Name</th>
+                                <th className="py-3 px-4">Batch</th>
+                                <th className="py-3 px-4">Dept</th>
+                                <th className="py-3 px-4">Year</th>
+                                <th className="py-3 px-4">Section</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 text-sm">
+                              {selectedTeam.leadData && (
+                                <tr className="hover:bg-gray-50 transition">
+                                  <td className="py-3 px-4"><span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">LEAD</span></td>
+                                  <td className="py-3 px-4 font-semibold text-gray-900">{selectedTeam.leadData.name || '-'}</td>
+                                  <td className="py-3 px-4 text-gray-600">{selectedTeam.leadData.batchNumber || '-'}</td>
+                                  <td className="py-3 px-4 text-gray-600">{selectedTeam.leadData.department || '-'}</td>
+                                  <td className="py-3 px-4 text-gray-600">{selectedTeam.leadData.year || '-'}</td>
+                                  <td className="py-3 px-4 text-gray-600">{selectedTeam.leadData.section || '-'}</td>
+                                </tr>
+                              )}
+                              
+                              {selectedTeam.membersData && Array.isArray(selectedTeam.membersData) && selectedTeam.membersData.length > 0 ? (
+                                selectedTeam.membersData.map((member: any, i: number) => (
+                                  <tr key={i} className="hover:bg-gray-50 transition">
+                                    <td className="py-3 px-4"><span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-1 rounded">MEMBER</span></td>
+                                    <td className="py-3 px-4 font-semibold text-gray-900">{member.name || '-'}</td>
+                                    <td className="py-3 px-4 text-gray-600">{member.batchNumber || '-'}</td>
+                                    <td className="py-3 px-4 text-gray-600">{member.department || '-'}</td>
+                                    <td className="py-3 px-4 text-gray-600">{member.year || '-'}</td>
+                                    <td className="py-3 px-4 text-gray-600">{member.section || '-'}</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                !selectedTeam.leadData && (
+                                  <tr>
+                                    <td colSpan={6} className="py-4 px-4 text-center text-gray-500 italic">No members documented.</td>
+                                  </tr>
+                                )
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

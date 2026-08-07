@@ -61,17 +61,17 @@ function PhaseBadge({ state }: { state: PhaseState }) {
   if (state === 'active') return (
     <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-sm">
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-      ▶️ LIVE / ACTIVE
+       LIVE / ACTIVE
     </span>
   );
   if (state === 'paused') return (
     <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-      ⏸️ STOPPED / PAUSED
+       STOPPED / PAUSED
     </span>
   );
   if (state === 'ended') return (
     <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 border border-gray-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-      🏁 FINISHED
+       FINISHED
     </span>
   );
   return (
@@ -108,7 +108,7 @@ function RoundControlButtons({
           title={!canStart ? canStartReason : ''}
           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-xs font-extrabold transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
         >
-          ▶️ Start Round
+           Start Round
         </button>
 
         <button
@@ -117,7 +117,7 @@ function RoundControlButtons({
           disabled={state === 'paused'}
           className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-sm text-xs font-extrabold transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
         >
-          ⏸️ Stop / Pause Round
+           Stop / Pause Round
         </button>
 
         <button
@@ -126,7 +126,7 @@ function RoundControlButtons({
           disabled={state === 'ended'}
           className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-sm text-xs font-extrabold transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
         >
-          🏁 Finish This Round
+           Finish This Round
         </button>
 
         <button
@@ -134,13 +134,13 @@ function RoundControlButtons({
           onClick={onReset}
           className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-extrabold transition flex items-center gap-1.5 ml-auto"
         >
-          🔄 Reset This Round
+           Reset This Round
         </button>
       </div>
 
       {!canStart && state !== 'active' && (
         <div className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-sm flex items-center gap-1.5">
-          <span>⚠️</span> {canStartReason}
+          <span></span> {canStartReason}
         </div>
       )}
     </div>
@@ -387,7 +387,7 @@ export default function AdminEventManagementPage() {
     if (res.success) {
       setMsg({
         type: 'success',
-        text: `🚀 Successfully published ${res.count} teams to the Final Round! All student dashboards and Phase 4 are updated.`,
+        text: ` Successfully published ${res.count} teams to the Final Round! All student dashboards and Phase 4 are updated.`,
       });
       await refreshData();
     } else {
@@ -480,7 +480,7 @@ export default function AdminEventManagementPage() {
     if (timeline === '2' && phase1State !== 'ended') {
       setMsg({
         type: 'error',
-        text: '❌ Cannot start Phase 2 (PPT Submission)! Phase 1 (Registration Phase) must be FINISHED before Phase 2 can begin.',
+        text: ' Cannot start Phase 2 (PPT Submission)! Phase 1 (Registration Phase) must be FINISHED before Phase 2 can begin.',
       });
       return;
     }
@@ -488,7 +488,7 @@ export default function AdminEventManagementPage() {
     if (timeline === '3' && phase2State !== 'ended') {
       setMsg({
         type: 'error',
-        text: '❌ Cannot start Phase 3 (Prelims Round)! Phase 2 (PPT Submission Phase) must be FINISHED before Phase 3 can begin.',
+        text: ' Cannot start Phase 3 (Prelims Round)! Phase 2 (PPT Submission Phase) must be FINISHED before Phase 3 can begin.',
       });
       return;
     }
@@ -496,7 +496,7 @@ export default function AdminEventManagementPage() {
     if (timeline === '4' && phase3State !== 'ended') {
       setMsg({
         type: 'error',
-        text: '❌ Cannot start Phase 4 (Final Round)! Phase 3 (Prelims Round) must be FINISHED before Phase 4 can begin.',
+        text: ' Cannot start Phase 4 (Final Round)! Phase 3 (Prelims Round) must be FINISHED before Phase 4 can begin.',
       });
       return;
     }
@@ -507,7 +507,7 @@ export default function AdminEventManagementPage() {
       updatedAt: new Date().toISOString(),
     });
     if (res.success) {
-      setMsg({ type: 'success', text: `▶️ Phase ${timeline} has been STARTED and is now LIVE.` });
+      setMsg({ type: 'success', text: ` Phase ${timeline} has been STARTED and is now LIVE.` });
       await refreshData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Failed to start round.' });
@@ -522,7 +522,7 @@ export default function AdminEventManagementPage() {
       updatedAt: new Date().toISOString(),
     });
     if (res.success) {
-      setMsg({ type: 'success', text: `⏸️ Phase ${timeline} has been STOPPED / PAUSED.` });
+      setMsg({ type: 'success', text: ` Phase ${timeline} has been STOPPED / PAUSED.` });
       await refreshData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Failed to pause round.' });
@@ -538,7 +538,7 @@ export default function AdminEventManagementPage() {
       updatedAt: new Date().toISOString(),
     });
     if (res.success) {
-      setMsg({ type: 'success', text: `🏁 Phase ${timeline} is now FINISHED / ENDED.` });
+      setMsg({ type: 'success', text: ` Phase ${timeline} is now FINISHED / ENDED.` });
       await refreshData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Failed to finish round.' });
@@ -550,7 +550,7 @@ export default function AdminEventManagementPage() {
     setMsg(null);
     const res = await resetTimelinePhaseAdmin(timeline);
     if (res.success) {
-      setMsg({ type: 'success', text: `🔄 Phase ${timeline} has been RESET.` });
+      setMsg({ type: 'success', text: ` Phase ${timeline} has been RESET.` });
       await refreshData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Failed to reset round.' });
@@ -667,7 +667,7 @@ export default function AdminEventManagementPage() {
     setMsg(null);
     const res = await applyPptFilterAdmin();
     if (res.success) {
-      setMsg({ type: 'success', text: `PPT filter applied! ✅ ${res.passed} teams passed, ❌ ${res.failed} teams failed.` });
+      setMsg({ type: 'success', text: `PPT filter applied!  ${res.passed} teams passed,  ${res.failed} teams failed.` });
       await refreshData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Failed to apply PPT filter.' });
@@ -680,7 +680,7 @@ export default function AdminEventManagementPage() {
     setMsg(null);
     const res = await resetPrelimsFiltersAndAssignmentsAdmin();
     if (res.success) {
-      setMsg({ type: 'success', text: `🔄 Undone all Prelims filters and team assignments successfully! ${res.resetCount} teams reset.` });
+      setMsg({ type: 'success', text: ` Undone all Prelims filters and team assignments successfully! ${res.resetCount} teams reset.` });
       await refreshData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Failed to reset prelims filters.' });
@@ -719,7 +719,7 @@ export default function AdminEventManagementPage() {
     if (winner3rd) payload.push({ teamId: winner3rd, rank: 3, title: '3rd Place / 2nd Runner Up' });
     const res = await setFinalWinnersAdmin(payload);
     if (res.success) {
-      setMsg({ type: 'success', text: '🏆 Final winners saved and published!' });
+      setMsg({ type: 'success', text: ' Final winners saved and published!' });
       await refreshData();
     } else {
       setMsg({ type: 'error', text: res.error || 'Failed to save winners.' });
@@ -809,7 +809,7 @@ export default function AdminEventManagementPage() {
     if (res.success) {
       setMsg({
         type: 'success',
-        text: `🎲 Randomly assigned ${res.assignedCount} teams across active Juries & Labs! ${res.eliminatedCount ? `${res.eliminatedCount} non-PPT teams marked as eliminated.` : ''}`
+        text: ` Randomly assigned ${res.assignedCount} teams across active Juries & Labs! ${res.eliminatedCount ? `${res.eliminatedCount} non-PPT teams marked as eliminated.` : ''}`
       });
       await refreshData();
     } else {
@@ -904,7 +904,7 @@ export default function AdminEventManagementPage() {
     if (res.success) {
       setMsg({
         type: 'success',
-        text: `⚡ Auto-assigned final round venues for ${res.assignedCount} qualified finalist teams!`
+        text: ` Auto-assigned final round venues for ${res.assignedCount} qualified finalist teams!`
       });
       await refreshData();
     } else {
@@ -954,6 +954,7 @@ export default function AdminEventManagementPage() {
   };
 
   const exportTimeline3Report = (fmt: 'csv' | 'pdf') => {
+
     const headers = ['Rank', 'Team Name', 'Jury', 'Lab', 'Evals', 'Score (/50)', 'Finalist'];
     const rows: (string | number)[][] = prelimsRankedTeams.map((t, i) => [i + 1, t.teamName, t.judge, t.labNo, t.evalCount, t.score, t.finaleQualified ? 'Yes' : 'No']);
     fmt === 'csv' ? exportToCSV('Timeline3_Prelims_Report', headers, rows) : exportToPDF('Prelims Round Report', 'Prelims evaluation scores & rankings', headers, rows);
@@ -988,7 +989,7 @@ export default function AdminEventManagementPage() {
             onClick={() => refreshData()}
             className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-sm text-xs font-bold transition"
           >
-            🔄 Refresh Data
+             Refresh Data
           </button>
         </div>
 
@@ -1005,8 +1006,8 @@ export default function AdminEventManagementPage() {
               <div key={i} className={`py-2.5 px-3 text-center ${bg} ${i > 0 ? 'border-l border-white/20' : ''}`}>
                 <div className="text-[10px] opacity-80 mb-0.5">Phase {i + 1}</div>
                 <div>{p.label}</div>
-                {p.state === 'active' && <div className="text-[9px] mt-0.5 opacity-90">● LIVE</div>}
-                {p.state === 'ended' && <div className="text-[9px] mt-0.5 opacity-80">✓ Complete</div>}
+                {p.state === 'active' && <div className="text-[9px] mt-0.5 opacity-90"> LIVE</div>}
+                {p.state === 'ended' && <div className="text-[9px] mt-0.5 opacity-80"> Complete</div>}
               </div>
             );
           })}
@@ -1014,10 +1015,11 @@ export default function AdminEventManagementPage() {
       </div>
 
       {/* ── MESSAGE BAR ───────────────────────────────────────────────────── */}
+      {/* Floating Notifications */}
       {msg && (
-        <div className={`p-4 rounded-sm border text-sm font-medium flex justify-between items-center ${msg.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
+        <div className={`fixed top-24 right-6 z-50 p-4 border rounded-sm text-sm font-bold shadow-lg flex items-center justify-between gap-4 min-w-[300px] ${msg.type === 'success' ? 'bg-white border-green-500 text-green-700' : 'bg-white border-red-500 text-red-700'}`}>
           <span>{msg.text}</span>
-          <button onClick={() => setMsg(null)} className="font-bold px-1 ml-4 shrink-0">✕</button>
+          <button onClick={() => setMsg(null)} className="text-gray-400 hover:text-gray-600"></button>
         </div>
       )}
 
@@ -1034,13 +1036,13 @@ export default function AdminEventManagementPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setActiveModalTimeline('1')} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-sm text-xs font-bold transition">
-              🔍 View Teams
+               View Teams
             </button>
             <button onClick={() => exportTimeline1Report('csv')} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition">
-              📥 CSV
+               CSV
             </button>
             <button onClick={() => exportTimeline1Report('pdf')} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-sm text-xs font-bold transition">
-              📄 PDF
+               PDF
             </button>
           </div>
         </div>
@@ -1079,10 +1081,10 @@ export default function AdminEventManagementPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setActiveModalTimeline('2')} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition">
-              🔍 View PPTs
+               View PPTs
             </button>
-            <button onClick={() => exportTimeline2Report('csv')} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition">📥 CSV</button>
-            <button onClick={() => exportTimeline2Report('pdf')} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-sm text-xs font-bold transition">📄 PDF</button>
+            <button onClick={() => exportTimeline2Report('csv')} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition"> CSV</button>
+            <button onClick={() => exportTimeline2Report('pdf')} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-sm text-xs font-bold transition"> PDF</button>
           </div>
         </div>
 
@@ -1112,7 +1114,7 @@ export default function AdminEventManagementPage() {
             <div>
               <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wide">PPT Filter &amp; Assignments Control</h4>
               {timelines.timeline2.pptFilterApplied ? (
-                <p className="text-xs text-emerald-700 mt-0.5 font-semibold">✅ Filter applied — Only teams with submitted PPTs advance to Prelims.</p>
+                <p className="text-xs text-emerald-700 mt-0.5 font-semibold"> Filter applied — Only teams with submitted PPTs advance to Prelims.</p>
               ) : (
                 <p className="text-xs text-gray-600 mt-0.5">Filter teams for Prelims. Teams without a PPT link will be marked as failed.</p>
               )}
@@ -1120,12 +1122,12 @@ export default function AdminEventManagementPage() {
             <div className="flex items-center gap-2">
               <button onClick={handleResetPrelimsFilters}
                 className="shrink-0 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition">
-                🔄 Reset Filters &amp; Assignments
+                 Reset Filters &amp; Assignments
               </button>
               {!timelines.timeline2.pptFilterApplied && (
                 <button onClick={handleApplyPptFilter} disabled={applyingPptFilter}
                   className="shrink-0 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition disabled:opacity-50">
-                  {applyingPptFilter ? 'Applying...' : '🔍 Apply PPT Filter'}
+                  {applyingPptFilter ? 'Applying...' : ' Apply PPT Filter'}
                 </button>
               )}
             </div>
@@ -1146,22 +1148,22 @@ export default function AdminEventManagementPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setActiveModalTimeline('3')} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-sm text-xs font-bold transition">
-              🔍 View Evaluations
+               View Evaluations
             </button>
             <button onClick={() => exportAttendanceSheet('Prelims Round (Prelims Teams)', teams)} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition shadow-sm">
-              📋 Attendance Sheet
+               Attendance Sheet
             </button>
             <button onClick={handleAutoAssignTeams} disabled={allocating} className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
-              ⚡ {allocating ? 'Assigning...' : 'Auto Assign Teams'}
+               {allocating ? 'Assigning...' : 'Auto Assign Teams'}
             </button>
             <button onClick={handleRandomAssignTeams} disabled={allocating} className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
-              🎲 Random Assign
+               Random Assign
             </button>
             <button onClick={handleUndoAllAssignments} disabled={allocating} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
               ↺ Undo All
             </button>
-            <button onClick={() => exportTimeline3Report('csv')} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition">📥 CSV</button>
-            <button onClick={() => exportTimeline3Report('pdf')} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-sm text-xs font-bold transition">📄 PDF</button>
+            <button onClick={() => exportTimeline3Report('csv')} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition"> CSV</button>
+            <button onClick={() => exportTimeline3Report('pdf')} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-sm text-xs font-bold transition"> PDF</button>
           </div>
         </div>
 
@@ -1217,14 +1219,14 @@ export default function AdminEventManagementPage() {
           {/* Finalist Selection & Publishing Bar */}
           <div className="bg-purple-50/80 border border-purple-200 rounded-sm p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wide">🌟 Final Round Selection &amp; Publishing</h4>
+              <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wide"> Final Round Selection &amp; Publishing</h4>
               <p className="text-xs text-purple-700 mt-0.5">
                 Finalists are selected from Jury recommendations and Admin adjustments in the Prelims View. Currently selected: <strong>{liveStats?.finalistCount || selectedFinalistIds.size} teams</strong>
               </p>
             </div>
             <a href="/admin/prelims-scores"
               className="shrink-0 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition inline-block">
-              🔍 Go to Prelims Round Tab
+               Go to Prelims Round Tab
             </a>
           </div>
 
@@ -1346,16 +1348,16 @@ export default function AdminEventManagementPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setActiveModalTimeline('4')} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm text-xs font-bold transition">
-              🏆 View Final Round
+               View Final Round
             </button>
             <button onClick={() => exportAttendanceSheet('Final Round (Qualified Finalists)', finaleRankedTeams)} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition shadow-sm">
-              📋 Attendance Sheet
+               Attendance Sheet
             </button>
             <button onClick={handleAutoAssignFinalTeams} disabled={allocatingFinal} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition disabled:opacity-50">
-              ⚡ {allocatingFinal ? 'Assigning...' : 'Auto Assign Final Venues'}
+               {allocatingFinal ? 'Assigning...' : 'Auto Assign Final Venues'}
             </button>
-            <button onClick={() => exportTimeline4Report('csv')} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition">📥 CSV</button>
-            <button onClick={() => exportTimeline4Report('pdf')} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-sm text-xs font-bold transition">📄 PDF</button>
+            <button onClick={() => exportTimeline4Report('csv')} className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-sm text-xs font-bold transition"> CSV</button>
+            <button onClick={() => exportTimeline4Report('pdf')} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-sm text-xs font-bold transition"> PDF</button>
           </div>
         </div>
 
@@ -1490,17 +1492,17 @@ export default function AdminEventManagementPage() {
           <div className="bg-amber-50/50 border border-amber-200 rounded-sm p-5 space-y-4">
             <div className="flex justify-between items-center border-b border-amber-200 pb-3">
               <div>
-                <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wide">🏆 Select Final Round Winners</h4>
+                <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wide"> Select Final Round Winners</h4>
                 <p className="text-xs text-amber-700 mt-0.5">Pick the top 1st, 2nd, and 3rd place winners from qualified finalists.</p>
               </div>
               <button onClick={handleSaveWinners} disabled={savingWinners}
                 className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-sm text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5">
-                🏆 {savingWinners ? 'Saving...' : 'Save & Publish'}
+                 {savingWinners ? 'Saving...' : 'Save & Publish'}
               </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
               <div className="bg-white p-3.5 rounded-sm border border-amber-300 space-y-1.5">
-                <div className="font-bold text-amber-800">🥇 1st Place / Champion</div>
+                <div className="font-bold text-amber-800"> 1st Place / Champion</div>
                 <select value={winner1st} onChange={(e) => setWinner1st(e.target.value)}
                   className="w-full bg-amber-50/40 border border-amber-300 rounded-sm px-2.5 py-1.5 text-xs font-semibold focus:outline-none">
                   <option value="">-- Select Champion --</option>
@@ -1508,7 +1510,7 @@ export default function AdminEventManagementPage() {
                 </select>
               </div>
               <div className="bg-white p-3.5 rounded-sm border border-slate-300 space-y-1.5">
-                <div className="font-bold text-slate-800">🥈 2nd Place / 1st Runner Up</div>
+                <div className="font-bold text-slate-800"> 2nd Place / 1st Runner Up</div>
                 <select value={winner2nd} onChange={(e) => setWinner2nd(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-sm px-2.5 py-1.5 text-xs font-semibold focus:outline-none">
                   <option value="">-- Select 1st Runner Up --</option>
@@ -1516,7 +1518,7 @@ export default function AdminEventManagementPage() {
                 </select>
               </div>
               <div className="bg-white p-3.5 rounded-sm border border-amber-600/30 space-y-1.5">
-                <div className="font-bold text-amber-900">🥉 3rd Place / 2nd Runner Up</div>
+                <div className="font-bold text-amber-900"> 3rd Place / 2nd Runner Up</div>
                 <select value={winner3rd} onChange={(e) => setWinner3rd(e.target.value)}
                   className="w-full bg-amber-50/20 border border-amber-200 rounded-sm px-2.5 py-1.5 text-xs font-semibold focus:outline-none">
                   <option value="">-- Select 2nd Runner Up --</option>
@@ -1553,17 +1555,17 @@ export default function AdminEventManagementPage() {
                 </p>
               </div>
               <button onClick={() => { setActiveModalTimeline(null); setModalSearchQuery(''); }}
-                className="text-gray-400 hover:text-white font-bold text-lg px-2">✕</button>
+                className="text-gray-400 hover:text-white font-bold text-lg px-2"></button>
             </div>
 
             {/* Modal Controls */}
             <div className="p-4 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3">
-              <input type="text" placeholder="🔍 Search Team Name, Lead Email, ID..."
+              <input type="text" placeholder=" Search Team Name, Lead Email, ID..."
                 value={modalSearchQuery} onChange={(e) => setModalSearchQuery(e.target.value)}
                 className="w-full sm:w-80 bg-white border border-gray-300 rounded-sm px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500" />
               <div className="flex items-center gap-2">
-                {activeModalTimeline === '1' && <><button onClick={() => exportTimeline1Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline1Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
-                {activeModalTimeline === '2' && <><button onClick={() => exportTimeline2Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline2Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
+                {activeModalTimeline === '1' && <><button onClick={() => exportTimeline1Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold"> CSV</button><button onClick={() => exportTimeline1Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold"> PDF</button></>}
+                {activeModalTimeline === '2' && <><button onClick={() => exportTimeline2Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold"> CSV</button><button onClick={() => exportTimeline2Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold"> PDF</button></>}
                 {activeModalTimeline === '3' && (
                   <>
                     <div className="flex items-center gap-1 bg-gray-200 p-0.5 rounded-sm mr-2">
@@ -1573,7 +1575,7 @@ export default function AdminEventManagementPage() {
                           prelimsSubTab === 'scores' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-700 hover:text-gray-900'
                         }`}
                       >
-                        📊 Score Details
+                         Score Details
                       </button>
                       <button
                         onClick={() => setPrelimsSubTab('selection')}
@@ -1581,15 +1583,15 @@ export default function AdminEventManagementPage() {
                           prelimsSubTab === 'selection' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-700 hover:text-gray-900'
                         }`}
                       >
-                        🌟 Final Selection ({selectedFinalistIds.size})
+                         Final Selection ({selectedFinalistIds.size})
                       </button>
                     </div>
-                    <button onClick={() => exportAttendanceSheet('Prelims Round', teams)} className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-bold hover:bg-purple-700">📋 Attendance Sheet</button>
-                    <button onClick={() => exportTimeline3Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button>
-                    <button onClick={() => exportTimeline3Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button>
+                    <button onClick={() => exportAttendanceSheet('Prelims Round', teams)} className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-bold hover:bg-purple-700"> Attendance Sheet</button>
+                    <button onClick={() => exportTimeline3Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold"> CSV</button>
+                    <button onClick={() => exportTimeline3Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold"> PDF</button>
                   </>
                 )}
-                {activeModalTimeline === '4' && <><button onClick={() => exportAttendanceSheet('Final Round (Finalists)', finaleRankedTeams)} className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-bold hover:bg-purple-700">📋 Attendance Sheet</button><button onClick={() => exportTimeline4Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold">📥 CSV</button><button onClick={() => exportTimeline4Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold">📄 PDF</button></>}
+                {activeModalTimeline === '4' && <><button onClick={() => exportAttendanceSheet('Final Round (Finalists)', finaleRankedTeams)} className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-bold hover:bg-purple-700"> Attendance Sheet</button><button onClick={() => exportTimeline4Report('csv')} className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold"> CSV</button><button onClick={() => exportTimeline4Report('pdf')} className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-bold"> PDF</button></>}
               </div>
             </div>
 
@@ -1654,7 +1656,7 @@ export default function AdminEventManagementPage() {
                         </td>
                         <td className="px-3 py-2 text-right">
                           {t.pptLink
-                            ? <a href={t.pptLink} target="_blank" rel="noreferrer" className="text-purple-600 font-bold underline">🔗 Open</a>
+                            ? <a href={t.pptLink} target="_blank" rel="noreferrer" className="text-purple-600 font-bold underline"> Open</a>
                             : <span className="text-gray-400 italic">No link</span>}
                         </td>
                       </tr>
@@ -1701,7 +1703,7 @@ export default function AdminEventManagementPage() {
                                 onClick={() => handleOpenEditScore(t, evalRecord)}
                                 className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold rounded hover:bg-indigo-100 transition"
                               >
-                                ✏️ Edit Score
+                                 Edit Score
                               </button>
                             </td>
                           </tr>
@@ -1715,7 +1717,7 @@ export default function AdminEventManagementPage() {
                 <div className="space-y-3">
                   <div className="p-3 bg-purple-50 border border-purple-200 rounded flex flex-col sm:flex-row items-center justify-between gap-3">
                     <div>
-                      <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider">🌟 Selected Teams for Final Round</h4>
+                      <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider"> Selected Teams for Final Round</h4>
                       <p className="text-xs text-purple-700">Review Jury nominations & recommendations below. Toggle teams in/out of the list and click Publish when ready.</p>
                     </div>
                     <button
@@ -1723,7 +1725,7 @@ export default function AdminEventManagementPage() {
                       disabled={publishingFinalists}
                       className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-bold transition shadow-sm disabled:opacity-50 shrink-0"
                     >
-                      {publishingFinalists ? 'Publishing...' : `🚀 Publish ${selectedFinalistIds.size} Finalists`}
+                      {publishingFinalists ? 'Publishing...' : ` Publish ${selectedFinalistIds.size} Finalists`}
                     </button>
                   </div>
 
@@ -1762,7 +1764,7 @@ export default function AdminEventManagementPage() {
                               <td className="px-3 py-2">
                                 {isJuryNominated ? (
                                   <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded border border-purple-200">
-                                    🌟 Nominated by {evalRecord?.juryName || 'Jury'}
+                                     Nominated by {evalRecord?.juryName || 'Jury'}
                                   </span>
                                 ) : (
                                   <span className="text-gray-400 italic text-[10px]">Not Nominated</span>
@@ -1781,7 +1783,7 @@ export default function AdminEventManagementPage() {
                                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
                                   }`}
                                 >
-                                  {isSelected ? '✓ Finalist Selected' : '+ Select Team'}
+                                  {isSelected ? ' Finalist Selected' : '+ Select Team'}
                                 </button>
                               </td>
                             </tr>
@@ -1823,7 +1825,7 @@ export default function AdminEventManagementPage() {
                             <td className="px-3 py-2 font-semibold text-gray-800">{t.finalVenue || 'TBA'}</td>
                             <td className="px-3 py-2 text-center font-extrabold text-emerald-700">{t.avgScore}</td>
                             <td className="px-3 py-2 text-right font-bold space-x-2">
-                              <span className="text-gray-800">{t.id === winner1st ? '🥇 1st Place' : t.id === winner2nd ? '🥈 2nd Place' : t.id === winner3rd ? '🥉 3rd Place' : 'Finalist'}</span>
+                              <span className="text-gray-800">{t.id === winner1st ? ' 1st Place' : t.id === winner2nd ? ' 2nd Place' : t.id === winner3rd ? ' 3rd Place' : 'Finalist'}</span>
                               <button onClick={() => setSelectedTeamForMembers(t)} className="px-2 py-1 bg-white border border-gray-300 text-blue-700 rounded font-bold text-[11px] hover:bg-blue-50">
                                 Members ({t.membersData?.length || 0})
                               </button>
@@ -1858,7 +1860,7 @@ export default function AdminEventManagementPage() {
                 <h3 className="text-lg font-bold text-gray-900 mt-0.5">{selectedTeamForMembers.teamName}</h3>
                 <p className="text-xs text-gray-500 mt-0.5">{selectedTeamForMembers.problemStatement}</p>
               </div>
-              <button onClick={() => setSelectedTeamForMembers(null)} className="text-gray-400 font-bold px-2 hover:text-gray-700">✕</button>
+              <button onClick={() => setSelectedTeamForMembers(null)} className="text-gray-400 font-bold px-2 hover:text-gray-700"></button>
             </div>
             <div className="bg-blue-50 p-3.5 rounded-sm text-xs space-y-1">
               <div className="font-bold text-blue-900 uppercase text-[10px] mb-1">Team Leader</div>
@@ -1896,10 +1898,10 @@ export default function AdminEventManagementPage() {
           <div className="bg-white rounded-sm max-w-lg w-full shadow-2xl overflow-hidden border border-gray-300">
             <div className="p-4 bg-indigo-900 text-white flex justify-between items-center">
               <div>
-                <h3 className="text-sm font-bold">✏️ Edit Score & Assignment</h3>
+                <h3 className="text-sm font-bold"> Edit Score & Assignment</h3>
                 <p className="text-xs text-indigo-200 mt-0.5">{editingScoreItem.team.teamName} ({editingScoreItem.team.displayId || editingScoreItem.team.id})</p>
               </div>
-              <button onClick={() => setEditingScoreItem(null)} className="text-indigo-300 hover:text-white font-bold text-base">✕</button>
+              <button onClick={() => setEditingScoreItem(null)} className="text-indigo-300 hover:text-white font-bold text-base"></button>
             </div>
 
             <div className="p-5 space-y-4 text-xs">
@@ -1962,7 +1964,7 @@ export default function AdminEventManagementPage() {
                 Cancel
               </button>
               <button onClick={handleSaveScoreEdit} disabled={savingScoreEdit} className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded text-xs disabled:opacity-50">
-                {savingScoreEdit ? 'Saving...' : '💾 Save Score & Assignments'}
+                {savingScoreEdit ? 'Saving...' : ' Save Score & Assignments'}
               </button>
             </div>
           </div>
