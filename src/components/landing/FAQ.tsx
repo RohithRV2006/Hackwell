@@ -6,19 +6,19 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 const FAQS = [
   {
     question: 'Who can participate in Hackwell?',
-    answer: 'Any student currently enrolled in a degree program is eligible to participate. You must form a team of 3 to 4 members.',
+    answer: 'Students currently enrolled in any computing-related branch are eligible to participate. Teams must consist of exactly four members.'
   },
   {
     question: 'Is there a registration fee?',
-    answer: 'No, Hackwell is completely free for all participants.',
+    answer: 'There is no registration fee to apply for Hackwell. However, teams selected for the final round will be required to pay a participation fee.',
   },
   {
     question: 'Will food and accommodation be provided?',
-    answer: 'Yes, meals, snacks, and basic resting areas will be provided during the 24-hour event at the venue.',
+    answer: 'Yes, meals, snacks, and basic resting areas will be provided during the 24 hour event at the venue.',
   },
   {
     question: 'What if I don\'t have a team?',
-    answer: 'You must register as a team of 3-4 members. We encourage you to connect with your classmates and form a team before the deadline.',
+    answer: 'You must register as a team of 4. We encourage you to connect with your friends or classmates and form a team before the deadline.',
   },
 ];
 

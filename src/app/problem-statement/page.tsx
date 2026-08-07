@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Suspense } from 'react';
 import { problemStatements, ProblemStatement } from '@/data/problem-statements';
+import { useSearchParams } from 'next/navigation';
 
-export default function ProblemStatementPage() {
-  const [selectedTheme, setSelectedTheme] = useState<string>('All');
+function ProblemStatementContent() {
+  const searchParams = useSearchParams();
+  const initialTheme = searchParams.get('theme') || 'All';
+  const [selectedTheme, setSelectedTheme] = useState<string>(initialTheme);
   const [selectedDomain, setSelectedDomain] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProblem, setSelectedProblem] = useState<ProblemStatement | null>(null);
@@ -182,5 +185,13 @@ export default function ProblemStatementPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function ProblemStatementPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 py-8 px-4 flex justify-center items-center">Loading...</div>}>
+      <ProblemStatementContent />
+    </Suspense>
   );
 }

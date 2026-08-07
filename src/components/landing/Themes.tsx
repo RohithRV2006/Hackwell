@@ -1,11 +1,12 @@
-import { Bot, BrainCircuit, Truck, Briefcase, HeartHandshake } from 'lucide-react';
+import Link from 'next/link';
+import { Bot, BrainCircuit, Truck, ShieldCheck, HeartHandshake } from 'lucide-react';
 import { THEME_NAMES, THEME_DESCRIPTIONS } from '@/lib/data/themes';
 
 const THEME_ICONS: Record<string, any> = {
   "Autonomous Agentic AI": Bot,
-  "Adaptive Intelligent Systems": BrainCircuit,
+  "Adaptive Intelligence System": BrainCircuit,
   "Predictive Logistics using Industrial AI": Truck,
-  "AI for Smart Business Solution": Briefcase,
+  "Cybersecurity & Digital Trust": ShieldCheck,
   "Human Centered AI": HeartHandshake,
 };
 
@@ -26,9 +27,10 @@ export default function Themes() {
             const Icon = THEME_ICONS[themeName] || BrainCircuit;
             const description = THEME_DESCRIPTIONS[themeName];
             return (
-              <div 
+              <Link 
+                href={`/problem-statement?theme=${encodeURIComponent(themeName)}`}
                 key={idx} 
-                className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-blue-200 transition-all group flex flex-col justify-between"
+                className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-blue-200 transition-all group flex flex-col justify-between cursor-pointer block"
               >
                 <div>
                   <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-colors">
@@ -38,7 +40,7 @@ export default function Themes() {
                   <h3 className="text-xl font-bold text-gray-900 mb-3">{themeName}</h3>
                   <p className="text-gray-600 text-sm leading-relaxed">{description}</p>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

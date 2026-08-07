@@ -13,26 +13,26 @@ export type Theme = {
 
 export const THEME_NAMES = [
   "Autonomous Agentic AI",
-  "Adaptive Intelligent Systems",
+  "Adaptive Intelligence System",
   "Predictive Logistics using Industrial AI",
-  "AI for Smart Business Solution",
+  "Cybersecurity & Digital Trust",
   "Human Centered AI",
 ] as const;
 
 export const THEME_DESCRIPTIONS: Record<string, string> = {
   "Autonomous Agentic AI": "Build self-directed, multi-agent AI systems that collaborate, reason, and autonomously solve complex workflows.",
-  "Adaptive Intelligent Systems": "Develop dynamic AI models that continuously learn, adapt, and personalize experiences based on user interactions.",
+  "Adaptive Intelligence System": "Develop dynamic AI models that continuously learn, adapt, and personalize experiences based on user interactions.",
   "Predictive Logistics using Industrial AI": "Leverage industrial AI to forecast demand, optimize supply chains, and enable predictive asset routing.",
-  "AI for Smart Business Solution": "Create AI tools that transform business operations, financial decision-making, and municipal services.",
+  "Cybersecurity & Digital Trust": "Create robust AI-driven security solutions to protect digital infrastructure, detect threats, and ensure data privacy.",
   "Human Centered AI": "Design ethical, accessible, and inclusive AI technologies tailored to empower humans and communities.",
 };
 
 const normalizeThemeName = (rawTheme: string): string => {
   const lower = rawTheme.toLowerCase().trim();
   if (lower.includes('autonomous') || lower.includes('agentic')) return "Autonomous Agentic AI";
-  if (lower.includes('adaptive') || lower.includes('intell')) return "Adaptive Intelligent Systems";
+  if (lower.includes('adaptive') || lower.includes('intell')) return "Adaptive Intelligence System";
   if (lower.includes('predictive') || lower.includes('logistics')) return "Predictive Logistics using Industrial AI";
-  if (lower.includes('business') || lower.includes('smart business')) return "AI for Smart Business Solution";
+  if (lower.includes('cybersecurity') || lower.includes('trust')) return "Cybersecurity & Digital Trust";
   if (lower.includes('human') || lower.includes('centered')) return "Human Centered AI";
   return rawTheme;
 };
