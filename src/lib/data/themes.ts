@@ -42,7 +42,7 @@ export const HACKATHON_THEMES: Theme[] = THEME_NAMES.map((themeName) => {
     .filter((ps) => normalizeThemeName(ps.theme) === themeName)
     .map((ps) => ({
       id: ps.ps_id,
-      name: `${ps.title}: ${ps.statement}`,
+      name: `${ps.title}: ${ps.problemStatement}`,
     }));
 
   return {

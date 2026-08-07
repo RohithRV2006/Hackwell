@@ -483,6 +483,8 @@ export async function getAllEvaluationsAdmin(round: 'prelims' | 'finale') {
         rubric: r.rubric || {},
         totalScore: r.totalScore || 0,
         remarks: r.remarks || r.feedback || '',
+        selectedForFinal: Boolean(r.selectedForFinal),
+        selectionReason: r.selectionReason || '',
         highlighted: r.highlighted || false,
         isFrozen: r.isFrozen || false,
         createdAt: r.createdAt || '',

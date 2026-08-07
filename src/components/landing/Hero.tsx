@@ -20,8 +20,7 @@ export default function Hero() {
     try {
       await signOut(auth);
       await clearSessionCookie();
-      router.refresh();
-      router.replace('/login');
+      window.location.href = '/login';
     } catch (error) {
       console.error('Logout failed', error);
     }
