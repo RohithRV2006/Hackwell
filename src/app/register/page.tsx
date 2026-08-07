@@ -550,31 +550,180 @@ export default function Register() {
 
       {/* Terms and Conditions Modal */}
       {showTnC && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-gray-900">Participant Terms & Conditions</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm transition-opacity">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden transform transition-all">
+            {/* Header */}
+            <div className="px-8 py-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-extrabold text-gray-900">Terms & Conditions</h2>
+                <p className="text-sm font-medium text-blue-600 mt-1">Hackwell — 24-Hour Hackathon</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowTnC(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-full hover:bg-gray-200"
+              >
+                ✕
+              </button>
             </div>
-            <div className="p-6 overflow-y-auto space-y-4 text-sm text-gray-700">
-              <h3 className="font-bold text-lg text-gray-900">1. Student Code of Conduct</h3>
-              <p>As a participant in this hackathon, you agree to treat all mentors, juries, coordinators, and fellow participants with respect. Any form of harassment, discrimination, or disruptive behavior will lead to immediate disqualification and removal from the event premises.</p>
+            
+            {/* Content */}
+            <div className="px-8 py-6 overflow-y-auto text-[15px] leading-relaxed text-gray-600 space-y-8 custom-scrollbar">
               
-              <h3 className="font-bold text-lg text-gray-900">2. Team Integrity</h3>
-              <p>Your team must solely consist of the 4 members registered here. Substituting members or bringing unauthorized students into the hacking venue is strictly prohibited. You must wear your ID badges at all times.</p>
+              <div className="bg-blue-50/50 p-5 rounded-xl border border-blue-100/50">
+                <p className="text-sm text-blue-900 leading-relaxed font-medium">
+                  Organized by the Computing Branches, Saranathan College of Engineering. 
+                  These Terms & Conditions ("Terms") govern registration and participation in Hackwell ("the Event"). 
+                  By registering, each participant and team agrees to be bound by these Terms in full.
+                </p>
+              </div>
 
-              <h3 className="font-bold text-lg text-gray-900">3. Original Work Guarantee</h3>
-              <p>All projects must be originally developed during the hackathon timeframe. While using open-source libraries is permitted, you cannot submit previously built academic projects or commercial products. Juries will review code commit histories.</p>
+              <div className="space-y-6">
+                <section>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm">1</span>
+                    Acceptance of Terms
+                  </h3>
+                  <p className="pl-8 text-gray-600">
+                    Registration for the Event constitutes acceptance of these Terms by the team and each of its members. If any member does not agree to these Terms, that member must not be included in the registration.
+                  </p>
+                </section>
 
-              <h3 className="font-bold text-lg text-gray-900">4. Facility & Equipment Rules</h3>
-              <p>Participants are responsible for any damage caused to university property during the event. Please keep your hacking stations clean. The organizers are not liable for the theft or loss of personal laptops and belongings.</p>
+                <hr className="border-gray-100" />
+
+                <section>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm">2</span>
+                    Eligibility
+                  </h3>
+                  <ul className="pl-8 space-y-3 list-disc list-inside text-gray-600">
+                    <li><strong className="text-gray-800 font-semibold">2.1</strong> Participation is open only to students currently enrolled in the CSE, AI&amp;DS, AIML, IT, or CSBS departments.</li>
+                    <li><strong className="text-gray-800 font-semibold">2.2</strong> Each team must comprise exactly four (4) members. Teams may be formed across eligible departments.</li>
+                    <li><strong className="text-gray-800 font-semibold">2.3</strong> The organizing committee reserves the right to verify eligibility at any stage and to disqualify any team found to contain ineligible members.</li>
+                  </ul>
+                </section>
+
+                <hr className="border-gray-100" />
+
+                <section>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm">3</span>
+                    Registration & Accuracy of Information
+                  </h3>
+                  <ul className="pl-8 space-y-3 list-disc list-inside text-gray-600">
+                    <li><strong className="text-gray-800 font-semibold">3.1</strong> All information submitted during registration — including team name, problem statement selection, and member details — must be true, accurate, and complete. Providing false information may result in disqualification at any stage.</li>
+                    <li><strong className="text-gray-800 font-semibold">3.2</strong> Information submitted at registration is final and cannot be modified thereafter, including the selected problem statement.</li>
+                    <li><strong className="text-gray-800 font-semibold">3.3</strong> Registration and problem statement selection must be completed before the published deadline. The organizing committee is not obligated to accept registrations or changes submitted after this deadline.</li>
+                    <li><strong className="text-gray-800 font-semibold">3.4</strong> There is no fee for registration. A participation fee applies only to teams shortlisted for the final round, as communicated separately to such teams.</li>
+                  </ul>
+                </section>
+
+                <hr className="border-gray-100" />
+
+                <section>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm">4</span>
+                    Originality of Work
+                  </h3>
+                  <ul className="pl-8 space-y-3 list-disc list-inside text-gray-600">
+                    <li><strong className="text-gray-800 font-semibold">4.1</strong> All work submitted must be developed by the team during the official duration of the Event. Submissions that are pre-built, previously created, or substantially developed prior to the Event are prohibited and will result in disqualification.</li>
+                    <li><strong className="text-gray-800 font-semibold">4.2</strong> Use of open-source libraries, frameworks, APIs, AI models, and publicly available datasets is permitted, provided the core idea, implementation, and integration are the original work of the team.</li>
+                    <li><strong className="text-gray-800 font-semibold">4.3</strong> By submitting a project, the team represents and warrants that it holds the necessary rights to all components of the submission and that the submission does not infringe on the intellectual property rights of any third party.</li>
+                  </ul>
+                </section>
+
+                <hr className="border-gray-100" />
+
+                <section>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm">5</span>
+                    Submission & Evaluation
+                  </h3>
+                  <ul className="pl-8 space-y-3 list-disc list-inside text-gray-600">
+                    <li><strong className="text-gray-800 font-semibold">5.1</strong> All deliverables must be submitted before the deadlines announced by the organizing committee. Submissions received after the applicable deadline will not be considered, and the responsible team will be disqualified.</li>
+                    <li><strong className="text-gray-800 font-semibold">5.2</strong> Shortlisted teams must present a live demonstration of their solution as part of the evaluation process.</li>
+                    <li><strong className="text-gray-800 font-semibold">5.3</strong> The decisions of the judging panel are final and binding on all participants, and shall not be subject to appeal or correspondence.</li>
+                  </ul>
+                </section>
+
+                <hr className="border-gray-100" />
+
+                <section>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm">6</span>
+                    Code of Conduct
+                  </h3>
+                  <ul className="pl-8 space-y-3 list-disc list-inside text-gray-600">
+                    <li><strong className="text-gray-800 font-semibold">6.1</strong> Participants must carry a valid college identification card at all times during the Event and produce it when requested.</li>
+                    <li><strong className="text-gray-800 font-semibold">6.2</strong> Participants are expected to conduct themselves professionally, respectfully, and ethically at all times.</li>
+                    <li><strong className="text-gray-800 font-semibold">6.3</strong> Participants must not leave the venue during the Event without the prior written or verbal permission of the organizing committee.</li>
+                    <li><strong className="text-gray-800 font-semibold">6.4</strong> Any act of plagiarism, cheating, misconduct, or violation of these Terms will result in the immediate disqualification of the team involved, at the sole discretion of the organizing committee.</li>
+                  </ul>
+                </section>
+
+                <hr className="border-gray-100" />
+
+                <section>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm">7</span>
+                    Communication
+                  </h3>
+                  <p className="pl-8 text-gray-600">
+                    All official communication regarding the Event will be issued through the Hackwell website and official WhatsApp groups. Participants are responsible for monitoring these channels for updates.
+                  </p>
+                </section>
+
+                <hr className="border-gray-100" />
+
+                <section>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm">8</span>
+                    Limitation of Liability
+                  </h3>
+                  <ul className="pl-8 space-y-3 list-disc list-inside text-gray-600">
+                    <li><strong className="text-gray-800 font-semibold">8.1</strong> Participants are solely responsible for their personal belongings and equipment brought to the venue. The organizing committee shall not be liable for any loss, theft, or damage.</li>
+                    <li><strong className="text-gray-800 font-semibold">8.2</strong> The organizing committee shall not be liable for any loss, damage, or inconvenience arising from participation in the Event, except where such liability cannot be excluded by law.</li>
+                  </ul>
+                </section>
+
+                <hr className="border-gray-100" />
+
+                <section>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm">9</span>
+                    Amendments
+                  </h3>
+                  <p className="pl-8 text-gray-600">
+                    The organizing committee reserves the right to modify these Terms, the event schedule, or any aspect of the Event at its discretion, including where necessitated by unforeseen circumstances. Material changes will be communicated through the official channels referenced in Section 7.
+                  </p>
+                </section>
+
+                <hr className="border-gray-100" />
+
+                <section>
+                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-sm">10</span>
+                    Governing Terms
+                  </h3>
+                  <p className="pl-8 text-gray-600">
+                    These Terms constitute the entire agreement between participants and the organizing committee regarding participation in the Event and supersede any prior understanding, whether written or oral.
+                  </p>
+                </section>
+              </div>
+
+              <div className="mt-8 p-4 bg-gray-50 rounded-lg text-sm italic text-gray-500 text-center border border-gray-200 border-dashed">
+                For queries regarding these Terms &amp; Conditions, please contact the Hackwell organizing committee through the official channels listed on the Hackwell website.
+              </div>
             </div>
-            <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end rounded-b-2xl">
+            
+            {/* Footer */}
+            <div className="px-8 py-5 border-t border-gray-100 bg-gray-50 flex justify-end">
               <button 
                 type="button" 
                 onClick={() => setShowTnC(false)} 
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition shadow-sm"
+                className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition shadow-sm hover:shadow active:scale-[0.98]"
               >
-                Close
+                I Agree & Close
               </button>
             </div>
           </div>

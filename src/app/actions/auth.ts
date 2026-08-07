@@ -11,9 +11,15 @@ import {
 
 export async function checkTeamNameUnique(teamName: string) {
   try {
+<<<<<<< HEAD
     const sanitizedName = teamName.trim().toLowerCase();
     const allTeams = await getAllTeamsFlatCached();
     const found = allTeams.some((t) => t.teamName?.trim().toLowerCase() === sanitizedName);
+=======
+    const sanitizedName = teamName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const allTeams = await getAllTeamsFlatCached();
+    const found = allTeams.some((t) => t.teamName?.toLowerCase().replace(/[^a-z0-9]/g, '') === sanitizedName);
+>>>>>>> 23779a34fb7d7e7559ee033269ee65a9aba419a1
     return { isUnique: !found };
   } catch (error: any) {
     console.error('Error checking team name', error);
@@ -89,7 +95,11 @@ export async function registerTeamData(
       return { success: false, error: timelineCheck.message };
     }
 
+<<<<<<< HEAD
     const sanitizedName = teamName.trim().toLowerCase();
+=======
+    const sanitizedName = teamName.toLowerCase().replace(/[^a-z0-9]/g, '');
+>>>>>>> 23779a34fb7d7e7559ee033269ee65a9aba419a1
 
     // Double check uniqueness
     const teamNameCheck = await checkTeamNameUnique(sanitizedName);
