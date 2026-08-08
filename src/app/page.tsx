@@ -8,10 +8,12 @@ import Rules from '@/components/landing/Rules';
 import Testimonials from '@/components/landing/Testimonials';
 import FAQ from '@/components/landing/FAQ';
 import Contact from '@/components/landing/Contact';
+import SideMenu from '@/components/landing/SideMenu';
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-white">
+      <SideMenu />
       <NavBar />
       <Hero />
       <About />

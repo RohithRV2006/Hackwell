@@ -29,7 +29,10 @@ export default async function TeamDashboard() {
 
   const role = await getUserRole(email);
   if (role !== 'team') {
-    redirect('/');
+    if (role === 'admin') redirect('/admin');
+    else if (role === 'jury') redirect('/jury-dashboard');
+    else if (role === 'coordinator') redirect('/coord-dashboard');
+    else redirect('/');
   }
 
   const { success, team, error } = await getTeamDataByEmail(email);

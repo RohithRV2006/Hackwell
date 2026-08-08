@@ -22,6 +22,8 @@ export default function UsersCreatorPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const router = useRouter();
   const [successMsg, setSuccessMsg] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
 
   // Active tab: which form to show
   const [activeForm, setActiveForm] = useState<ActiveForm>('jury');
@@ -139,15 +141,11 @@ export default function UsersCreatorPage() {
 
   return (
     <div className="space-y-8 animate-fadeIn">
-      {/* Notifications */}
-      {successMsg && (
-        <div className="p-4 bg-gray-50 border border-gray-300 text-blue-700 rounded-sm text-sm font-medium">
-          {successMsg}
-        </div>
-      )}
-      {errorMsg && (
-        <div className="p-4 bg-gray-50 border border-gray-300 text-gray-700 rounded-sm text-sm font-medium">
-          {errorMsg}
+      {/* Floating Notifications */}
+      {(successMsg || errorMsg) && (
+        <div className={`fixed top-24 right-6 z-50 p-4 border rounded-sm text-sm font-bold shadow-lg flex items-center justify-between gap-4 min-w-[300px] ${successMsg ? 'bg-white border-green-500 text-green-700' : 'bg-white border-red-500 text-red-700'}`}>
+          <span>{successMsg || errorMsg}</span>
+          <button onClick={clearMessages} className="text-gray-400 hover:text-gray-600">&times;</button>
         </div>
       )}
 
@@ -348,13 +346,33 @@ export default function UsersCreatorPage() {
                 <h3 className="text-xl font-bold text-gray-900">User Accounts</h3>
                 <p className="text-sm text-gray-500">List of all privileged users and their credentials.</p>
               </div>
-              <button
-                onClick={loadUsers}
-                disabled={loading}
-                className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-blue-600 border border-gray-300 rounded-sm text-sm font-bold transition duration-200"
-              >
-                Refresh
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto mt-4 sm:mt-0">
+                <input
+                  type="text"
+                  placeholder="Search by name or email..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-gray-50 border border-gray-300 rounded-sm px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+                />
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="bg-gray-50 border border-gray-300 rounded-sm px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+                >
+                  <option value="all">All Roles</option>
+                  <option value="team">Team</option>
+                  <option value="admin">Admin</option>
+                  <option value="jury">Jury</option>
+                  <option value="coordinator">Coordinator</option>
+                </select>
+                <button
+                  onClick={loadUsers}
+                  disabled={loading}
+                  className="px-4 py-1.5 bg-gray-50 hover:bg-gray-100 text-blue-600 border border-gray-300 rounded-sm text-sm font-bold transition duration-200"
+                >
+                  Refresh
+                </button>
+              </div>
             </div>
             
             <div className="overflow-x-auto">
@@ -367,39 +385,47 @@ export default function UsersCreatorPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {users.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-6 py-8 text-center text-gray-500 text-sm">
-                        No privileged users found.
-                      </td>
-                    </tr>
-                  ) : (
-                    users.map((u) => {
-                      return (
-                        <tr key={u.email} className="hover:bg-gray-50 transition">
-                          <td className="px-6 py-4">
-                            <div className="font-bold text-gray-900">{u.name || u.email}</div>
-                            <div className="text-sm text-gray-500 font-mono">{u.email}</div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="bg-gray-100 text-gray-700 border border-gray-200 px-2 py-1 rounded-sm text-xs font-bold uppercase tracking-wider">
-                              {u.role}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            {u.role !== 'admin' && (
-                              <button
-                                onClick={() => handleDeleteUser(u.email, u.role)}
-                                className="text-red-600 hover:text-red-800 bg-white border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-sm text-xs font-bold transition"
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
+                  {(() => {
+                    const filteredUsers = users.filter((u) => {
+                      const matchesSearch = (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase());
+                      const matchesRole = roleFilter === 'all' || u.role === roleFilter;
+                      return matchesSearch && matchesRole;
+                    });
+
+                    return filteredUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-6 py-8 text-center text-gray-500 text-sm">
+                          No privileged users found.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredUsers.map((u) => {
+                        return (
+                          <tr key={u.email} className="hover:bg-gray-50 transition">
+                            <td className="px-6 py-4">
+                              <div className="font-bold text-gray-900">{u.name || u.email}</div>
+                              <div className="text-sm text-gray-500 font-mono">{u.email}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="bg-gray-100 text-gray-700 border border-gray-200 px-2 py-1 rounded-sm text-xs font-bold uppercase tracking-wider">
+                                {u.role}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              {u.role !== 'admin' && (
+                                <button
+                                  onClick={() => handleDeleteUser(u.email, u.role)}
+                                  className="text-red-600 hover:text-red-800 bg-white border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-sm text-xs font-bold transition"
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>

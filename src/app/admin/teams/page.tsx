@@ -185,7 +185,7 @@ export default function AdminTeamsPage() {
     setSuccessMsg('');
     const res = await resetPrelimsFiltersAndAssignmentsAdmin();
     if (res.success) {
-      setSuccessMsg(`🔄 Undone all Prelims filters and team assignments successfully! ${res.resetCount} teams reset.`);
+      setSuccessMsg(` Undone all Prelims filters and team assignments successfully! ${res.resetCount} teams reset.`);
       await loadTeams();
     } else {
       setErrorMsg(res.error || 'Failed to reset prelims filters.');
@@ -259,13 +259,13 @@ export default function AdminTeamsPage() {
             onClick={() => setStatusFilter('submitted')}
             className={`px-4 py-2 rounded-sm text-xs font-bold transition ${statusFilter === 'submitted' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'}`}
           >
-            ✅ Qualified (PPT Uploaded: {submittedCount})
+             Qualified (PPT Uploaded: {submittedCount})
           </button>
           <button
             onClick={() => setStatusFilter('eliminated')}
             className={`px-4 py-2 rounded-sm text-xs font-bold transition ${statusFilter === 'eliminated' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'}`}
           >
-            ❌ Eliminated (No PPT: {eliminatedCount})
+             Eliminated (No PPT: {eliminatedCount})
           </button>
         </div>
         <div className="text-xs text-gray-500 font-medium">
@@ -276,7 +276,7 @@ export default function AdminTeamsPage() {
       {successMsg && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-sm text-sm font-medium flex justify-between items-center">
           <span>{successMsg}</span>
-          <button onClick={() => setSuccessMsg('')} className="text-emerald-600 hover:text-emerald-800 font-bold">✕</button>
+          <button onClick={() => setSuccessMsg('')} className="text-emerald-600 hover:text-emerald-800 font-bold"></button>
         </div>
       )}
 
@@ -326,7 +326,7 @@ export default function AdminTeamsPage() {
                             rel="noreferrer"
                             className="text-xs font-bold text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-1 rounded transition"
                           >
-                            📄 Open PPT
+                             Open PPT
                           </a>
                         </div>
                       ) : (
@@ -416,7 +416,7 @@ export default function AdminTeamsPage() {
                       rel="noreferrer"
                       className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-sm text-xs font-bold transition shadow-sm flex items-center gap-1.5"
                     >
-                      🔗 Open in Google Drive
+                       Open in Google Drive
                     </a>
                   </div>
                 ) : (
@@ -487,7 +487,7 @@ export default function AdminTeamsPage() {
                 onClick={() => setEditingTeam(null)}
                 className="text-gray-400 hover:text-gray-600 font-bold px-2 py-1"
               >
-                ✕
+                
               </button>
             </div>
 

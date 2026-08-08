@@ -208,7 +208,7 @@ export function exportAttendanceSheet(title: string, teams: any[]) {
       <body>
         <div class="no-print" style="margin-bottom: 15px; text-align: right;">
           <button onclick="window.print()" style="background-color: #0F172A; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 13px;">
-            🖨 Print Attendance Sheet
+             Print Attendance Sheet
           </button>
         </div>
         <div class="header">
@@ -368,7 +368,7 @@ export function exportRegistrationReportPDF(teams: any[]) {
       <body>
         <div class="no-print" style="margin-bottom: 15px; text-align: right;">
           <button onclick="window.print()" style="background-color: #2563EB; color: white; border: none; padding: 9px 18px; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 12px;">
-            🖨 Print / Save PDF Report
+             Print / Save PDF Report
           </button>
         </div>
         <div class="header">
