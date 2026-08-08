@@ -9,11 +9,39 @@ import { auth } from '@/lib/firebase';
 import { clearSessionCookie, getUserRole } from '@/app/actions/session';
 import { useRouter } from 'next/navigation';
 
-export default function Hero() {
+export default function Hero({ countdownEndTime }: { countdownEndTime?: string }) {
   const router = useRouter();
+  const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number, seconds: number} | null>(null);
+
+  useEffect(() => {
+    if (!countdownEndTime) return;
+    
+    const end = new Date(countdownEndTime).getTime();
+    
+    const updateCountdown = () => {
+      const now = new Date().getTime();
+      const diff = end - now;
+      
+      if (diff <= 0) {
+        setTimeLeft(null);
+        return;
+      }
+      
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      setTimeLeft({ days, hours, minutes, seconds });
+    };
+    
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [countdownEndTime]);
   const [isRegistrationOpen, setIsRegistrationOpen] = useState<boolean | null>(null);
   const [registrationMsg, setRegistrationMsg] = useState<string>('');
-  const [user, setUser] = useState<User | null>(null);
+  const [hasSession, setHasSession] = useState(false);
   const [dashboardUrl, setDashboardUrl] = useState('/team-dashboard');
 
   const handleLogout = async () => {
@@ -36,23 +64,19 @@ export default function Hero() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      if (u?.email) {
-        try {
-          const userRole = await getUserRole(u.email);
-          switch(userRole) {
-            case 'admin': setDashboardUrl('/admin'); break;
-            case 'jury': setDashboardUrl('/jury-dashboard'); break;
-            case 'coordinator': setDashboardUrl('/coord-dashboard'); break;
-            default: setDashboardUrl('/team-dashboard'); break;
-          }
-        } catch (error) {
-          console.error("Failed to fetch role", error);
-        }
+    const match = document.cookie.match(new RegExp('(^| )user_role=([^;]+)'));
+    if (match) {
+      setHasSession(true);
+      const role = match[2];
+      switch(role) {
+        case 'admin': setDashboardUrl('/admin'); break;
+        case 'jury': setDashboardUrl('/jury-dashboard'); break;
+        case 'coordinator': setDashboardUrl('/coord-dashboard'); break;
+        default: setDashboardUrl('/team-dashboard'); break;
       }
-    });
-    return () => unsubscribe();
+    } else {
+      setHasSession(false);
+    }
   }, []);
 
   const openSideMenu = () => {
@@ -86,19 +110,43 @@ export default function Hero() {
           </span>
         </p>
 
-        {user ? (
+        {timeLeft && (
+          <div className="flex justify-center gap-2 sm:gap-4 mb-8">
+            <div className="flex flex-col items-center">
+              <div className="text-3xl font-black text-gray-900 bg-white shadow-sm border border-gray-100 rounded-lg w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center">{timeLeft.days}</div>
+              <span className="text-[10px] sm:text-xs font-semibold text-gray-500 mt-2 uppercase tracking-wider">Days</span>
+            </div>
+            <div className="text-2xl font-bold text-gray-300 mt-3">:</div>
+            <div className="flex flex-col items-center">
+              <div className="text-3xl font-black text-gray-900 bg-white shadow-sm border border-gray-100 rounded-lg w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center">{String(timeLeft.hours).padStart(2, '0')}</div>
+              <span className="text-[10px] sm:text-xs font-semibold text-gray-500 mt-2 uppercase tracking-wider">Hours</span>
+            </div>
+            <div className="text-2xl font-bold text-gray-300 mt-3">:</div>
+            <div className="flex flex-col items-center">
+              <div className="text-3xl font-black text-gray-900 bg-white shadow-sm border border-gray-100 rounded-lg w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center">{String(timeLeft.minutes).padStart(2, '0')}</div>
+              <span className="text-[10px] sm:text-xs font-semibold text-gray-500 mt-2 uppercase tracking-wider">Mins</span>
+            </div>
+            <div className="text-2xl font-bold text-gray-300 mt-3">:</div>
+            <div className="flex flex-col items-center">
+              <div className="text-3xl font-black text-blue-600 bg-white shadow-sm border border-blue-100 rounded-lg w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center">{String(timeLeft.seconds).padStart(2, '0')}</div>
+              <span className="text-[10px] sm:text-xs font-semibold text-gray-500 mt-2 uppercase tracking-wider">Secs</span>
+            </div>
+          </div>
+        )}
+
+        {hasSession ? (
           <Link 
             href={dashboardUrl} 
             className="inline-block px-8 py-3 text-lg font-bold text-blue-600 border-2 border-blue-600 rounded-md hover:bg-blue-50 transition-colors shadow-sm"
           >
-            Go to Dashboard
+            Headquarters &rarr;
           </Link>
         ) : (
           <Link 
             href="/login" 
             className="inline-block px-8 py-3 text-lg font-bold text-blue-600 border-2 border-blue-600 rounded-md hover:bg-blue-50 transition-colors shadow-sm"
           >
-            Register Now!
+            Assemble!
           </Link>
         )}
       </div>

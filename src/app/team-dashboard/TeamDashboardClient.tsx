@@ -265,19 +265,7 @@ export default function TeamDashboardClient({ team }: { team: any }) {
         >
           <Info size={16} /> Overview
         </button>
-        {/* TAB 2: PPT SUBMISSION (Hidden by default unless phase 2 started/paused/ended) */}
-        {pptTimelineStatus.state !== 'not-set' && (
-          <button
-            onClick={() => setActiveTab('submission')}
-            className={`flex items-center gap-2 px-6 py-4 font-semibold text-sm transition-colors whitespace-nowrap border-b-2 ${
-              activeTab === 'submission' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <UploadCloud size={16} /> Submissions
-          </button>
-        )}
-
-        {/* TAB 3: MEMBERS */}
+        {/* TAB 2: MEMBERS */}
         <button
           onClick={() => setActiveTab('members')}
           className={`flex items-center gap-2 px-6 py-4 font-semibold text-sm transition-colors whitespace-nowrap border-b-2 ${
@@ -285,6 +273,16 @@ export default function TeamDashboardClient({ team }: { team: any }) {
           }`}
         >
           <Users size={16} /> Members
+        </button>
+
+        {/* TAB 3: PPT SUBMISSION */}
+        <button
+          onClick={() => setActiveTab('submission')}
+          className={`flex items-center gap-2 px-6 py-4 font-semibold text-sm transition-colors whitespace-nowrap border-b-2 ${
+            activeTab === 'submission' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          <UploadCloud size={16} /> Submissions
         </button>
 
         {/* TAB 4: CONSENT LETTER (Conditionally rendered) */}

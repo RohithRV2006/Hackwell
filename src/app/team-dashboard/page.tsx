@@ -12,14 +12,14 @@ export default async function TeamDashboard() {
   const sessionCookie = cookieStore.get('session')?.value;
 
   if (!sessionCookie) {
-    redirect('/login');
+    redirect('/api/logout');
   }
 
   let decodedClaims;
   try {
     decodedClaims = await getAdminAuth().verifySessionCookie(sessionCookie, true);
   } catch (error) {
-    redirect('/login');
+    redirect('/api/logout');
   }
 
   const email = decodedClaims.email;

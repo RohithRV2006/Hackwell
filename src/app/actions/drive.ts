@@ -10,7 +10,7 @@ import { updateTeamInDomainDoc } from '@/lib/firestore-helpers';
  */
 export async function checkPPTSubmissionTimelineStatus() {
   try {
-    const db = getAdminDb();
+    const db = await getAdminDb();
     const docSnap = await db.collection('metadata').doc('eventTimelines').get();
 
     if (!docSnap.exists) {

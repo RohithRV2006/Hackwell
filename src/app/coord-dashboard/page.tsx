@@ -10,24 +10,24 @@ export default async function CoordDashboard() {
   const sessionCookie = cookieStore.get('session')?.value;
 
   if (!sessionCookie) {
-    redirect('/login');
+    redirect('/api/logout');
   }
 
   let decodedClaims;
   try {
     decodedClaims = await getAdminAuth().verifySessionCookie(sessionCookie, true);
   } catch {
-    redirect('/login');
+    redirect('/api/logout');
   }
 
   const email = decodedClaims.email;
   if (!email) {
-    redirect('/login');
+    redirect('/api/logout');
   }
 
   const role = await getUserRole(email);
   if (role !== 'coordinator') {
-    redirect('/');
+    redirect('/api/logout');
   }
 
   let coordName = email;

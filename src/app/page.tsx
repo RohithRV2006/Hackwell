@@ -10,12 +10,24 @@ import FAQ from '@/components/landing/FAQ';
 import Contact from '@/components/landing/Contact';
 import SideMenu from '@/components/landing/SideMenu';
 
-export default function Home() {
+import { getAdminDb } from '@/lib/firebase-admin';
+
+export default async function Home() {
+  let countdownEndTime = '';
+  try {
+    const docSnap = await getAdminDb().collection('metadata').doc('eventTimelines').get();
+    if (docSnap.exists) {
+      countdownEndTime = docSnap.data()?.countdownEndTime || '';
+    }
+  } catch (error) {
+    console.error('Error fetching countdown:', error);
+  }
+
   return (
     <main className="min-h-screen bg-white">
       <SideMenu />
       <NavBar />
-      <Hero />
+      <Hero countdownEndTime={countdownEndTime} />
       <About />
       <Themes />
       <Timeline />

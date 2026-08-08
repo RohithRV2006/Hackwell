@@ -345,6 +345,7 @@ export default function AdminEventManagementPage() {
         setLoading(false);
       } else {
         setLoading(false);
+        window.location.href = '/api/logout';
       }
     })();
   }, []);
@@ -600,23 +601,7 @@ export default function AdminEventManagementPage() {
     if (phase === '4') setP4Saving(false);
   };
 
-  const handleToggleConsent = async () => {
-    setMsg(null);
-    const newValue = !timelines.consentLetterEnabled;
-    const newTimelines = { ...timelines, consentLetterEnabled: newValue };
-    
-    // Optimistic update
-    setTimelines(newTimelines);
 
-    const res = await updateEventTimelinesAdmin(newTimelines);
-    if (res.success) {
-      setMsg({ type: 'success', text: `Consent Letter is now ${newValue ? 'ENABLED (Visible)' : 'DISABLED (Hidden)'} for students.` });
-    } else {
-      setMsg({ type: 'error', text: res.error || 'Failed to toggle consent letter.' });
-      // Revert on failure
-      setTimelines(timelines);
-    }
-  };
 
   const handleUpdatePhase = async (phase: '1' | '2' | '3' | '4') => {
     let updates: Record<string, any> = {};
@@ -1032,26 +1017,6 @@ export default function AdminEventManagementPage() {
           })}
         </div>
 
-        {/* Global Event Settings */}
-        <div className="mt-5 p-4 border border-blue-200 bg-blue-50/50 rounded-sm flex items-center justify-between">
-          <div>
-            <h4 className="text-sm font-bold text-gray-900">Consent Letter</h4>
-            <p className="text-xs text-gray-500 mt-0.5">Toggle whether the Consent Letter tab is visible to students in their Team Dashboard.</p>
-          </div>
-          <button
-            onClick={handleToggleConsent}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-              timelines.consentLetterEnabled ? 'bg-blue-600' : 'bg-gray-300'
-            }`}
-          >
-            <span className="sr-only">Toggle Consent Letter</span>
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                timelines.consentLetterEnabled ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
-        </div>
       </div>
 
       {/* ── MESSAGE BAR ───────────────────────────────────────────────────── */}

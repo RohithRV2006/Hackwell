@@ -61,6 +61,7 @@ export default function JuryDashboard() {
   const [syncSuccessMap, setSyncSuccessMap] = useState<Record<string, string>>({});
 
   const loadDashboard = async () => {
+
     setLoading(true);
     setErrorMsg('');
     const res = await getJuryDashboardData();
@@ -78,6 +79,10 @@ export default function JuryDashboard() {
         setMainTab('prelims');
       }
     } else {
+      if (res.error?.includes('Unauthorized') || res.error?.includes('Invalid session') || res.error?.includes('No active session')) {
+        window.location.href = '/api/logout';
+        return;
+      }
       setErrorMsg(res.error || 'Failed to retrieve dashboard data.');
     }
     setLoading(false);

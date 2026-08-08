@@ -159,7 +159,7 @@ export default function AdminFinaleScoresPage() {
       loadData();
     } else {
       setLoading(false);
-      router.replace('/');
+      window.location.href = '/api/logout';
     }
   };
 
