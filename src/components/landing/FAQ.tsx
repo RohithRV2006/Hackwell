@@ -26,34 +26,42 @@ export default function FAQ() {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
 
   return (
-    <section id="faq" className="py-24 bg-gray-50">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl font-extrabold text-blue-600">Frequently Asked Questions</h2>
-          <div className="mt-2 w-24 h-1 bg-blue-600 mx-auto rounded-full"></div>
+    <section id="faq" className="py-24 halftone-bg-dark border-t-4 border-black relative">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+        <div className="text-center mb-12">
+          <h2 className="font-display-hero text-5xl md:text-6xl text-white tracking-wide uppercase drop-shadow-md">
+            <span className="text-[#fee12b]">Intel</span> Briefings
+          </h2>
+          <div className="w-32 h-2 bg-primary mx-auto mt-4 border-2 border-black"></div>
         </div>
 
-        <div className="space-y-4">
-          {FAQS.map((faq, idx) => (
-            <div key={idx} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-              <button
-                className="w-full px-6 py-4 text-left flex justify-between items-center focus:outline-none focus:bg-gray-50 hover:bg-gray-50 transition"
-                onClick={() => setOpenIdx(openIdx === idx ? null : idx)}
+        <div className="space-y-6 mt-10">
+          {FAQS.map((faq, idx) => {
+            const isOpen = openIdx === idx;
+            return (
+              <div 
+                key={idx} 
+                className="bg-white border-4 border-black shadow-comic transform -skew-x-2 overflow-hidden transition-all duration-200"
               >
-                <span className="font-bold text-gray-900">{faq.question}</span>
-                {openIdx === idx ? (
-                  <ChevronUp className="text-blue-600 flex-shrink-0" size={20} />
-                ) : (
-                  <ChevronDown className="text-gray-400 flex-shrink-0" size={20} />
+                <button
+                  className={`w-full px-6 py-4 text-left flex justify-between items-center focus:outline-none transition-colors duration-200 ${isOpen ? 'bg-[#fee12b] text-black border-b-4 border-black' : 'bg-white text-black hover:bg-[#fee12b]'}`}
+                  onClick={() => setOpenIdx(isOpen ? null : idx)}
+                >
+                  <span className="font-display-hero text-xl uppercase tracking-wider">{faq.question}</span>
+                  {isOpen ? (
+                    <ChevronUp className="text-black flex-shrink-0 stroke-[3px]" size={24} />
+                  ) : (
+                    <ChevronDown className="text-gray-500 flex-shrink-0 stroke-[3px]" size={24} />
+                  )}
+                </button>
+                {isOpen && (
+                  <div className="p-6 bg-white transform skew-x-2 text-lg font-bold text-gray-800">
+                    {faq.answer}
+                  </div>
                 )}
-              </button>
-              {openIdx === idx && (
-                <div className="px-6 pb-4 pt-2 text-gray-600 bg-gray-50 border-t border-gray-100">
-                  {faq.answer}
-                </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>

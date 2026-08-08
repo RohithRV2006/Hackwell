@@ -11,14 +11,13 @@ const THEME_ICONS: Record<string, any> = {
 
 export default function Themes() {
   return (
-    <section id="themes" className="py-24 bg-gray-50">
+    <section id="themes" className="py-24 halftone-bg border-t-4 border-black">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl font-extrabold text-blue-600">Hackathon Themes</h2>
-          <div className="mt-2 w-24 h-1 bg-blue-600 mx-auto rounded-full"></div>
-          <p className="mt-4 text-gray-500 max-w-2xl mx-auto font-medium">
-            Choose from 5 cutting-edge AI tracks to build your next breakthrough solution.
-          </p>
+        <div className="text-center mb-16 relative">
+          <h2 className="font-display-hero text-6xl md:text-7xl text-secondary uppercase tracking-wide inline-block relative z-10">
+            Mission <span className="text-primary">Tracks</span>
+          </h2>
+          <div className="absolute w-48 h-2 bg-secondary bottom-0 left-1/2 transform -translate-x-1/2 -mb-2 border-2 border-black z-0"></div>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 justify-center">
@@ -28,15 +27,17 @@ export default function Themes() {
             return (
               <div 
                 key={idx} 
-                className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:border-blue-200 transition-all group flex flex-col justify-between"
+                className="comic-panel bg-white p-8 border-3 border-black shadow-[8px_8px_0px_#1c1b1b] hover:translate-x-1 hover:translate-y-1 hover:shadow-[4px_4px_0px_#1c1b1b] transition-all flex flex-col justify-between"
               >
                 <div>
-                  <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                  <div className="w-14 h-14 bg-secondary text-white border-2 border-black flex items-center justify-center mb-6 shadow-[2px_2px_0px_black]">
                     <Icon size={28} />
                   </div>
-                  <div className="text-xs font-extrabold text-blue-600 uppercase tracking-wider mb-1">Track 0{idx + 1}</div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">{themeName}</h3>
-                  <p className="text-gray-600 text-sm leading-relaxed">{description}</p>
+                  <div className="inline-block bg-[#ffd700] border-2 border-black text-black px-3 py-0.5 text-xs font-bold font-label shadow-[2px_2px_0px_black] uppercase tracking-wider mb-4">
+                    Track 0{idx + 1}
+                  </div>
+                  <h3 className="font-headline text-2xl text-black mb-3 leading-tight">{themeName}</h3>
+                  <p className="font-body text-gray-700 text-sm leading-relaxed">{description}</p>
                 </div>
               </div>
             );

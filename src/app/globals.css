@@ -1,26 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Comic+Neue:wght@400;700&family=Oswald:wght@400;700&family=Roboto:wght@400;500;700&family=Space+Grotesk:wght@500;700&family=Work+Sans:wght@400;500&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fcf9f8;
+  --foreground: #1c1b1b;
 }
 
-@theme inline {
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-primary: #bb0013;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #e71620;
+  --color-on-primary-container: #fffbff;
+  --color-secondary: #002d5c;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #a5c5fd;
+  --color-on-secondary-container: #305182;
+  --color-tertiary: #6c5e00;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #c3ab00;
+  --color-on-tertiary-container: #494000;
+  --color-tertiary-fixed: #fee12b;
+  --color-on-tertiary-fixed: #211b00;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-surface: #fcf9f8;
+  --color-on-surface: #1c1b1b;
+  --color-surface-dim: #dcd9d9;
+  --color-surface-bright: #fcf9f8;
+  --color-surface-container: #f0eded;
+  --color-surface-container-low: #f6f3f2;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-high: #eae7e7;
+  --color-surface-container-highest: #e5e2e1;
+  --color-on-surface-variant: #5e3f3c;
+
+  --font-display-hero: "Anton", sans-serif;
+  --font-headline: "Anton", sans-serif;
+  --font-headline-md: "Anton", sans-serif;
+  --font-headline-lg: "Anton", sans-serif;
+  --font-comic-heading: "Bangers", cursive;
+  --font-comic-text: "Comic Neue", cursive;
+  --font-body: "Work Sans", sans-serif;
+  --font-label: "Space Grotesk", sans-serif;
+
+  --shadow-comic: 4px 4px 0px 0px #1c1b1b;
+  --shadow-comic-lg: 8px 8px 0px 0px #1c1b1b;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Work Sans', Arial, sans-serif;
 }
+
+/* Custom Comic Halftone BG Utilities */
+.halftone-bg {
+  background-image: radial-gradient(#1c1b1b 1px, transparent 1px);
+  background-size: 8px 8px;
+  background-color: #fcf9f8;
+}
+
+.halftone-bg-dark {
+  background-image: radial-gradient(#333 1px, transparent 1px);
+  background-size: 8px 8px;
+  background-color: #0b162c;
+}
+
+.comic-panel {
+  border: 3px solid #1c1b1b;
+  box-shadow: 8px 8px 0px #1c1b1b;
+  background-color: #ffffff;
+  position: relative;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.comic-panel:hover {
+  transform: translate(4px, 4px);
+  box-shadow: 4px 4px 0px #1c1b1b;
+}
+
+/* Speech bubble styling */
+.speech-bubble {
+  border: 3px solid #1c1b1b;
+  border-radius: 0.5rem;
+  position: relative;
+  background: #ffffff;
+}
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -15px;
+  left: 20px;
+  border-width: 15px 15px 0 0;
+  border-style: solid;
+  border-color: #1c1b1b transparent transparent transparent;
+}
+.speech-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 23px;
+  border-width: 10px 10px 0 0;
+  border-style: solid;
+  border-color: #ffffff transparent transparent transparent;
+  z-index: 1;
+}
+
+.comic-bg {
+  background-color: #ed1d24; /* Avengers Red */
+  background-image: radial-gradient(#000 15%, transparent 16%), radial-gradient(#000 15%, transparent 16%);
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+  position: relative;
+}
+
+.comic-bg::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background: linear-gradient(135deg, rgba(237, 29, 36, 0.9) 0%, rgba(237, 29, 36, 0.95) 100%);
+  z-index: 0;
+}
+
