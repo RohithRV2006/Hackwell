@@ -38,6 +38,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Final Round', href: '/admin/finale-scores', exact: false },
     { name: 'Game Scores', href: '/admin/game-scores', exact: false },
     { name: 'Users Creator', href: '/admin/users-creator', exact: false },
+    { name: 'Settings', href: '/admin/settings', exact: false },
   ];
 
   return (

@@ -9,7 +9,7 @@ import { clearSessionCookie, getUserRole } from '@/app/actions/session';
 import { checkRegistrationTimelineStatus } from '@/app/actions/auth';
 
 export default function NavBar() {
-  const [user, setUser] = useState<User | null>(null);
+  const [hasSession, setHasSession] = useState(false);
   const [dashboardUrl, setDashboardUrl] = useState('/team-dashboard');
   const [isScrolled, setIsScrolled] = useState(false);
   const [isRegistrationOpen, setIsRegistrationOpen] = useState<boolean | null>(null);
@@ -46,23 +46,19 @@ export default function NavBar() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      if (u?.email) {
-        try {
-          const userRole = await getUserRole(u.email);
-          switch(userRole) {
-            case 'admin': setDashboardUrl('/admin'); break;
-            case 'jury': setDashboardUrl('/jury-dashboard'); break;
-            case 'coordinator': setDashboardUrl('/coord-dashboard'); break;
-            default: setDashboardUrl('/team-dashboard'); break;
-          }
-        } catch (error) {
-          console.error("Failed to fetch role", error);
-        }
+    const match = document.cookie.match(new RegExp('(^| )user_role=([^;]+)'));
+    if (match) {
+      setHasSession(true);
+      const role = match[2];
+      switch(role) {
+        case 'admin': setDashboardUrl('/admin'); break;
+        case 'jury': setDashboardUrl('/jury-dashboard'); break;
+        case 'coordinator': setDashboardUrl('/coord-dashboard'); break;
+        default: setDashboardUrl('/team-dashboard'); break;
       }
-    });
-    return () => unsubscribe();
+    } else {
+      setHasSession(false);
+    }
   }, []);
 
   const openSideMenu = () => {
@@ -80,7 +76,7 @@ export default function NavBar() {
             </Link>
           </div>
           <div className="flex items-center space-x-4">
-            {user ? (
+            {hasSession ? (
               <Link href={dashboardUrl} className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-sm transition">
                 Dashboard
               </Link>

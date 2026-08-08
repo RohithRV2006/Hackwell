@@ -55,13 +55,13 @@ function LoginForm() {
       const role = result.role || 'team';
 
       if (role === 'admin') {
-        router.push('/admin');
+        router.replace('/admin');
       } else if (role === 'jury') {
-        router.push('/jury-dashboard');
+        router.replace('/jury-dashboard');
       } else if (role === 'coordinator') {
-        router.push('/coord-dashboard');
+        router.replace('/coord-dashboard');
       } else {
-        router.push('/team-dashboard');
+        router.replace('/team-dashboard');
       }
     } catch (err: any) {
       setError(err.message || 'Invalid credentials');

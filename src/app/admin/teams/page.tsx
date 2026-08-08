@@ -58,6 +58,7 @@ export default function AdminTeamsPage() {
       loadTeams();
     } else {
       setLoading(false);
+      window.location.href = '/api/logout';
     }
   };
 

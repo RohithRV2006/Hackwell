@@ -57,6 +57,9 @@ export default function UsersCreatorPage() {
     const valid = await verifyAdminSession();
     setIsAuthenticated(valid);
     if (valid) loadUsers();
+    else {
+      window.location.href = '/api/logout';
+    }
   };
 
   useEffect(() => { const run = async () => { await checkSession(); }; run(); }, []);

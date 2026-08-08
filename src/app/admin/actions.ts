@@ -723,6 +723,7 @@ export interface EventTimelinesData {
   timeline3: { name: string; startDate: string; endDate: string; enabled: boolean; topTeamsToFinal?: number; state?: PhaseState; finalistsPromoted?: boolean };
   timeline4: { name: string; startDate: string; endDate: string; enabled: boolean; winnerCount?: number; state?: PhaseState };
   consentLetterEnabled?: boolean;
+  countdownEndTime?: string;
 }
 
 export async function getEventTimelinesAdmin() {
@@ -740,6 +741,7 @@ export async function getEventTimelinesAdmin() {
       timeline3: { name: 'Prelims Round', startDate: '', endDate: '', enabled: true, topTeamsToFinal: 10, state: 'not-set', finalistsPromoted: false },
       timeline4: { name: 'Final Round', startDate: '', endDate: '', enabled: true, winnerCount: 3, state: 'not-set' },
       consentLetterEnabled: false,
+      countdownEndTime: '',
     };
 
     if (!docSnap.exists) {
@@ -772,6 +774,8 @@ export async function getEventTimelinesAdmin() {
         timeline2: t2,
         timeline3: t3,
         timeline4: t4,
+        consentLetterEnabled: data.consentLetterEnabled || false,
+        countdownEndTime: data.countdownEndTime || '',
       },
     };
   } catch (error: any) {

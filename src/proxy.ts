@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+function getDashboardForRole(role: string) {
+  if (role === 'admin') return '/admin';
+  if (role === 'jury') return '/jury-dashboard';
+  if (role === 'coordinator') return '/coord-dashboard';
+  return '/team-dashboard';
+}
+
 export async function proxy(request: NextRequest) {
   const session = request.cookies.get('session')?.value;
 
@@ -18,20 +25,29 @@ export async function proxy(request: NextRequest) {
     if (!session) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
-    // We cannot verify Firestore roles in Edge middleware.
-    // The specific layouts/pages will verify if the user's role allows access.
+    
+    const role = request.cookies.get('user_role')?.value || 'team';
+    const path = request.nextUrl.pathname;
+    
+    // Role-based routing enforcement (Admins have access to all dashboards for debugging)
+    if (path.startsWith('/admin') && role !== 'admin') {
+      return NextResponse.redirect(new URL(getDashboardForRole(role), request.url));
+    }
+    if (path.startsWith('/jury-dashboard') && role !== 'jury' && role !== 'admin') {
+      return NextResponse.redirect(new URL(getDashboardForRole(role), request.url));
+    }
+    if (path.startsWith('/coord-dashboard') && role !== 'coordinator' && role !== 'admin') {
+      return NextResponse.redirect(new URL(getDashboardForRole(role), request.url));
+    }
+    if (path.startsWith('/team-dashboard') && role !== 'team' && role !== 'admin') {
+      return NextResponse.redirect(new URL(getDashboardForRole(role), request.url));
+    }
   }
 
   // Redirect authenticated users away from login/register
   if (session && (request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register'))) {
     const role = request.cookies.get('user_role')?.value || 'team';
-    
-    let dashboardPath = '/team-dashboard';
-    if (role === 'admin') dashboardPath = '/admin';
-    else if (role === 'jury') dashboardPath = '/jury-dashboard';
-    else if (role === 'coordinator') dashboardPath = '/coord-dashboard';
-    
-    return NextResponse.redirect(new URL(dashboardPath, request.url));
+    return NextResponse.redirect(new URL(getDashboardForRole(role), request.url));
   }
 
   const response = NextResponse.next();
